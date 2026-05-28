@@ -1,0 +1,97 @@
+@import "tailwindcss";
+
+@font-face {
+	font-family: "Geist";
+	src: url("/fonts/Geist.woff2") format("woff2");
+	font-weight: 100 900;
+	font-style: normal;
+	font-display: swap;
+}
+
+@theme {
+	--font-sans: "Geist", system-ui, sans-serif;
+
+	--color-bg-950: #fbfbfb;
+	--color-bg-900: #f7f6f6;
+	--color-bg-850: #f4f4f4;
+	--color-bg-800: #f3f2f2;
+	--color-bg-700: #e9e9e9;
+	--color-bg-600: #d9d9d9;
+
+	--color-text-100: #000000;
+	--color-text-150: #636363;
+	--color-text-200: #767676;
+	--color-text-250: #7e7e7e;
+
+	--color-text-inactive: #404040;
+
+	--color-icon: #171717;
+	--color-icon-inactive: #404040;
+
+	--color-bg-overlay: rgba(0, 0, 84, 0.35);
+
+	--color-bg-input-on-pure-white: #f0f0f0;
+
+	--color-bg-switch-off: #d5d5d5;
+
+	--color-bg-checkbox-off: #eeeeee;
+	--color-border-checkbox-off: #dddddd;
+
+	--shadow-tooltip: 0 12px 48px 0 rgba(0, 0, 0, 0.12);
+
+	--shadow-page: 0 24px 32px 0 rgba(0, 0, 0, 0.02);
+	--shadow-toolbar:
+		0 4px 20px 0 rgba(0, 0, 0, 0.05),
+		inset 0 1px 0 0 #ffffff;
+
+	--radius-lg: 12px;
+	--radius-md: 6px;
+	--radius-sm: 6px;
+}
+
+@layer base {
+	html,
+	body {
+		height: 100%;
+		overflow: hidden;
+	}
+
+	body {
+		@apply font-sans font-[430] antialiased bg-bg-900 text-icon;
+		font-feature-settings: "ss03" 1, "ss04" 1;
+	}
+
+	button {
+		@apply cursor-pointer;
+	}
+
+	img {
+		@apply select-none;
+	}
+}
+
+@utility text-body-14 {
+	@apply text-sm leading-[1.35] tracking-[-0.005em];
+	font-feature-settings: "ss03" 1, "ss04" 1;
+}
+
+@utility icon-wrap {
+	& svg {
+		display: block;
+		width: 100%;
+		height: 100%;
+	}
+
+	& svg [stroke] {
+		vector-effect: non-scaling-stroke;
+	}
+}
+
+@utility toolbar-shell {
+	border: 1px solid transparent;
+	background-image:
+		linear-gradient(var(--color-bg-800), var(--color-bg-800)),
+		linear-gradient(0deg, rgba(201, 201, 201, 1) 0%, rgba(210, 210, 210, 1) 100%);
+	background-origin: border-box;
+	background-clip: padding-box, border-box;
+}
