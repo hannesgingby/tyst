@@ -59,9 +59,9 @@ export interface TypographySettings {
 	fontFamily: string;
 	weight: FontWeightName;
 	/**
-	 * Font size in CSS pixels (the unit shown in the UI). Converted to points
-	 * for the `.typ` output. The document renders at its true pixel size, so
-	 * this value is what is drawn on the page before the viewport scale.
+	 * Font size in typographic points (Typst's native unit). Serialized directly
+	 * as `pt` and converted to CSS pixels for on-page rendering. The UI may
+	 * display this value in other units (pt/px/mm), but it is always stored in pt.
 	 */
 	size: number;
 	/** Leading (space between lines) in em — maps to Typst `par(leading)`. */

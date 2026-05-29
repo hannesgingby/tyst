@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { untrack } from "svelte";
 	import { documentStore } from "$lib/document/store.svelte";
+	import { ptToPx } from "$lib/document/units";
 	import type { Block } from "$lib/document/types";
 
 	const WEIGHT_CSS: Record<string, number> = { Regular: 400, Medium: 500, Bold: 700 };
@@ -38,7 +39,7 @@
 	// at zero leading, measured against the compiler). `1 + leading` is too loose.
 	const LINE_ADVANCE_BASE = 0.66;
 
-	const fontSizePx = $derived(typography.size * scale);
+	const fontSizePx = $derived(ptToPx(typography.size) * scale);
 	const lineHeight = $derived(typography.leading + LINE_ADVANCE_BASE);
 	const letterSpacingPx = $derived((typography.tracking / 100) * fontSizePx);
 	const fontWeight = $derived(WEIGHT_CSS[typography.weight] ?? 400);

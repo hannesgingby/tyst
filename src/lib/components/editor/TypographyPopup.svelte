@@ -9,15 +9,23 @@
 	import Tag from "$lib/components/ui/Tag.svelte";
 	import { documentStore } from "$lib/document/store.svelte";
 	import { fontStore } from "$lib/system/fonts.svelte";
+	import { FONT_SIZE_UNITS, fontSizeUnit, ptToUnit, unitToPt } from "$lib/document/units";
 	import type { FontWeightName } from "$lib/document/types";
 
 	const weightOptions: FontWeightName[] = ["Regular", "Medium", "Bold"];
+	const sizeUnitOptions = FONT_SIZE_UNITS.map((u) => u.unit);
 
 	const fontOptions = $derived(fontStore.families);
 	// Values shown reflect the current scope: the shared default when linked,
 	// otherwise the active block's resolved settings.
 	const typography = $derived(documentStore.popupTypography);
 	const paragraph = $derived(documentStore.popupParagraph);
+
+	// Size is stored in points; the input may display pt/px/mm. The unit is a
+	// local display preference and converts the value to preserve physical size.
+	let sizeUnit = $state("pt");
+	const sizeCfg = $derived(fontSizeUnit(sizeUnit));
+	const sizeValue = $derived(Number(ptToUnit(typography.size, sizeUnit).toFixed(sizeCfg.decimals)));
 </script>
 
 <Popup padding={16} class="w-[344px] pb-5">
@@ -100,13 +108,15 @@
 					onchange={(v) => documentStore.setTypography("weight", v)}
 				/>
 				<Input
-					value={typography.size}
-					unit="px"
-					min={6}
-					max={72}
-					step={1}
-					decimals={0}
-					onchange={(v) => documentStore.setTypography("size", v)}
+					value={sizeValue}
+					unit={sizeUnit}
+					units={sizeUnitOptions}
+					min={ptToUnit(1, sizeUnit)}
+					max={ptToUnit(720, sizeUnit)}
+					step={sizeCfg.step}
+					decimals={sizeCfg.decimals}
+					onchange={(v) => documentStore.setTypography("size", unitToPt(v, sizeUnit))}
+					onunitchange={(u) => (sizeUnit = u)}
 				/>
 			</div>
 

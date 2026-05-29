@@ -10,6 +10,9 @@
 		icon?: string;
 		iconClass?: string;
 		unit?: string;
+		/** When provided (with >1 entry), the unit suffix becomes clickable and
+		 * cycles through these options, reporting the new unit via `onunitchange`. */
+		units?: readonly string[];
 		min?: number;
 		max?: number;
 		step?: number;
@@ -20,6 +23,7 @@
 		bg?: string;
 		class?: ClassValue;
 		onchange?: (value: number) => void;
+		onunitchange?: (unit: string) => void;
 	}
 
 	let {
@@ -27,6 +31,7 @@
 		icon,
 		iconClass = "size-[26px]",
 		unit,
+		units,
 		min = 0,
 		max = 100,
 		step = 1,
@@ -36,9 +41,20 @@
 		bg = "bg-bg-950",
 		class: className,
 		onchange,
+		onunitchange,
 	}: Props = $props();
 
 	const hasUnitSuffix = $derived(unit != null && unit !== "%");
+	const canCycleUnit = $derived(
+		!disabled && unit != null && units != null && units.length > 1,
+	);
+
+	function cycleUnit(): void {
+		if (!canCycleUnit || unit == null || units == null) return;
+		const i = units.indexOf(unit);
+		const next = units[(i + 1) % units.length];
+		onunitchange?.(next);
+	}
 	const isEditable = $derived(!disabled);
 
 	let isEditing = $state(false);
@@ -180,6 +196,17 @@
 	{/if}
 
 	{#if hasUnitSuffix}
-		<span class="shrink-0 text-text-200">{unit}</span>
+		{#if canCycleUnit}
+			<button
+				type="button"
+				class="shrink-0 cursor-pointer text-text-200 select-none hover:text-text-100"
+				aria-label="Change unit"
+				onclick={cycleUnit}
+			>
+				{unit}
+			</button>
+		{:else}
+			<span class="shrink-0 text-text-200">{unit}</span>
+		{/if}
 	{/if}
 </div>

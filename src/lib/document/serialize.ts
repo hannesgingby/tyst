@@ -6,7 +6,7 @@ import type {
 	TypographySettings,
 } from "./types";
 import { TYPST_PAPER_NAME } from "./paperSizes";
-import { pxToPt, typstNumber } from "./units";
+import { typstNumber } from "./units";
 
 const WEIGHT_KEYWORD: Record<FontWeightName, string> = {
 	Regular: "regular",
@@ -27,7 +27,7 @@ function hexToRgb(hex: string): string {
 function textArgs(t: Partial<TypographySettings>): string[] {
 	const lines: string[] = [];
 	if (t.fontFamily !== undefined) lines.push(`font: "${t.fontFamily}"`);
-	if (t.size !== undefined) lines.push(`size: ${typstNumber(pxToPt(t.size))}pt`);
+	if (t.size !== undefined) lines.push(`size: ${typstNumber(t.size)}pt`);
 	if (t.weight !== undefined) lines.push(`weight: "${WEIGHT_KEYWORD[t.weight]}"`);
 	if (t.color !== undefined) lines.push(`fill: ${hexToRgb(t.color)}`);
 	if (t.tracking !== undefined && t.tracking !== 0) {
