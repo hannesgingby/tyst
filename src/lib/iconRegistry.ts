@@ -15,9 +15,11 @@ const registry = Object.fromEntries(
 
 function normalizeSvg(svg: string): string {
 	return svg
-		.replace(/stroke="#[^"]*"/g, 'stroke="currentColor"')
-		.replace(/fill="#171717"/g, 'fill="currentColor"')
-		.replace(/color="#[^"]*"/g, 'color="currentColor"');
+		.replace(/stroke="#[^"]*"/gi, 'stroke="currentColor"')
+		.replace(/stroke="black"/gi, 'stroke="currentColor"')
+		.replace(/fill="#171717"/gi, 'fill="currentColor"')
+		.replace(/fill="black"/gi, 'fill="currentColor"')
+		.replace(/color="#[^"]*"/gi, 'color="currentColor"');
 }
 
 export function getIconSvg(name: string): string | undefined {
