@@ -16,6 +16,8 @@
 		decimals?: number;
 		emptyLabel?: string;
 		disabled?: boolean;
+		/** Background utility class for the field surface. */
+		bg?: string;
 		class?: ClassValue;
 		onchange?: (value: number) => void;
 	}
@@ -31,6 +33,7 @@
 		decimals,
 		emptyLabel,
 		disabled = false,
+		bg = "bg-bg-950",
 		class: className,
 		onchange,
 	}: Props = $props();
@@ -50,8 +53,7 @@
 	});
 
 	function formatValue(): string {
-		if (disabled && emptyLabel != null) return emptyLabel;
-		if (value == null) return "";
+		if (value == null) return emptyLabel ?? "";
 		return formatDecimal(value, decimals);
 	}
 
@@ -128,6 +130,7 @@
 <div
 	class={[
 		"field-shell grid items-center gap-x-2 pl-3",
+		bg,
 		hasUnitSuffix ? "pr-4" : "pr-3",
 		disabled && "opacity-50",
 		className,

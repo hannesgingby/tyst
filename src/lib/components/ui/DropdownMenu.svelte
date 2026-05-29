@@ -1,14 +1,16 @@
-<script lang="ts">
+<script lang="ts" generics="T extends string = string">
 	import type { Snippet } from "svelte";
 	import type { ClassValue } from "svelte/elements";
 	import Icon from "$lib/components/Icon.svelte";
 
 	interface Props {
-		value: string;
-		options?: readonly string[];
+		value: T;
+		options?: readonly T[];
 		disabled?: boolean;
+		/** Background utility class for the field surface. */
+		bg?: string;
 		class?: ClassValue;
-		onchange?: (value: string) => void;
+		onchange?: (value: T) => void;
 		menu?: Snippet;
 	}
 
@@ -16,6 +18,7 @@
 		value = $bindable(),
 		options = [],
 		disabled = false,
+		bg = "bg-bg-950",
 		class: className,
 		onchange,
 		menu,
@@ -29,7 +32,7 @@
 		open = !open;
 	}
 
-	function select(option: string): void {
+	function select(option: T): void {
 		value = option;
 		onchange?.(option);
 		open = false;
@@ -54,6 +57,7 @@
 		type="button"
 		class={[
 			"field-shell flex w-full items-center gap-2 pl-3 pr-3",
+			bg,
 			disabled && "pointer-events-none opacity-50",
 		]}
 		aria-expanded={open}

@@ -8,6 +8,50 @@
     font-display: swap;
 }
 
+/* Libertinus Serif — Typst's default font, bundled so the editor matches the PDF. */
+@font-face {
+    font-family: "Libertinus Serif";
+    src: url("/fonts/LibertinusSerif-Regular.otf") format("opentype");
+    font-weight: 400;
+    font-style: normal;
+    font-display: swap;
+}
+@font-face {
+    font-family: "Libertinus Serif";
+    src: url("/fonts/LibertinusSerif-Semibold.otf") format("opentype");
+    font-weight: 500 600;
+    font-style: normal;
+    font-display: swap;
+}
+@font-face {
+    font-family: "Libertinus Serif";
+    src: url("/fonts/LibertinusSerif-Bold.otf") format("opentype");
+    font-weight: 700;
+    font-style: normal;
+    font-display: swap;
+}
+@font-face {
+    font-family: "Libertinus Serif";
+    src: url("/fonts/LibertinusSerif-Italic.otf") format("opentype");
+    font-weight: 400;
+    font-style: italic;
+    font-display: swap;
+}
+@font-face {
+    font-family: "Libertinus Serif";
+    src: url("/fonts/LibertinusSerif-SemiboldItalic.otf") format("opentype");
+    font-weight: 500 600;
+    font-style: italic;
+    font-display: swap;
+}
+@font-face {
+    font-family: "Libertinus Serif";
+    src: url("/fonts/LibertinusSerif-BoldItalic.otf") format("opentype");
+    font-weight: 700;
+    font-style: italic;
+    font-display: swap;
+}
+
 @theme {
     --font-sans: "Geist", system-ui, sans-serif;
 
@@ -28,7 +72,7 @@
     --color-icon: #171717;
     --color-icon-inactive: #404040;
 
-    --color-bg-overlay: rgba(0, 0, 84, 0.35);
+    --color-bg-overlay: rgba(213, 213, 213, 0.35);
 
     --color-bg-input-on-pure-white: #f0f0f0;
 
@@ -83,6 +127,11 @@
     font-feature-settings: "ss03" 1, "ss04" 1;
 }
 
+@utility text-body-16 {
+    @apply text-base leading-[1.3] tracking-[-0.005em];
+    font-feature-settings: "ss03" 1, "ss04" 1;
+}
+
 @utility text-body-14-tight {
     @apply text-sm leading-[1.3] tracking-[-0.005em];
     font-feature-settings: "ss03" 1, "ss04" 1;
@@ -123,5 +172,5 @@
 }
 
 @utility field-shell {
-    @apply flex h-9 items-center rounded-md bg-bg-950 text-body-14-tight text-text-100;
+    @apply flex h-9 items-center rounded-md text-body-14-tight text-text-100;
 }

@@ -1,7 +1,30 @@
 <script lang="ts">
+    import { onMount } from "svelte";
     import Document from "./Document.svelte";
+    import DocumentSettings from "./DocumentSettings.svelte";
     import Toolbar from "./Toolbar.svelte";
     import Topbar from "./Topbar.svelte";
+    import { fontStore } from "$lib/system/fonts.svelte";
+    import { exportPdf, saveTypFile } from "$lib/system/files";
+    import { isTauri } from "$lib/system/tauri";
+
+    let settingsOpen = $state(false);
+
+    onMount(() => {
+        fontStore.ensureLoaded();
+
+        if (!isTauri()) return;
+
+        // Bridge native File-menu actions (emitted from Rust) to the frontend.
+        const unlisteners: Array<() => void> = [];
+        (async () => {
+            const { listen } = await import("@tauri-apps/api/event");
+            unlisteners.push(await listen("menu://save", () => saveTypFile()));
+            unlisteners.push(await listen("menu://export-pdf", () => exportPdf()));
+        })();
+
+        return () => unlisteners.forEach((off) => off());
+    });
 </script>
 
 <div class="fixed inset-0 flex flex-col overflow-hidden bg-bg-900">
@@ -12,9 +35,10 @@
             class="flex w-full max-w-[1240px] flex-col"
             style="padding-top: clamp(2rem, 9vh, 5.625rem);"
         >
-            <Topbar />
+            <Topbar onMore={() => (settingsOpen = true)} />
             <Document />
         </div>
     </main>
     <Toolbar />
+    <DocumentSettings bind:open={settingsOpen} />
 </div>
