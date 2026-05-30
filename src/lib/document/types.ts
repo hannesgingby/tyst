@@ -165,8 +165,14 @@ export interface Block {
 	paragraph?: ParagraphOverride;
 	/** Marks this block as a heading / title. */
 	heading?: HeadingSettings;
+	/** Per-block numbering override when unlinked from the document heading style. */
+	headingNumbering?: HeadingNumberingSettings;
+	/** Per-block above/below spacing override when unlinked from document heading spacing. */
+	headingSpacing?: BlockSpacing;
 	/** Marks this block as a list item. */
 	list?: ListSettings;
+	/** List-group spacing override (stored on the first item in the group). */
+	listSpacing?: BlockSpacing;
 	/** Per-block horizontal alignment. Undefined = inherit document default. */
 	alignment?: HorizontalAlignment;
 	/** Placeholder shown when the block has no text (e.g. "Heading 1", "Item"). */
@@ -189,9 +195,17 @@ export interface DocumentModel {
 	headingLinks: HeadingLinks;
 	/** Per-level overrides when unlinked from `headings`. */
 	headingLevels: Partial<Record<HeadingLevel, HeadingNumberingSettings>>;
-	/** Above/below spacing for each heading level (0 = title), serialized as #block(above:, below:). */
+	/** Shared heading spacing when a level is linked to the spacing tag. */
+	headingSpacingShared?: BlockSpacing;
+	/** When true, a level uses `headingSpacingShared`; when false, `headingSpacing[level]`. */
+	headingSpacingLinks?: Partial<Record<0 | HeadingLevel, boolean>>;
+	/** Per-level heading spacing overrides when unlinked. */
 	headingSpacing?: Partial<Record<0 | HeadingLevel, BlockSpacing>>;
-	/** Above/below spacing for list groups, serialized as #block(above:, below:). */
+	/** Shared list spacing when a kind is linked to its spacing tag. */
+	listSpacingShared?: BlockSpacing;
+	/** When true, a list kind uses `listSpacingShared`; when false, `listSpacing[kind]`. */
+	listSpacingLinks?: Partial<Record<ListKind, boolean>>;
+	/** Per-kind list spacing overrides when unlinked. */
 	listSpacing?: { bullet?: BlockSpacing; numbered?: BlockSpacing };
 	/** Document body as an ordered list of paragraph blocks. */
 	blocks: Block[];

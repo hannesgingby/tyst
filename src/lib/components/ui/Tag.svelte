@@ -3,11 +3,6 @@
 
     export type TagVariant = "purple" | "blue";
 
-    const slotWidth: Record<TagVariant, string> = {
-        purple: "73px",
-        blue: "63px",
-    };
-
     interface Props {
         label: string;
         variant: TagVariant;
@@ -35,12 +30,12 @@
     }
 </script>
 
-<div class="relative ml-auto h-5 shrink-0" style:width={slotWidth[variant]}>
+<div class="relative ml-auto h-5 shrink-0">
     {#if linked}
         <button
             type="button"
             class={[
-                "absolute top-0 right-0 flex h-5 items-center gap-1 rounded px-2 text-body-12",
+                "flex h-5 items-center gap-1 whitespace-nowrap rounded px-2 text-body-12",
                 variant === "purple" && "bg-tag-purple-bg text-tag-purple-text",
                 variant === "blue" && "bg-tag-blue-bg text-tag-blue-text",
             ]}

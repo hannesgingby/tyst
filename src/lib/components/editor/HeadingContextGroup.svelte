@@ -34,6 +34,7 @@
 	});
 
 	$effect(() => {
+		if (documentStore.isEditingHeadingBlock) return;
 		documentStore.headingMenuIsTitle = activeIndex === 0;
 		if (activeIndex > 0) {
 			documentStore.headingMenuLevel = activeIndex as HeadingLevel;

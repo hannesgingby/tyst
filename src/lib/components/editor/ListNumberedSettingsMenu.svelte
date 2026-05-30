@@ -3,6 +3,7 @@
 	import FieldLabel from "$lib/components/ui/FieldLabel.svelte";
 	import Input from "$lib/components/ui/Input.svelte";
 	import PopupSectionHeader from "$lib/components/ui/PopupSectionHeader.svelte";
+	import Tag from "$lib/components/ui/Tag.svelte";
 	import { documentStore } from "$lib/document/store.svelte";
 
 	interface Props {
@@ -68,9 +69,7 @@
 
 	<div class="mt-[41px]">
 		<PopupSectionHeader title="Spacing">
-			<span class="flex h-5 items-center rounded px-2 text-body-12 bg-tag-blue-bg text-tag-blue-text">
-				numbered-list
-			</span>
+			<Tag label="numbered-list" variant="blue" bind:linked={documentStore.numberedListSpacingLinked} />
 		</PopupSectionHeader>
 		<div class="mt-[13px] grid grid-cols-2 gap-2">
 			<FieldLabel label="Above">

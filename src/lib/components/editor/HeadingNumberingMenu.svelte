@@ -40,9 +40,13 @@
 
 	<div class="mt-[13px]">
 		<PopupSectionHeader title="Spacing">
-			<span class="flex h-5 items-center rounded px-2 text-body-12 bg-tag-blue-bg text-tag-blue-text">
-				{documentStore.headingSpacingLevel === 0 ? "title" : `heading ${documentStore.headingEditLevel}`}
-			</span>
+			<Tag
+				label={documentStore.headingSpacingLevel === 0
+					? "title"
+					: `heading ${documentStore.headingSpacingLevel}`}
+				variant="blue"
+				bind:linked={documentStore.headingSpacingLinked}
+			/>
 		</PopupSectionHeader>
 		<div class="mt-[13px] grid grid-cols-2 gap-2">
 			<FieldLabel label="Above">

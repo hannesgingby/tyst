@@ -8,7 +8,9 @@
 </script>
 
 <script lang="ts">
+	import { untrack } from "svelte";
 	import type { ListSettings } from "$lib/document/types";
+	import { documentStore } from "$lib/document/store.svelte";
 	import ContextGroup from "./ContextGroup.svelte";
 	import ListBulletSettingsMenu from "./ListBulletSettingsMenu.svelte";
 	import ListNumberedSettingsMenu from "./ListNumberedSettingsMenu.svelte";
@@ -27,6 +29,8 @@
 	/** Keep the taller numbered panel visible while the clip shrinks to bullet height. */
 	let holdNumbered = $state(false);
 	let prevActiveIndex = 0;
+	/** First block id of the list group being edited; null = insert preview only. */
+	let listEditAnchorId = $state<string | null>(null);
 
 	// Bullet settings
 	let bulletMarker = $state("");
@@ -52,6 +56,124 @@
 		holdNumbered ? bulletPanelEl : isNumbered ? numberedPanelEl : bulletPanelEl,
 	);
 
+	function buildBulletSettings(): ListSettings {
+		return {
+			kind: "bullet",
+			marker: bulletMarker.trim() || undefined,
+			spacing: bulletSpacing,
+			indent: bulletIndent,
+			bodyIndent: bulletBodyIndent,
+			tight: bulletTight,
+		};
+	}
+
+	function listSettingsEqual(a: ListSettings, b: ListSettings): boolean {
+		return (
+			a.kind === b.kind &&
+			(a.marker ?? "") === (b.marker ?? "") &&
+			a.spacing === b.spacing &&
+			(a.indent ?? 0) === (b.indent ?? 0) &&
+			(a.bodyIndent ?? 0.5) === (b.bodyIndent ?? 0.5) &&
+			(a.tight !== false) === (b.tight !== false) &&
+			(a.start ?? null) === (b.start ?? null) &&
+			(a.full === true) === (b.full === true) &&
+			(a.reversed === true) === (b.reversed === true)
+		);
+	}
+
+	function buildNumberedSettings(): ListSettings {
+		return {
+			kind: "numbered",
+			marker: numberedMarker.trim() || undefined,
+			start: numberedStart,
+			spacing: numberedSpacing,
+			indent: numberedIndent,
+			bodyIndent: numberedBodyIndent,
+			tight: numberedTight,
+			full: numberedFull,
+			reversed: numberedReversed,
+		};
+	}
+
+	function loadPanelFromList(list: ListSettings): void {
+		if (list.kind === "bullet") {
+			bulletMarker = list.marker ?? "";
+			bulletSpacing = list.spacing ?? null;
+			bulletIndent = list.indent ?? 0;
+			bulletBodyIndent = list.bodyIndent ?? 0.5;
+			bulletTight = list.tight !== false;
+		} else {
+			numberedMarker = list.marker ?? "1.";
+			numberedStart = list.start ?? null;
+			numberedSpacing = list.spacing ?? null;
+			numberedIndent = list.indent ?? 0;
+			numberedBodyIndent = list.bodyIndent ?? 0.5;
+			numberedTight = list.tight !== false;
+			numberedFull = list.full === true;
+			numberedReversed = list.reversed === true;
+		}
+	}
+
+	$effect(() => {
+		const kind = documentStore.activeBlock.list?.kind;
+		if (kind === "bullet") activeIndex = 0;
+		else if (kind === "numbered") activeIndex = 1;
+	});
+
+	$effect(() => {
+		if (!documentStore.isEditingListBlock) {
+			documentStore.listMenuKind = activeIndex === 1 ? "numbered" : "bullet";
+		}
+	});
+
+	$effect(() => {
+		documentStore.activeBlockId;
+		documentStore.model.blocks;
+		const first = documentStore.listGroupFirstForActive();
+		if (!first?.list) {
+			listEditAnchorId = null;
+			return;
+		}
+		listEditAnchorId = first.id;
+		untrack(() => loadPanelFromList(first.list!));
+	});
+
+	$effect(() => {
+		const anchor = listEditAnchorId;
+		if (!anchor) return;
+		const first = documentStore.findBlock(anchor);
+		if (!first?.list) return;
+
+		if (first.list.kind === "bullet") {
+			bulletMarker;
+			bulletSpacing;
+			bulletIndent;
+			bulletBodyIndent;
+			bulletTight;
+			untrack(() => {
+				const next = buildBulletSettings();
+				if (!listSettingsEqual(first.list!, next)) {
+					documentStore.applyListGroupSettings(anchor, next);
+				}
+			});
+		} else {
+			numberedMarker;
+			numberedStart;
+			numberedSpacing;
+			numberedIndent;
+			numberedBodyIndent;
+			numberedTight;
+			numberedFull;
+			numberedReversed;
+			untrack(() => {
+				const next = buildNumberedSettings();
+				if (!listSettingsEqual(first.list!, next)) {
+					documentStore.applyListGroupSettings(anchor, next);
+				}
+			});
+		}
+	});
+
 	$effect(() => {
 		if (prevActiveIndex === 1 && activeIndex === 0) {
 			holdNumbered = true;
@@ -67,28 +189,7 @@
 	}
 
 	function handleSelect(index: number): void {
-		if (index === 0) {
-			onselect?.({
-				kind: "bullet",
-				marker: bulletMarker.trim() || undefined,
-				spacing: bulletSpacing,
-				indent: bulletIndent,
-				bodyIndent: bulletBodyIndent,
-				tight: bulletTight,
-			});
-		} else {
-			onselect?.({
-				kind: "numbered",
-				marker: numberedMarker.trim() || undefined,
-				start: numberedStart,
-				spacing: numberedSpacing,
-				indent: numberedIndent,
-				bodyIndent: numberedBodyIndent,
-				tight: numberedTight,
-				full: numberedFull,
-				reversed: numberedReversed,
-			});
-		}
+		onselect?.(index === 0 ? buildBulletSettings() : buildNumberedSettings());
 	}
 </script>
 

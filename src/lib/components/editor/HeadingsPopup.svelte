@@ -12,4 +12,4 @@
 	}
 </script>
 
-<HeadingContextGroup onselect={handleSelect} />
+<HeadingContextGroup levelIndex={documentStore.headingMenuIndex} onselect={handleSelect} />

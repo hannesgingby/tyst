@@ -88,7 +88,7 @@
 			<div class="shrink-0" style:width="{GAP_PX}px" aria-hidden="true"></div>
 			<div class="relative shrink-0" style:width="{menuWidth}px">
 				<div
-					class="absolute inset-x-0 flex flex-col justify-end overflow-hidden transition-[height,bottom] duration-100 ease-[cubic-bezier(0.33,1,0.68,1)]"
+					class="absolute inset-x-0 flex flex-col justify-end overflow-hidden rounded-lg transition-[height,bottom] duration-100 ease-[cubic-bezier(0.33,1,0.68,1)]"
 					style:bottom="{menuBottom}px"
 					style:height="{menuHeight}px"
 					ontransitionend={handleClipTransitionEnd}

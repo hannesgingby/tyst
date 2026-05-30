@@ -2,10 +2,18 @@
     import Icon from "$lib/components/Icon.svelte";
     import Tooltip from "$lib/components/Tooltip.svelte";
     import HoverPopup from "$lib/components/ui/HoverPopup.svelte";
+    import { documentStore } from "$lib/document/store.svelte";
     import AlignmentPopup from "./AlignmentPopup.svelte";
     import HeadingsPopup from "./HeadingsPopup.svelte";
     import ListPopup from "./ListPopup.svelte";
     import TypographyPopup from "./TypographyPopup.svelte";
+
+    const activeBlock = $derived(documentStore.activeBlock);
+    const headingsActive = $derived(activeBlock.heading != null);
+    const listActive = $derived(activeBlock.list != null);
+    const alignmentActive = $derived(
+        activeBlock.alignment != null && activeBlock.alignment !== "left",
+    );
 
     type PopupKind = "typography" | "headings" | "list" | "alignment";
 
@@ -171,13 +179,17 @@
     label: string,
     size = "size-6",
     shortcut?: string,
+    active = false,
 )}
     <Tooltip {label} {shortcut} position="bottom">
         <button
             type="button"
-            class="flex h-6 items-center justify-center transition-opacity duration-150 [transition-timing-function:cubic-bezier(0.33,1,0.68,1)] hover:opacity-50"
+            class={[
+                "flex h-6 items-center justify-center rounded-md transition-opacity duration-150 [transition-timing-function:cubic-bezier(0.33,1,0.68,1)]",
+                active ? "bg-[#E3F0FB] text-[#3D9EEE]" : "hover:opacity-50",
+            ]}
         >
-            <Icon {name} class="{size} text-icon" />
+            <Icon {name} class="{size} {active ? 'text-[#3D9EEE]' : 'text-icon'}" />
         </button>
     </Tooltip>
 {/snippet}
@@ -218,6 +230,7 @@
                             icon={tool.name}
                             iconClass={tool.iconClass}
                             shortcut={tool.shortcut}
+                            active={headingsActive}
                         >
                             {#snippet popup()}<HeadingsPopup />{/snippet}
                         </HoverPopup>
@@ -227,6 +240,7 @@
                             icon={tool.name}
                             iconClass={tool.iconClass}
                             shortcut={tool.shortcut}
+                            active={listActive}
                         >
                             {#snippet popup()}<ListPopup />{/snippet}
                         </HoverPopup>
@@ -236,6 +250,7 @@
                             icon={tool.name}
                             iconClass={tool.iconClass}
                             shortcut={tool.shortcut}
+                            active={alignmentActive}
                         >
                             {#snippet popup()}<AlignmentPopup />{/snippet}
                         </HoverPopup>

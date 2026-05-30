@@ -14,6 +14,21 @@ import type {
 	PaperPreset,
 	TypographySettings,
 } from "./types";
+import {
+	isHeadingSpacingLinked,
+	isListSpacingLinked,
+	resolveHeadingSpacing,
+	resolveListSpacing,
+} from "./blockSpacing";
+import {
+	hasBlockHeadingNumberingOverride,
+	hasBlockHeadingSpacingOverride,
+	hasBlockListSpacingOverride,
+	resolveBlockHeadingNumbering,
+	resolveBlockHeadingSpacing,
+	resolveBlockListSpacing,
+} from "./blockLevelStyle";
+import { listGroupBlockIds, listGroupFirstBlock } from "./listGroup";
 import { isHeadingLevelLinked, resolveHeadingLevelStyle } from "./headingStyle";
 import { PAPER_SIZES, matchPreset } from "./paperSizes";
 import { serializeDocument } from "./serialize";
@@ -55,6 +70,8 @@ function defaultModel(): DocumentModel {
 		headings: { outlined: true },
 		headingLinks: { 1: true, 2: true, 3: true, 4: true },
 		headingLevels: {},
+		headingSpacingShared: { above: 1.2, below: 0.35 },
+		headingSpacingLinks: { 0: true, 1: true, 2: true, 3: true, 4: true },
 		headingSpacing: {
 			0: { above: 1.4, below: 0.5 },
 			1: { above: 1.5, below: 0.5 },
@@ -62,6 +79,8 @@ function defaultModel(): DocumentModel {
 			3: { above: 1.0, below: 0.25 },
 			4: { above: 0.85, below: 0.2 },
 		},
+		listSpacingShared: { above: 0.8, below: 0.8 },
+		listSpacingLinks: { bullet: true, numbered: true },
 		listSpacing: {
 			bullet: { above: 0.8, below: 0.8 },
 			numbered: { above: 0.8, below: 0.8 },
@@ -118,6 +137,9 @@ class DocumentStore {
 
 	/** True when the title entry is selected in the headings popup. */
 	headingMenuIsTitle = $state(false);
+
+	/** List kind shown in the list popup when not on a list block (insert preview). */
+	listMenuKind = $state<ListKind>("bullet");
 
 	/** Number of laid-out pages, reported by the paginating editor. */
 	pageCount = $state(1);
@@ -192,6 +214,18 @@ class DocumentStore {
 		return this.findBlock(this.activeBlockId ?? "") ?? this.model.blocks[0];
 	}
 
+	readonly isEditingHeadingBlock = $derived(this.activeBlock.heading !== undefined);
+
+	readonly isEditingListBlock = $derived(this.activeBlock.list !== undefined);
+
+	/** Row index for the headings list (0 = title, 1–4 = heading levels). */
+	readonly headingMenuIndex = $derived.by((): 0 | HeadingLevel => {
+		const level = this.activeBlock.heading?.level;
+		if (level !== undefined) return level;
+		if (this.headingMenuIsTitle) return 0;
+		return this.headingMenuLevel;
+	});
+
 	/** Level used by the headings popup (active heading block, else menu selection). */
 	readonly headingEditLevel = $derived.by((): HeadingLevel => {
 		const level = this.activeBlock.heading?.level;
@@ -199,16 +233,40 @@ class DocumentStore {
 		return this.headingMenuLevel;
 	});
 
+	/** List kind for spacing tags / insert preview. */
+	readonly listSpacingKind = $derived(
+		(): ListKind => this.activeBlock.list?.kind ?? this.listMenuKind,
+	);
+
 	resolveHeadingStyle(level: HeadingLevel): HeadingNumberingSettings {
 		return resolveHeadingLevelStyle(this.model, level);
 	}
 
+	private get headingNumberingTargetBlock(): Block | null {
+		const block = this.activeBlock;
+		if (block.heading && block.heading.level !== 0) return block;
+		return null;
+	}
+
 	get headingNumberingLinked(): boolean {
+		const block = this.headingNumberingTargetBlock;
+		if (block) return !hasBlockHeadingNumberingOverride(block);
 		return isHeadingLevelLinked(this.model, this.headingEditLevel);
 	}
 
 	set headingNumberingLinked(value: boolean) {
+		const block = this.headingNumberingTargetBlock;
 		const level = this.headingEditLevel;
+		if (block) {
+			if (value) {
+				delete block.headingNumbering;
+			} else {
+				block.headingNumbering = {
+					...resolveHeadingLevelStyle(this.model, block.heading!.level as HeadingLevel),
+				};
+			}
+			return;
+		}
 		if (value) {
 			this.model.headingLinks[level] = true;
 			delete this.model.headingLevels[level];
@@ -218,9 +276,16 @@ class DocumentStore {
 		}
 	}
 
-	readonly popupHeadingStyle = $derived.by(() =>
-		this.resolveHeadingStyle(this.headingEditLevel),
-	);
+	readonly popupHeadingStyle = $derived.by((): HeadingNumberingSettings => {
+		const block = this.activeBlock;
+		if (block.heading && block.heading.level !== 0) {
+			return (
+				resolveBlockHeadingNumbering(this.model, block) ??
+				this.resolveHeadingStyle(block.heading.level as HeadingLevel)
+			);
+		}
+		return this.resolveHeadingStyle(this.headingEditLevel);
+	});
 
 	get popupHeadingNumbering(): string {
 		return this.popupHeadingStyle.numbering ?? "";
@@ -229,6 +294,11 @@ class DocumentStore {
 	set popupHeadingNumbering(value: string) {
 		const numbering = value.trim() || undefined;
 		const level = this.headingEditLevel;
+		const block = this.headingNumberingTargetBlock;
+		if (block && !this.headingNumberingLinked) {
+			(block.headingNumbering ??= {}).numbering = numbering;
+			return;
+		}
 		if (this.headingNumberingLinked) {
 			this.model.headings.numbering = numbering;
 		} else {
@@ -242,6 +312,11 @@ class DocumentStore {
 
 	set popupHeadingOutlined(value: boolean) {
 		const level = this.headingEditLevel;
+		const block = this.headingNumberingTargetBlock;
+		if (block && !this.headingNumberingLinked) {
+			(block.headingNumbering ??= {}).outlined = value;
+			return;
+		}
 		if (this.headingNumberingLinked) {
 			this.model.headings.outlined = value;
 		} else {
@@ -251,8 +326,21 @@ class DocumentStore {
 
 	/** Level key used for spacing — includes 0 (title) unlike headingEditLevel. */
 	get headingSpacingLevel(): 0 | HeadingLevel {
-		if (this.headingMenuIsTitle || this.activeBlock.heading?.level === 0) return 0;
+		if (this.activeBlock.heading?.level !== undefined) {
+			return this.activeBlock.heading.level as 0 | HeadingLevel;
+		}
+		if (this.headingMenuIsTitle) return 0;
 		return this.headingEditLevel;
+	}
+
+	private get headingSpacingTargetBlock(): Block | null {
+		const block = this.activeBlock;
+		if (block.heading) return block;
+		return null;
+	}
+
+	private ensureHeadingSpacingShared(): BlockSpacing {
+		return (this.model.headingSpacingShared ??= { above: 1.2, below: 0.35 });
 	}
 
 	private ensureHeadingSpacing(level: 0 | HeadingLevel): BlockSpacing {
@@ -260,20 +348,89 @@ class DocumentStore {
 		return (this.model.headingSpacing[level] ??= { above: 1.0, below: 0.3 });
 	}
 
+	get headingSpacingLinked(): boolean {
+		const block = this.headingSpacingTargetBlock;
+		if (block) return !hasBlockHeadingSpacingOverride(block);
+		return isHeadingSpacingLinked(this.model, this.headingSpacingLevel);
+	}
+
+	set headingSpacingLinked(value: boolean) {
+		const level = this.headingSpacingLevel;
+		const block = this.headingSpacingTargetBlock;
+		if (block) {
+			if (value) {
+				delete block.headingSpacing;
+			} else {
+				const level = block.heading!.level as 0 | HeadingLevel;
+				const resolved = resolveHeadingSpacing(this.model, level);
+				block.headingSpacing = {
+					above: resolved?.above ?? 1.0,
+					below: resolved?.below ?? 0.3,
+				};
+			}
+			return;
+		}
+		if (!this.model.headingSpacingLinks) this.model.headingSpacingLinks = {};
+		if (value) {
+			this.model.headingSpacingLinks[level] = true;
+			if (this.model.headingSpacing) delete this.model.headingSpacing[level];
+		} else {
+			const resolved = resolveHeadingSpacing(this.model, level);
+			this.model.headingSpacingLinks[level] = false;
+			this.model.headingSpacing ??= {};
+			this.model.headingSpacing[level] = {
+				above: resolved?.above ?? 1.0,
+				below: resolved?.below ?? 0.3,
+			};
+		}
+	}
+
 	get popupHeadingSpacingAbove(): number {
-		return this.model.headingSpacing?.[this.headingSpacingLevel]?.above ?? 1.0;
+		const block = this.headingSpacingTargetBlock;
+		if (block) {
+			return resolveBlockHeadingSpacing(this.model, block)?.above ?? 1.0;
+		}
+		return resolveHeadingSpacing(this.model, this.headingSpacingLevel)?.above ?? 1.0;
 	}
 
 	set popupHeadingSpacingAbove(value: number) {
-		this.ensureHeadingSpacing(this.headingSpacingLevel).above = value;
+		const level = this.headingSpacingLevel;
+		const block = this.headingSpacingTargetBlock;
+		if (block && !this.headingSpacingLinked) {
+			(block.headingSpacing ??= { above: 1.0, below: 0.3 }).above = value;
+			return;
+		}
+		if (isHeadingSpacingLinked(this.model, level)) {
+			this.ensureHeadingSpacingShared().above = value;
+		} else {
+			this.ensureHeadingSpacing(level).above = value;
+		}
 	}
 
 	get popupHeadingSpacingBelow(): number {
-		return this.model.headingSpacing?.[this.headingSpacingLevel]?.below ?? 0.3;
+		const block = this.headingSpacingTargetBlock;
+		if (block) {
+			return resolveBlockHeadingSpacing(this.model, block)?.below ?? 0.3;
+		}
+		return resolveHeadingSpacing(this.model, this.headingSpacingLevel)?.below ?? 0.3;
 	}
 
 	set popupHeadingSpacingBelow(value: number) {
-		this.ensureHeadingSpacing(this.headingSpacingLevel).below = value;
+		const level = this.headingSpacingLevel;
+		const block = this.headingSpacingTargetBlock;
+		if (block && !this.headingSpacingLinked) {
+			(block.headingSpacing ??= { above: 1.0, below: 0.3 }).below = value;
+			return;
+		}
+		if (isHeadingSpacingLinked(this.model, level)) {
+			this.ensureHeadingSpacingShared().below = value;
+		} else {
+			this.ensureHeadingSpacing(level).below = value;
+		}
+	}
+
+	private ensureListSpacingShared(): BlockSpacing {
+		return (this.model.listSpacingShared ??= { above: 0.8, below: 0.8 });
 	}
 
 	private ensureListSpacing(kind: ListKind): BlockSpacing {
@@ -281,36 +438,155 @@ class DocumentStore {
 		return (this.model.listSpacing[kind] ??= { above: 0.8, below: 0.8 });
 	}
 
+	private listSpacingTargetBlock(kind: ListKind): Block | null {
+		const block = this.activeBlock;
+		if (block.list?.kind !== kind) return null;
+		return listGroupFirstBlock(this.model, block, this.pageBreakBlockIds);
+	}
+
+	private clearListSpacingFromGroup(kind: ListKind, keepBlockId?: string): void {
+		const first = this.listSpacingTargetBlock(kind);
+		if (!first) return;
+		for (const id of listGroupBlockIds(this.model, first.id, this.pageBreakBlockIds)) {
+			if (id === keepBlockId) continue;
+			const b = this.findBlock(id);
+			if (b) delete b.listSpacing;
+		}
+	}
+
+	isListSpacingLinkedFor(kind: ListKind): boolean {
+		const block = this.activeBlock;
+		if (block.list?.kind === kind) {
+			return !hasBlockListSpacingOverride(this.model, block, this.pageBreakBlockIds);
+		}
+		return isListSpacingLinked(this.model, kind);
+	}
+
+	setListSpacingLinkedFor(kind: ListKind, value: boolean): void {
+		const block = this.listSpacingTargetBlock(kind);
+		if (block) {
+			if (value) {
+				delete block.listSpacing;
+				this.clearListSpacingFromGroup(kind);
+			} else {
+				const resolved = resolveListSpacing(this.model, kind);
+				block.listSpacing = {
+					above: resolved?.above ?? 0.8,
+					below: resolved?.below ?? 0.8,
+				};
+				this.clearListSpacingFromGroup(kind, block.id);
+			}
+			return;
+		}
+		if (!this.model.listSpacingLinks) this.model.listSpacingLinks = {};
+		if (value) {
+			this.model.listSpacingLinks[kind] = true;
+			if (this.model.listSpacing) delete this.model.listSpacing[kind];
+		} else {
+			const resolved = resolveListSpacing(this.model, kind);
+			this.model.listSpacingLinks[kind] = false;
+			this.model.listSpacing ??= {};
+			this.model.listSpacing[kind] = {
+				above: resolved?.above ?? 0.8,
+				below: resolved?.below ?? 0.8,
+			};
+		}
+	}
+
+	get bulletListSpacingLinked(): boolean {
+		return this.isListSpacingLinkedFor("bullet");
+	}
+
+	set bulletListSpacingLinked(value: boolean) {
+		this.setListSpacingLinkedFor("bullet", value);
+	}
+
+	get numberedListSpacingLinked(): boolean {
+		return this.isListSpacingLinkedFor("numbered");
+	}
+
+	set numberedListSpacingLinked(value: boolean) {
+		this.setListSpacingLinkedFor("numbered", value);
+	}
+
+	private popupListSpacingAbove(kind: ListKind): number {
+		const active = this.activeBlock;
+		if (active.list?.kind === kind) {
+			return (
+				resolveBlockListSpacing(this.model, active, this.pageBreakBlockIds)?.above ?? 0.8
+			);
+		}
+		return resolveListSpacing(this.model, kind)?.above ?? 0.8;
+	}
+
+	private setPopupListSpacingAbove(kind: ListKind, value: number): void {
+		const block = this.listSpacingTargetBlock(kind);
+		if (block && !this.isListSpacingLinkedFor(kind)) {
+			(block.listSpacing ??= { above: 0.8, below: 0.8 }).above = value;
+			this.clearListSpacingFromGroup(kind, block.id);
+			return;
+		}
+		if (isListSpacingLinked(this.model, kind)) {
+			this.ensureListSpacingShared().above = value;
+		} else {
+			this.ensureListSpacing(kind).above = value;
+		}
+	}
+
+	private popupListSpacingBelow(kind: ListKind): number {
+		const active = this.activeBlock;
+		if (active.list?.kind === kind) {
+			return (
+				resolveBlockListSpacing(this.model, active, this.pageBreakBlockIds)?.below ?? 0.8
+			);
+		}
+		return resolveListSpacing(this.model, kind)?.below ?? 0.8;
+	}
+
+	private setPopupListSpacingBelow(kind: ListKind, value: number): void {
+		const block = this.listSpacingTargetBlock(kind);
+		if (block && !this.isListSpacingLinkedFor(kind)) {
+			(block.listSpacing ??= { above: 0.8, below: 0.8 }).below = value;
+			this.clearListSpacingFromGroup(kind, block.id);
+			return;
+		}
+		if (isListSpacingLinked(this.model, kind)) {
+			this.ensureListSpacingShared().below = value;
+		} else {
+			this.ensureListSpacing(kind).below = value;
+		}
+	}
+
 	get popupBulletListSpacingAbove(): number {
-		return this.model.listSpacing?.bullet?.above ?? 0.8;
+		return this.popupListSpacingAbove("bullet");
 	}
 
 	set popupBulletListSpacingAbove(value: number) {
-		this.ensureListSpacing("bullet").above = value;
+		this.setPopupListSpacingAbove("bullet", value);
 	}
 
 	get popupBulletListSpacingBelow(): number {
-		return this.model.listSpacing?.bullet?.below ?? 0.8;
+		return this.popupListSpacingBelow("bullet");
 	}
 
 	set popupBulletListSpacingBelow(value: number) {
-		this.ensureListSpacing("bullet").below = value;
+		this.setPopupListSpacingBelow("bullet", value);
 	}
 
 	get popupNumberedListSpacingAbove(): number {
-		return this.model.listSpacing?.numbered?.above ?? 0.8;
+		return this.popupListSpacingAbove("numbered");
 	}
 
 	set popupNumberedListSpacingAbove(value: number) {
-		this.ensureListSpacing("numbered").above = value;
+		this.setPopupListSpacingAbove("numbered", value);
 	}
 
 	get popupNumberedListSpacingBelow(): number {
-		return this.model.listSpacing?.numbered?.below ?? 0.8;
+		return this.popupListSpacingBelow("numbered");
 	}
 
 	set popupNumberedListSpacingBelow(value: number) {
-		this.ensureListSpacing("numbered").below = value;
+		this.setPopupListSpacingBelow("numbered", value);
 	}
 
 	// --- Blocks ---------------------------------------------------------------
@@ -382,6 +658,28 @@ class DocumentStore {
 		if (!b) return;
 		b.list = list;
 		if (list) b.heading = undefined;
+	}
+
+	/** First block of the list group containing the active block, if any. */
+	listGroupFirstForActive(): Block | null {
+		const block = this.activeBlock;
+		if (!block.list) return null;
+		return listGroupFirstBlock(this.model, block, this.pageBreakBlockIds);
+	}
+
+	/** Apply list settings to every item in the group anchored at `anchorBlockId`. */
+	applyListGroupSettings(anchorBlockId: string, settings: ListSettings): void {
+		const anchor = this.findBlock(anchorBlockId);
+		if (!anchor?.list) return;
+		for (const id of listGroupBlockIds(
+			this.model,
+			anchorBlockId,
+			this.pageBreakBlockIds,
+		)) {
+			const b = this.findBlock(id);
+			if (!b?.list) continue;
+			b.list = { ...settings };
+		}
 	}
 
 	setAlignment(id: string, alignment: HorizontalAlignment | undefined): void {

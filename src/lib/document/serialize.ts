@@ -12,6 +12,11 @@ import type {
 	ParagraphSettings,
 	TypographySettings,
 } from "./types";
+import {
+	hasBlockHeadingNumberingOverride,
+	resolveBlockHeadingSpacing,
+	resolveBlockListSpacing,
+} from "./blockLevelStyle";
 import { isHeadingLevelLinked, resolveHeadingLevelStyle } from "./headingStyle";
 import { TYPST_PAPER_NAME } from "./paperSizes";
 import { typstNumber } from "./units";
@@ -188,10 +193,13 @@ function serializeHeading(block: Block, heading: HeadingSettings, doc: DocumentM
 		return `#text(size: 2em, weight: "bold")[${text}]`;
 	}
 	const level = heading.level as HeadingLevel;
-	const style = resolveHeadingLevelStyle(doc, level);
+	const blockOverride = hasBlockHeadingNumberingOverride(block);
+	const style = blockOverride
+		? { ...resolveHeadingLevelStyle(doc, level), ...block.headingNumbering }
+		: resolveHeadingLevelStyle(doc, level);
 	const args: string[] = [`level: ${level}`];
 	// Linked levels inherit `#set heading(...)` from the preamble.
-	if (!isHeadingLevelLinked(doc, level)) {
+	if (blockOverride || !isHeadingLevelLinked(doc, level)) {
 		if (style.numbering) args.push(`numbering: "${style.numbering}"`);
 		if (style.outlined === false) args.push(`outlined: false`);
 	}
@@ -335,7 +343,7 @@ export function serializeDocument(
 				j++;
 			}
 			if (hasContent) parts.push("");
-			const listSpacing = doc.listSpacing?.[kind];
+			const listSpacing = resolveBlockListSpacing(doc, block, pageBreakBlockIds);
 			const listContent = serializeListGroup(items);
 			parts.push(wrapAligned(listSpacing ? wrapBlock(listContent, listSpacing) : listContent, block.alignment));
 			pushBlockSeparator();
@@ -352,7 +360,7 @@ export function serializeDocument(
 			if (hasContent) parts.push("");
 			const headingContent = serializeHeading(block, block.heading, doc);
 			const hLevel = block.heading.level;
-			const headingSpacing = doc.headingSpacing?.[hLevel as 0 | HeadingLevel];
+			const headingSpacing = resolveBlockHeadingSpacing(doc, block);
 			parts.push(wrapAligned(headingSpacing ? wrapBlock(headingContent, headingSpacing) : headingContent, block.alignment));
 			pushBlockSeparator();
 			hasContent = true;

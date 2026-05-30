@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { untrack } from "svelte";
+	import { resolveBlockHeadingSpacing, resolveBlockListSpacing } from "$lib/document/blockLevelStyle";
 	import { documentStore } from "$lib/document/store.svelte";
 	import { ptToPx } from "$lib/document/units";
 	import type { Block } from "$lib/document/types";
@@ -110,23 +111,35 @@
 	const headingTopMarginEm = $derived.by(() => {
 		if (!block.heading) return 0;
 		const level = block.heading.level;
-		const spacing = documentStore.model.headingSpacing?.[level as 0 | 1 | 2 | 3 | 4];
+		const spacing = resolveBlockHeadingSpacing(documentStore.model, block);
 		return spacing?.above ?? (HEADING_TOP_MARGIN_EM_FALLBACK[level] ?? 0);
 	});
 
 	const headingBottomMarginEm = $derived.by(() => {
 		if (!block.heading) return 0;
-		return documentStore.model.headingSpacing?.[block.heading.level as 0 | 1 | 2 | 3 | 4]?.below ?? 0;
+		return resolveBlockHeadingSpacing(documentStore.model, block)?.below ?? 0;
 	});
 
 	const listAboveEm = $derived.by(() => {
 		if (!block.list) return 0;
-		return documentStore.model.listSpacing?.[block.list.kind]?.above ?? 0;
+		return (
+			resolveBlockListSpacing(
+				documentStore.model,
+				block,
+				documentStore.pageBreakBlockIds,
+			)?.above ?? 0
+		);
 	});
 
 	const listBelowEm = $derived.by(() => {
 		if (!block.list) return 0;
-		return documentStore.model.listSpacing?.[block.list.kind]?.below ?? 0;
+		return (
+			resolveBlockListSpacing(
+				documentStore.model,
+				block,
+				documentStore.pageBreakBlockIds,
+			)?.below ?? 0
+		);
 	});
 
 	const isInline = $derived(block.continuation || renderInline);

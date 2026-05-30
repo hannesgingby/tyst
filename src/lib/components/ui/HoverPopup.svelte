@@ -11,6 +11,8 @@
 		shortcut?: string;
 		/** Extra classes for the absolutely-positioned popup wrapper. */
 		popupClass?: string;
+		/** Highlights the trigger when the cursor is on a matching block type. */
+		active?: boolean;
 		popup?: Snippet;
 	}
 
@@ -21,6 +23,7 @@
 		iconClass = "size-6",
 		shortcut,
 		popupClass = "-left-8",
+		active = false,
 		popup,
 	}: Props = $props();
 
@@ -41,12 +44,18 @@
 	<Tooltip {label} {shortcut} position="bottom" disabled={open}>
 		<button
 			type="button"
-			class="tool-btn flex h-6 items-center gap-0.5 transition-opacity duration-150 [transition-timing-function:cubic-bezier(0.33,1,0.68,1)] hover:opacity-50"
+			class={[
+				"tool-btn flex h-6 items-center gap-0.5 rounded-md transition-opacity duration-150 [transition-timing-function:cubic-bezier(0.33,1,0.68,1)]",
+				active ? "bg-[#E3F0FB] text-[#3D9EEE]" : "hover:opacity-50",
+			]}
 			aria-expanded={open}
 		>
-			<Icon name={icon} class="{iconClass} text-icon" />
-			<span class="chevron text-icon" class:open>
-				<Icon name="nav-arrow-down" class="size-3.5" />
+			<Icon name={icon} class="{iconClass} {active ? 'text-[#3D9EEE]' : 'text-icon'}" />
+			<span class="chevron" class:active class:open>
+				<Icon
+					name="nav-arrow-down"
+					class="size-3.5 {active ? 'text-[#3D9EEE]' : 'text-icon'}"
+				/>
 			</span>
 		</button>
 	</Tooltip>
