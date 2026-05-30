@@ -1,12 +1,15 @@
 /**
- * Lightweight implementation of Typst's `numbering` patterns for the editor
- * preview. We support the symbols `1`, `a`, `A`, `i`, `I` which is the
- * subset useful for flat (non-nested) lists.
+ * Typst-style `numbering` patterns for the editor preview.
  *
- * See https://typst.app/docs/reference/model/numbering/ for the full reference.
+ * See https://typst.app/docs/reference/model/numbering/
  */
 
-const SYMBOLS = new Set(["1", "a", "A", "i", "I"]);
+const COUNTING_SYMBOLS = new Set([
+	"1", "a", "A", "i", "I", "α", "Α", "一", "壹", "あ", "い", "ア", "イ", "א",
+	"가", "ㄱ", "*", "١", "۱", "१", "ৱ", "ক", "①", "⓵",
+]);
+
+const SYMBOL_SUFFIXES = ["†", "‡", "§", "¶", "‖"];
 
 function toAlpha(n: number, upper: boolean): string {
 	if (n <= 0) return "";
@@ -43,39 +46,67 @@ function renderSymbol(symbol: string, n: number): string {
 		case "A": return toAlpha(n, true);
 		case "i": return toRoman(n, false);
 		case "I": return toRoman(n, true);
+		case "*": {
+			if (n <= 0) return "";
+			if (n <= SYMBOL_SUFFIXES.length) return SYMBOL_SUFFIXES[n - 1];
+			const base = SYMBOL_SUFFIXES[SYMBOL_SUFFIXES.length - 1];
+			return base.repeat(Math.ceil(n / SYMBOL_SUFFIXES.length));
+		}
 		default: return String(n);
 	}
 }
 
-/**
- * Format a 1-based index with a Typst-style numbering pattern. Only the first
- * symbol in the pattern is used (sub-level symbols are ignored — we don't
- * support nested lists in the editor preview).
- *
- * Examples:
- *   formatItem("1.", 3)  → "3."
- *   formatItem("a)", 2)  → "b)"
- *   formatItem("I.", 4)  → "IV."
- *   formatItem("1.a", 5) → "5." (sub-symbol stripped)
- */
-export function formatItem(pattern: string, index: number): string {
-	let symbolIdx = -1;
+function symbolIndices(pattern: string): number[] {
+	const indices: number[] = [];
 	for (let i = 0; i < pattern.length; i++) {
-		if (SYMBOLS.has(pattern[i])) {
-			symbolIdx = i;
-			break;
-		}
+		if (COUNTING_SYMBOLS.has(pattern[i])) indices.push(i);
 	}
-	if (symbolIdx < 0) return pattern;
+	return indices;
+}
 
-	const prefix = pattern.slice(0, symbolIdx);
-	const symbol = pattern[symbolIdx];
-	// Strip any further symbol chars (those address nested levels).
-	let suffix = "";
-	let nestedSeen = false;
-	for (let i = symbolIdx + 1; i < pattern.length; i++) {
-		if (SYMBOLS.has(pattern[i])) nestedSeen = true;
-		else if (!nestedSeen) suffix += pattern[i];
+/**
+ * Format numbers with a Typst numbering pattern.
+ *
+ * Examples (matching Typst):
+ *   formatNumbering("1.", [3])     → "3."
+ *   formatNumbering("1.a", [3])    → "3"
+ *   formatNumbering("1.a)", [3])   → "3)"
+ *   formatNumbering("1.1", [1, 2]) → "1.2"
+ */
+export function formatNumbering(pattern: string, numbers: readonly number[]): string {
+	const indices = symbolIndices(pattern);
+	if (indices.length === 0 || numbers.length === 0) return pattern;
+
+	const lastSym = indices[indices.length - 1];
+	const globalSuffix = pattern.slice(lastSym + 1);
+
+	const n = numbers.length;
+	const lastSlot = indices.length - 1;
+	let out = "";
+
+	for (let level = 0; level < n; level++) {
+		const symbolSlot = Math.min(level, lastSlot);
+		const symIdx = indices[symbolSlot]!;
+		if (level === 0) {
+			out += pattern.slice(0, symIdx);
+		} else {
+			const prevSymIdx = indices[Math.min(level - 1, lastSlot)]!;
+			if (symbolSlot === lastSlot && level >= indices.length) {
+				// More numbers than symbols: repeat the last symbol and its prefix.
+				const prevLastIdx = lastSlot > 0 ? indices[lastSlot - 1]! : -1;
+				out += pattern.slice(prevLastIdx + 1, symIdx);
+			} else {
+				out += pattern.slice(prevSymIdx + 1, symIdx);
+			}
+		}
+		out += renderSymbol(pattern[symIdx], numbers[level]!);
 	}
-	return prefix + renderSymbol(symbol, index) + suffix;
+
+	out += globalSuffix;
+	return out;
+}
+
+/** Shorthand for a single counter (flat lists). */
+export function formatItem(pattern: string, index: number): string {
+	return formatNumbering(pattern, [index]);
 }

@@ -1,17 +1,15 @@
 <script lang="ts">
 	import Checkbox from "$lib/components/ui/Checkbox.svelte";
 	import Icon from "$lib/components/Icon.svelte";
-
-	interface Props {
-		numbering?: string;
-		outlined?: boolean;
-	}
-
-	let { numbering = $bindable(""), outlined = $bindable(true) }: Props = $props();
+	import PopupSectionHeader from "$lib/components/ui/PopupSectionHeader.svelte";
+	import Tag from "$lib/components/ui/Tag.svelte";
+	import { documentStore } from "$lib/document/store.svelte";
 </script>
 
 <div class="shell relative z-[60] w-[324px] rounded-lg p-3">
-	<h3 class="text-body-14 font-[430] text-text-100">Numbering</h3>
+	<PopupSectionHeader title="Numbering">
+		<Tag label="headings" variant="blue" bind:linked={documentStore.headingNumberingLinked} />
+	</PopupSectionHeader>
 
 	<div class="mt-[13px]">
 		<label class="field-shell flex w-full items-center justify-between bg-bg-950 pl-4 pr-4">
@@ -19,16 +17,16 @@
 				type="text"
 				class="h-full flex-1 border-none bg-transparent text-body-14-tight text-text-100 outline-none placeholder:text-text-250"
 				placeholder="None"
-				bind:value={numbering}
+				bind:value={documentStore.popupHeadingNumbering}
 				spellcheck="false"
 				autocomplete="off"
 			/>
-			<span class="ml-3 shrink-0 text-text-250">ex. 1.a</span>
+			<span class="ml-3 shrink-0 text-text-250">ex. 1.a)</span>
 		</label>
 	</div>
 
 	<div class="mt-[13px]">
-		<Checkbox label="Outlined" bind:checked={outlined} />
+		<Checkbox label="Outlined" bind:checked={documentStore.popupHeadingOutlined} />
 	</div>
 
 	<button

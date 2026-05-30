@@ -10,8 +10,10 @@ import type {
 	ParagraphSettings,
 	TypographySettings,
 } from "./types";
+import { isHeadingLevelLinked, resolveHeadingLevelStyle } from "./headingStyle";
 import { TYPST_PAPER_NAME } from "./paperSizes";
 import { typstNumber } from "./units";
+import type { HeadingLevel } from "./types";
 
 const WEIGHT_KEYWORD: Record<FontWeightName, string> = {
 	Regular: "regular",
@@ -149,7 +151,21 @@ function serializePreamble(doc: DocumentModel): string {
 		.map((l) => `  ${l},`)
 		.join("\n")}\n)`;
 
-	return [serializePageSetFull(doc.pages[0]), textRule, parRule].join("\n\n");
+	const headingLines: string[] = [];
+	if (doc.headings?.numbering) {
+		headingLines.push(`numbering: "${doc.headings.numbering}"`);
+	}
+	if (doc.headings?.outlined === false) {
+		headingLines.push(`outlined: false`);
+	}
+	const headingRule =
+		headingLines.length > 0
+			? `#set heading(\n${headingLines.map((l) => `  ${l},`).join("\n")}\n)`
+			: null;
+
+	const parts = [serializePageSetFull(doc.pages[0]), textRule, parRule];
+	if (headingRule) parts.push(headingRule);
+	return parts.join("\n\n");
 }
 
 /** Wrap `content` in `#align(...)[…]` when alignment is set and non-default. */
@@ -159,22 +175,28 @@ function wrapAligned(content: string, alignment: HorizontalAlignment | undefined
 }
 
 /** Title (level 0) → styled #text; headings 1-4 → #heading(level: N, …). */
-function serializeHeading(block: Block, heading: HeadingSettings): string {
+function serializeHeading(block: Block, heading: HeadingSettings, doc: DocumentModel): string {
 	const text = escapeText(block.text);
 	if (heading.level === 0) {
 		// Title isn't a heading in Typst's model. Render as a bold, oversized line.
 		return `#text(size: 2em, weight: "bold")[${text}]`;
 	}
-	const args: string[] = [`level: ${heading.level}`];
-	if (heading.numbering) args.push(`numbering: "${heading.numbering}"`);
-	if (heading.outlined === false) args.push(`outlined: false`);
+	const level = heading.level as HeadingLevel;
+	const style = resolveHeadingLevelStyle(doc, level);
+	const args: string[] = [`level: ${level}`];
+	// Linked levels inherit `#set heading(...)` from the preamble.
+	if (!isHeadingLevelLinked(doc, level)) {
+		if (style.numbering) args.push(`numbering: "${style.numbering}"`);
+		if (style.outlined === false) args.push(`outlined: false`);
+	}
 	return `#heading(${args.join(", ")})[${text}]`;
 }
 
 /** Build the argument list shared by both `#list(…)` and `#enum(…)`. */
 function listSharedArgs(s: ListSettings): string[] {
 	const args: string[] = [];
-	if (s.tight === false) args.push(`tight: false`);
+	if (s.tight === true) args.push(`tight: true`);
+	else if (s.tight === false) args.push(`tight: false`);
 	if (s.spacing != null) args.push(`spacing: ${typstNumber(s.spacing)}em`);
 	if (s.indent != null && s.indent !== 0) args.push(`indent: ${typstNumber(s.indent)}pt`);
 	if (s.bodyIndent != null) args.push(`body-indent: ${typstNumber(s.bodyIndent)}em`);
@@ -264,6 +286,9 @@ export function serializeDocument(
 	const parts: string[] = [];
 	let pendingBlanks = 0;
 	let hasContent = false;
+	/** Previous emitted block was a list or heading (Typst auto-parbreaks after both). */
+	let afterList = false;
+	let afterHeading = false;
 
 	function handlePageBreak(block: Block): void {
 		if (!pageBreakSet.has(block.id)) return;
@@ -273,6 +298,7 @@ export function serializeDocument(
 		currentPageIdx = nextPageIdx;
 		hasContent = false;
 		pendingBlanks = 0;
+		afterHeading = false;
 		parts.push("#pagebreak()");
 		parts.push(...serializePageTransition(defaultPage, prevPage, nextPage));
 	}
@@ -307,6 +333,8 @@ export function serializeDocument(
 			pushBlockSeparator();
 			hasContent = true;
 			pendingBlanks = 0;
+			afterList = true;
+			afterHeading = false;
 			i = j;
 			continue;
 		}
@@ -314,9 +342,11 @@ export function serializeDocument(
 		// ── Heading ─────────────────────────────────────────────────────────────
 		if (block.heading) {
 			if (hasContent) parts.push("");
-			parts.push(wrapAligned(serializeHeading(block, block.heading), block.alignment));
+			parts.push(wrapAligned(serializeHeading(block, block.heading, doc), block.alignment));
 			pushBlockSeparator();
 			hasContent = true;
+			afterList = false;
+			afterHeading = true;
 			pendingBlanks = 0;
 			i++;
 			continue;
@@ -338,16 +368,24 @@ export function serializeDocument(
 			parts[parts.length - 1] += serialized;
 		} else {
 			if (hasContent) {
-				if (pendingBlanks === 0) {
-					parts.push("#linebreak()");
-				} else {
-					parts.push("#parbreak()");
+				if (afterHeading) {
+					// Headings already end a paragraph in Typst. The first blank block is
+					// just the "exit" keypress — only additional blanks add linebreaks.
 					for (let k = 1; k < pendingBlanks; k++) parts.push("#linebreak()");
+				} else if (!afterList) {
+					if (pendingBlanks === 0) {
+						parts.push("#linebreak()");
+					} else {
+						parts.push("#parbreak()");
+						for (let k = 1; k < pendingBlanks; k++) parts.push("#linebreak()");
+					}
 				}
 			}
 			parts.push(serialized);
 		}
 		pendingBlanks = 0;
+		afterList = false;
+		afterHeading = false;
 		hasContent = true;
 		i++;
 	}

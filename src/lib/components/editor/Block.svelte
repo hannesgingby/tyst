@@ -24,6 +24,12 @@
 		renderInline?: boolean;
 		/** Pre-rendered list marker (e.g. "•", "1."). Set only on list items. */
 		marker?: string;
+		/** Pre-rendered heading number prefix (e.g. "1.2 "). */
+		headingPrefix?: string;
+		/** List group uses paragraph leading between items when true. */
+		listTight?: boolean;
+		/** Another item follows in the same list group. */
+		listHasNext?: boolean;
 		registerel: (id: string, el: HTMLElement | null) => void;
 		onheight: (id: string, px: number) => void;
 		onfocusblock: (id: string) => void;
@@ -41,6 +47,9 @@
 		placeholder,
 		renderInline = false,
 		marker,
+		headingPrefix = "",
+		listTight = true,
+		listHasNext = false,
 		registerel,
 		onheight,
 		onfocusblock,
@@ -107,6 +116,9 @@
 	// body-indent (em): space between marker and text. Defaults to 0.5em.
 	const bodyIndentEm = $derived(block.list?.bodyIndent ?? 0.5);
 	const listIndentPt = $derived(block.list?.indent ?? 0);
+	const listItemGapEm = $derived(
+		listTight ? typography.leading : paragraph.spacing,
+	);
 
 	const effectivePlaceholder = $derived(block.placeholder ?? placeholder);
 
@@ -247,14 +259,13 @@
 {#if isList}
 	<div
 		bind:this={outerEl}
-		class="relative w-full"
-		style:padding-left="calc({listIndentPt}pt + {bodyIndentEm}em)"
+		class="flex w-full"
+		style:padding-left="{listIndentPt}pt"
+		style:margin-bottom={listHasNext ? `${listItemGapEm}em` : undefined}
 		style:text-indent="0"
 	>
 		<span
-			class="absolute pointer-events-none select-none"
-			style:left="{listIndentPt}pt"
-			style:top="0"
+			class="pointer-events-none shrink-0 select-none"
 			style:font-family={`"${typography.fontFamily}", serif`}
 			style:font-size="{fontSizePx}px"
 			style:font-weight={fontWeight}
@@ -262,15 +273,30 @@
 			style:color={typography.color}
 			aria-hidden="true">{markerText}</span
 		>
-		{@render editable()}
+		<div class="min-w-0 flex-1" style:margin-left="{bodyIndentEm}em">
+			{@render editable()}
+		</div>
 	</div>
 {:else if block.heading}
 	<div
 		bind:this={outerEl}
-		class="w-full"
+		class="flex w-full"
 		style:margin-top="{headingTopMarginEm}em"
 	>
-		{@render editable()}
+		{#if headingPrefix}
+			<span
+				class="pointer-events-none shrink-0 select-none"
+				style:font-family={`"${typography.fontFamily}", serif`}
+				style:font-size="{fontSizePx}px"
+				style:font-weight={fontWeight}
+				style:line-height={effectiveLineHeight}
+				style:color={typography.color}
+				aria-hidden="true">{headingPrefix}</span
+			>
+		{/if}
+		<div class="min-w-0 flex-1">
+			{@render editable()}
+		</div>
 	</div>
 {:else}
 	{@render editable()}

@@ -1,6 +1,8 @@
 import type {
 	Block,
 	DocumentModel,
+	HeadingLevel,
+	HeadingNumberingSettings,
 	HeadingSettings,
 	HorizontalAlignment,
 	ListSettings,
@@ -10,6 +12,7 @@ import type {
 	PaperPreset,
 	TypographySettings,
 } from "./types";
+import { isHeadingLevelLinked, resolveHeadingLevelStyle } from "./headingStyle";
 import { PAPER_SIZES, matchPreset } from "./paperSizes";
 import { serializeDocument } from "./serialize";
 
@@ -47,6 +50,9 @@ function defaultModel(): DocumentModel {
 			firstLineIndent: null,
 			hangingIndent: null,
 		},
+		headings: { outlined: true },
+		headingLinks: { 1: true, 2: true, 3: true, 4: true },
+		headingLevels: {},
 		blocks: [{ id: newId(), text: "" }],
 	};
 }
@@ -93,6 +99,9 @@ class DocumentStore {
 
 	/** Block to focus after a DOM update (e.g. after inserting from a toolbar popup). */
 	pendingFocus = $state<string | null>(null);
+
+	/** Heading level currently shown in the headings popup (1–4). */
+	headingMenuLevel = $state<HeadingLevel>(1);
 
 	/** Number of laid-out pages, reported by the paginating editor. */
 	pageCount = $state(1);
@@ -167,6 +176,63 @@ class DocumentStore {
 		return this.findBlock(this.activeBlockId ?? "") ?? this.model.blocks[0];
 	}
 
+	/** Level used by the headings popup (active heading block, else menu selection). */
+	readonly headingEditLevel = $derived.by((): HeadingLevel => {
+		const level = this.activeBlock.heading?.level;
+		if (level === 1 || level === 2 || level === 3 || level === 4) return level;
+		return this.headingMenuLevel;
+	});
+
+	resolveHeadingStyle(level: HeadingLevel): HeadingNumberingSettings {
+		return resolveHeadingLevelStyle(this.model, level);
+	}
+
+	get headingNumberingLinked(): boolean {
+		return isHeadingLevelLinked(this.model, this.headingEditLevel);
+	}
+
+	set headingNumberingLinked(value: boolean) {
+		const level = this.headingEditLevel;
+		if (value) {
+			this.model.headingLinks[level] = true;
+			delete this.model.headingLevels[level];
+		} else {
+			this.model.headingLinks[level] = false;
+			this.model.headingLevels[level] = { ...this.resolveHeadingStyle(level) };
+		}
+	}
+
+	readonly popupHeadingStyle = $derived.by(() =>
+		this.resolveHeadingStyle(this.headingEditLevel),
+	);
+
+	get popupHeadingNumbering(): string {
+		return this.popupHeadingStyle.numbering ?? "";
+	}
+
+	set popupHeadingNumbering(value: string) {
+		const numbering = value.trim() || undefined;
+		const level = this.headingEditLevel;
+		if (this.headingNumberingLinked) {
+			this.model.headings.numbering = numbering;
+		} else {
+			(this.model.headingLevels[level] ??= {}).numbering = numbering;
+		}
+	}
+
+	get popupHeadingOutlined(): boolean {
+		return this.popupHeadingStyle.outlined !== false;
+	}
+
+	set popupHeadingOutlined(value: boolean) {
+		const level = this.headingEditLevel;
+		if (this.headingNumberingLinked) {
+			this.model.headings.outlined = value;
+		} else {
+			(this.model.headingLevels[level] ??= {}).outlined = value;
+		}
+	}
+
 	// --- Blocks ---------------------------------------------------------------
 
 	blockIndex(id: string): number {
@@ -175,7 +241,12 @@ class DocumentStore {
 
 	setBlockText(id: string, text: string): void {
 		const block = this.findBlock(id);
-		if (block) block.text = text;
+		if (!block) return;
+		if (text === "" && block.heading) {
+			block.heading = undefined;
+			block.placeholder = undefined;
+		}
+		block.text = text;
 	}
 
 	/** Insert a new (override-free) block after `id`, returning its id. */
@@ -224,12 +295,6 @@ class DocumentStore {
 		if (!b) return;
 		b.heading = heading;
 		if (heading) b.list = undefined;
-	}
-
-	setHeadingNumbering(id: string, numbering: string | undefined): void {
-		const b = this.findBlock(id);
-		if (!b?.heading) return;
-		b.heading.numbering = numbering && numbering.length > 0 ? numbering : undefined;
 	}
 
 	setList(id: string, list: ListSettings | undefined): void {

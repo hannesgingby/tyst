@@ -88,15 +88,34 @@ export type TypographyOverride = Partial<TypographySettings>;
 /** Per-block overrides of the document's default paragraph settings. */
 export type ParagraphOverride = Partial<ParagraphSettings>;
 
+/** Heading levels that participate in outline numbering (excludes title). */
+export type HeadingLevel = 1 | 2 | 3 | 4;
+
 /**
- * Heading metadata. `level: 0` is the document title (`#title[…]`); levels 1-4
- * map to `#heading(level: N, …)[…]`. `numbering` is a Typst numbering pattern
- * (e.g. "1.", "1.a.") — empty/undefined means no numbering.
+ * Numbering and outline settings for headings. Stored on the document when linked
+ * to the "headings" tag, or per-level when unlinked.
  */
-export interface HeadingSettings {
-	level: 0 | 1 | 2 | 3 | 4;
+export interface HeadingNumberingSettings {
+	/** Typst numbering pattern (e.g. "1.a)") — empty/undefined means no numbering. */
 	numbering?: string;
 	outlined?: boolean;
+}
+
+/** Whether each heading level inherits the document-wide `headings` style. */
+export interface HeadingLinks {
+	1: boolean;
+	2: boolean;
+	3: boolean;
+	4: boolean;
+}
+
+/**
+ * Block heading metadata. `level: 0` is the document title; levels 1–4 map to
+ * `#heading(level: N)[…]`. Numbering comes from `DocumentModel.headings` /
+ * `headingLevels` (see `headingStyle.ts`).
+ */
+export interface HeadingSettings {
+	level: 0 | HeadingLevel;
 }
 
 export type ListKind = "bullet" | "numbered";
@@ -158,6 +177,12 @@ export interface DocumentModel {
 	typography: TypographySettings;
 	/** Default paragraph settings. */
 	paragraph: ParagraphSettings;
+	/** Default numbering/outlined for all heading levels (the "headings" tag). */
+	headings: HeadingNumberingSettings;
+	/** When true, a level uses `headings`; when false, `headingLevels[level]`. */
+	headingLinks: HeadingLinks;
+	/** Per-level overrides when unlinked from `headings`. */
+	headingLevels: Partial<Record<HeadingLevel, HeadingNumberingSettings>>;
 	/** Document body as an ordered list of paragraph blocks. */
 	blocks: Block[];
 }

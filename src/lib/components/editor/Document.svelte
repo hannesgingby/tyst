@@ -2,7 +2,7 @@
     import { tick } from "svelte";
     import Block from "./Block.svelte";
     import { documentStore } from "$lib/document/store.svelte";
-    import { formatItem } from "$lib/document/numbering";
+    import { formatItem, formatNumbering } from "$lib/document/numbering";
     import { cmToPx, ptToPx } from "$lib/document/units";
     import {
         caretAtEnd,
@@ -95,6 +95,54 @@
         return map;
     });
 
+    // Heading number prefixes (e.g. "1.", "1.2") from outline counters.
+    const headingNumbers = $derived.by(() => {
+        const map = new Map<string, string>();
+        const counters = [0, 0, 0, 0, 0];
+        for (const b of blocks) {
+            if (!b.heading || b.heading.level === 0) continue;
+            const level = b.heading.level;
+            const pattern = documentStore.resolveHeadingStyle(level).numbering;
+            if (!pattern) continue;
+            counters[level] += 1;
+            for (let l = level + 1; l <= 4; l++) counters[l] = 0;
+            const nums = counters.slice(1, level + 1);
+            const label = formatNumbering(pattern, nums);
+            map.set(b.id, label.length > 0 ? `${label} ` : "");
+        }
+        return map;
+    });
+
+    // Per list item: tight spacing flag and whether another item follows in the group.
+    const listItemLayout = $derived.by(() => {
+        const map = new Map<string, { tight: boolean; hasNext: boolean }>();
+        let i = 0;
+        while (i < blocks.length) {
+            const b = blocks[i];
+            if (!b.list) {
+                i++;
+                continue;
+            }
+            const kind = b.list.kind;
+            const ids: string[] = [];
+            let j = i;
+            while (j < blocks.length && blocks[j].list?.kind === kind) {
+                ids.push(blocks[j].id);
+                j++;
+            }
+            const tight = blocks[i].list?.tight !== false;
+            for (let k = 0; k < ids.length; k++) {
+                map.set(ids[k], { tight, hasNext: k < ids.length - 1 });
+            }
+            i = j;
+        }
+        return map;
+    });
+
+    function isListBlock(b: (typeof blocks)[number] | undefined): boolean {
+        return !!b?.list;
+    }
+
     // Non-continuation blocks that directly precede a continuation block must
     // also render inline so all segments flow on one visual line.
     const renderInlineIds = $derived.by(() => {
@@ -117,11 +165,18 @@
             if (b.continuation || b.text !== "") {
                 roles.set(b.id, "text");
             } else {
-                const nextHasText =
-                    i < blocks.length - 1 &&
-                    blocks[i + 1].text !== "" &&
-                    !blocks[i + 1].continuation;
-                roles.set(b.id, nextHasText ? "parbreak" : "linebreak");
+                const prev = i > 0 ? blocks[i - 1] : undefined;
+                const next = i < blocks.length - 1 ? blocks[i + 1] : undefined;
+                // Lists auto-parbreak in Typst — keep a minimal gap before body text.
+                if (isListBlock(prev) && next != null && !next.list && !next.heading) {
+                    roles.set(b.id, "linebreak");
+                } else {
+                    const nextHasText =
+                        next != null &&
+                        next.text !== "" &&
+                        !next.continuation;
+                    roles.set(b.id, nextHasText ? "parbreak" : "linebreak");
+                }
             }
         }
         return roles;
@@ -317,6 +372,8 @@
             block.placeholder = undefined;
             const el = blockEls.get(id);
             if (el) syncBlockDom(el, "");
+            pendingCaret = { id, offset: 0 };
+            focusPending();
             return;
         }
         if (text === "" && block.heading) {
@@ -559,6 +616,9 @@
                         spacingEm={parbreakSpacings.get(block.id)}
                         renderInline={renderInlineIds.has(block.id)}
                         marker={listMarkers.get(block.id)}
+                        headingPrefix={headingNumbers.get(block.id)}
+                        listTight={listItemLayout.get(block.id)?.tight}
+                        listHasNext={listItemLayout.get(block.id)?.hasNext}
                         placeholder={pageIdx === 0 &&
                         i === 0 &&
                         blocks.length === 1
