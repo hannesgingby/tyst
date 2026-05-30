@@ -1,46 +1,39 @@
 <script lang="ts">
 	import { tick } from "svelte";
-	import HeadingNumberingMenu from "./HeadingNumberingMenu.svelte";
-	import HeadingsLevelList from "./HeadingsLevelList.svelte";
+	import ListBulletSettingsMenu from "./ListBulletSettingsMenu.svelte";
+	import ListNumberedSettingsMenu from "./ListNumberedSettingsMenu.svelte";
+	import ListTypeList from "./ListTypeList.svelte";
 
 	const GAP_PX = 10;
-
-	interface Props {
-		levelIndex?: number;
-	}
-
-	let { levelIndex = 0 }: Props = $props();
 
 	let activeIndex = $state(0);
 	let rowEls = $state<HTMLElement[]>([]);
 	let trackEl = $state<HTMLElement | null>(null);
 	let listShellEl = $state<HTMLElement | null>(null);
-	let menuPanelEl = $state<HTMLElement | null>(null);
+	let bulletPanelEl = $state<HTMLElement | null>(null);
+	let numberedPanelEl = $state<HTMLElement | null>(null);
 	let trackHeight = $state(0);
 	let listWidth = $state(0);
 	let menuBottom = $state(0);
 	let menuHeight = $state(0);
 
-	const showNumbering = $derived(activeIndex > 0);
-
-	$effect(() => {
-		activeIndex = levelIndex;
-	});
+	const isNumbered = $derived(activeIndex === 1);
 
 	function updateLayout(): void {
 		const track = trackEl;
 		const listShell = listShellEl;
 		const row = rowEls[activeIndex];
-		const menuPanel = menuPanelEl;
 
 		if (listShell) {
 			trackHeight = listShell.offsetHeight;
 			listWidth = listShell.offsetWidth;
 		}
 
-		menuHeight = menuPanel?.offsetHeight ?? 0;
+		const bulletH = bulletPanelEl?.offsetHeight ?? 0;
+		const numberedH = numberedPanelEl?.offsetHeight ?? 0;
+		menuHeight = isNumbered ? numberedH : bulletH;
 
-		if (!showNumbering || !track || !row || menuHeight === 0) {
+		if (!track || !row || menuHeight === 0) {
 			menuBottom = 0;
 			return;
 		}
@@ -58,23 +51,26 @@
 
 	$effect(() => {
 		activeIndex;
-		showNumbering;
+		isNumbered;
 		rowEls;
 		trackEl;
 		listShellEl;
-		menuPanelEl;
+		bulletPanelEl;
+		numberedPanelEl;
 		tick().then(updateLayout);
 	});
 
 	$effect(() => {
 		const track = trackEl;
 		const listShell = listShellEl;
-		const menuPanel = menuPanelEl;
-		if (!track && !listShell && !menuPanel) return;
+		const bullet = bulletPanelEl;
+		const numbered = numberedPanelEl;
+		if (!track && !listShell && !bullet && !numbered) return;
 		const ro = new ResizeObserver(() => updateLayout());
 		if (track) ro.observe(track);
 		if (listShell) ro.observe(listShell);
-		if (menuPanel) ro.observe(menuPanel);
+		if (bullet) ro.observe(bullet);
+		if (numbered) ro.observe(numbered);
 		return () => ro.disconnect();
 	});
 
@@ -90,19 +86,34 @@
 >
 	<div class="flex gap-2.5">
 		<div bind:this={listShellEl} class="shrink-0">
-			<HeadingsLevelList bind:activeIndex shell={false} onrows={onRows} />
+			<ListTypeList bind:activeIndex shell={false} onrows={onRows} />
 		</div>
 	</div>
-	{#if showNumbering}
+	<div
+		class="absolute w-[324px] overflow-hidden transition-[height,bottom] duration-100 ease-[cubic-bezier(0.33,1,0.68,1)]"
+		style:left="{listWidth + GAP_PX}px"
+		style:bottom="{menuBottom}px"
+		style:height="{menuHeight}px"
+	>
 		<div
-			class="absolute w-[324px] overflow-hidden transition-[height,bottom] duration-100 ease-[cubic-bezier(0.33,1,0.68,1)]"
-			style:left="{listWidth + GAP_PX}px"
-			style:bottom="{menuBottom}px"
-			style:height="{menuHeight}px"
+			bind:this={bulletPanelEl}
+			class={[
+				"absolute inset-x-0 bottom-0",
+				isNumbered && "pointer-events-none invisible",
+			]}
+			aria-hidden={isNumbered}
 		>
-			<div bind:this={menuPanelEl} class="absolute inset-x-0 bottom-0">
-				<HeadingNumberingMenu />
-			</div>
+			<ListBulletSettingsMenu />
 		</div>
-	{/if}
+		<div
+			bind:this={numberedPanelEl}
+			class={[
+				"absolute inset-x-0 bottom-0",
+				!isNumbered && "pointer-events-none invisible",
+			]}
+			aria-hidden={!isNumbered}
+		>
+			<ListNumberedSettingsMenu />
+		</div>
+	</div>
 </div>

@@ -2,6 +2,7 @@
     import Icon from "$lib/components/Icon.svelte";
     import Tooltip from "$lib/components/Tooltip.svelte";
     import HeadingsPopup from "./HeadingsPopup.svelte";
+    import ListPopup from "./ListPopup.svelte";
     import TypographyPopup from "./TypographyPopup.svelte";
 
     type IconTool = {
@@ -18,7 +19,7 @@
         label: string;
         iconClass?: string;
         shortcut?: string;
-        popup?: "typography" | "headings";
+        popup?: "typography" | "headings" | "list";
     };
 
     type DotTool = { kind: "dot" };
@@ -77,7 +78,12 @@
                     name: "align-center",
                     label: "Alignment",
                 },
-                { kind: "expandable", name: "list", label: "List" },
+                {
+                    kind: "expandable",
+                    name: "list",
+                    label: "List",
+                    popup: "list",
+                },
                 {
                     kind: "icon",
                     name: "table",
@@ -156,6 +162,7 @@
 
     let typographyOpen = $state(false);
     let headingsOpen = $state(false);
+    let listOpen = $state(false);
 
     const iconClass = "text-icon";
     const hoverClass =
@@ -233,6 +240,35 @@
     </div>
 {/snippet}
 
+{#snippet listControl(label: string)}
+    <!-- svelte-ignore a11y_no_static_element_interactions -->
+    <div
+        class="relative flex items-center"
+        onmouseenter={() => (listOpen = true)}
+        onmouseleave={() => (listOpen = false)}
+    >
+        <Tooltip {label} position="bottom" disabled={listOpen}>
+            <button
+                type="button"
+                class="flex h-6 items-center gap-0.5 {hoverClass}"
+                aria-expanded={listOpen}
+            >
+                {@render expandableContent("list", "size-6", listOpen)}
+            </button>
+        </Tooltip>
+
+        {#if listOpen}
+            <div
+                class="absolute bottom-full -left-8 z-[60] pb-2.5"
+                role="dialog"
+                aria-label="List settings"
+            >
+                <ListPopup />
+            </div>
+        {/if}
+    </div>
+{/snippet}
+
 {#snippet typographyControl(name: string, label: string, size = "size-6")}
     <!-- Popup lives inside this wrapper so the 10px gap (the popup's bottom padding)
 	     stays inside the hover region. Leaving the wrapper closes it immediately. -->
@@ -293,6 +329,8 @@
                         )}
                     {:else if tool.kind === "expandable" && tool.popup === "headings"}
                         {@render headingsControl(tool.label)}
+                    {:else if tool.kind === "expandable" && tool.popup === "list"}
+                        {@render listControl(tool.label)}
                     {:else if tool.kind === "expandable"}
                         {@render toolExpandable(
                             tool.name,
