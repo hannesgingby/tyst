@@ -28,15 +28,11 @@
 	let trackEl = $state<HTMLElement | null>(null);
 	let listShellEl = $state<HTMLElement | null>(null);
 	let trackHeight = $state(0);
-	let listWidth = $state(0);
 	let menuBottom = $state(0);
 	let menuHeight = $state(0);
 
 	function updateLayout(): void {
-		if (listShellEl) {
-			trackHeight = listShellEl.offsetHeight;
-			listWidth = listShellEl.offsetWidth;
-		}
+		if (listShellEl) trackHeight = listShellEl.offsetHeight;
 		menuHeight = menuEl?.offsetHeight ?? 0;
 
 		if (!showMenu || !trackEl || !activeRowEl || menuHeight === 0) {
@@ -75,20 +71,22 @@
 	bind:this={trackEl}
 	style:height={trackHeight > 0 ? `${trackHeight}px` : undefined}
 >
-	<div class="flex gap-2.5">
+	<div class="flex">
 		<div bind:this={listShellEl} class="shrink-0">
 			{@render list()}
 		</div>
+		{#if showMenu && menu}
+			<!-- Explicit spacer: flex gap is not hoverable; this keeps the 10px gap open. -->
+			<div class="shrink-0" style:width="{GAP_PX}px" aria-hidden="true"></div>
+			<div class="relative shrink-0" style:width="{menuWidth}px">
+				<div
+					class="absolute inset-x-0 overflow-hidden transition-[height,bottom] duration-100 ease-[cubic-bezier(0.33,1,0.68,1)]"
+					style:bottom="{menuBottom}px"
+					style:height="{menuHeight}px"
+				>
+					{@render menu()}
+				</div>
+			</div>
+		{/if}
 	</div>
-	{#if showMenu && menu}
-		<div
-			class="absolute overflow-hidden transition-[height,bottom] duration-100 ease-[cubic-bezier(0.33,1,0.68,1)]"
-			style:left="{listWidth + GAP_PX}px"
-			style:bottom="{menuBottom}px"
-			style:height="{menuHeight}px"
-			style:width="{menuWidth}px"
-		>
-			{@render menu()}
-		</div>
-	{/if}
 </div>
