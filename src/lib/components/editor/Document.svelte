@@ -3,6 +3,14 @@
     import Block from "./Block.svelte";
     import { documentStore } from "$lib/document/store.svelte";
     import { cmToPx, ptToPx } from "$lib/document/units";
+    import {
+        caretAtEnd,
+        caretAtStart,
+        getCaretOffset,
+        measureOffset,
+        setCaretOffset,
+        setCaretRange,
+    } from "./caret";
 
     // Render the page at a higher internal pixel density and scale it *down* to
     // fit the viewport: layout matches the PDF, and the caret renders crisp/thin.
@@ -174,21 +182,6 @@
     // We watch selectionchange and record which block IDs are covered so the
     // store can apply formatting to all of them.
     $effect(() => {
-        function measureOffset(
-            el: HTMLElement,
-            container: Node,
-            offset: number,
-        ): number {
-            try {
-                const r = document.createRange();
-                r.selectNodeContents(el);
-                r.setEnd(container, offset);
-                return r.toString().length;
-            } catch {
-                return 0;
-            }
-        }
-
         function onSelectionChange(): void {
             const sel = window.getSelection();
             if (!sel || sel.isCollapsed || sel.rangeCount === 0) {
@@ -256,37 +249,6 @@
         else blockEls.delete(id);
     }
 
-    function setCaret(el: HTMLElement, offset: number): void {
-        const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
-        let node = walker.nextNode();
-        const sel = window.getSelection();
-        if (!sel) return;
-        const range = document.createRange();
-        if (!node) {
-            range.selectNodeContents(el);
-            range.collapse(true);
-        } else {
-            let remaining = offset;
-            while (node) {
-                const len = node.textContent?.length ?? 0;
-                if (remaining <= len) {
-                    range.setStart(node, remaining);
-                    break;
-                }
-                remaining -= len;
-                const next = walker.nextNode();
-                if (!next) {
-                    range.setStart(node, len);
-                    break;
-                }
-                node = next;
-            }
-            range.collapse(true);
-        }
-        sel.removeAllRanges();
-        sel.addRange(range);
-    }
-
     async function focusPending(): Promise<void> {
         const pending = pendingCaret;
         pendingCaret = null;
@@ -295,7 +257,7 @@
         const el = blockEls.get(pending.id);
         if (el) {
             el.focus();
-            setCaret(el, pending.offset);
+            setCaretOffset(el, pending.offset);
         }
     }
 
@@ -355,27 +317,7 @@
         documentStore.activeBlockId = result.id;
         syncBlockDom(el, merged.text);
         el.focus();
-        setCaret(el, result.offset);
-    }
-
-    function caretOffsetIn(el: HTMLElement): number {
-        const sel = window.getSelection();
-        if (!sel?.rangeCount) return 0;
-        const range = sel.getRangeAt(0);
-        const pre = document.createRange();
-        pre.selectNodeContents(el);
-        pre.setEnd(range.endContainer, range.endOffset);
-        return pre.toString().length;
-    }
-
-    function caretAtEnd(el: HTMLElement, textLen: number): boolean {
-        return (
-            !!window.getSelection()?.isCollapsed && caretOffsetIn(el) >= textLen
-        );
-    }
-
-    function caretAtStart(el: HTMLElement): boolean {
-        return !!window.getSelection()?.isCollapsed && caretOffsetIn(el) === 0;
+        setCaretOffset(el, result.offset);
     }
 
     /** Offset after crossing into a sibling inline segment (skips a dead keypress at 0 / length). */
@@ -412,7 +354,7 @@
 
             if (event.key === "Backspace") {
                 if (!window.getSelection()?.isCollapsed) return;
-                const offset = caretOffsetIn(active);
+                const offset = getCaretOffset(active);
                 const text = blocks[idx].text;
 
                 // Mirror enterOffset: backspace at inline boundaries often needs two presses.
@@ -422,7 +364,7 @@
                     const newText = text.slice(1);
                     documentStore.setBlockText(id, newText);
                     syncBlockDom(active, newText);
-                    setCaret(active, 0);
+                    setCaretOffset(active, 0);
                     return;
                 }
 
@@ -437,7 +379,7 @@
                     const newText = text.slice(0, offset - 1) + text.slice(offset);
                     documentStore.setBlockText(id, newText);
                     syncBlockDom(active, newText);
-                    setCaret(active, enterOffset(newText.length, false));
+                    setCaretOffset(active, enterOffset(newText.length, false));
                     return;
                 }
 
@@ -460,7 +402,7 @@
                 if (nextEl) {
                     documentStore.activeBlockId = next.id;
                     nextEl.focus();
-                    setCaret(nextEl, enterOffset(next.text.length, true));
+                    setCaretOffset(nextEl, enterOffset(next.text.length, true));
                 }
             } else {
                 if (!blocks[idx].continuation) return;
@@ -472,7 +414,7 @@
                 if (prevEl) {
                     documentStore.activeBlockId = prev.id;
                     prevEl.focus();
-                    setCaret(prevEl, enterOffset(prev.text.length, false));
+                    setCaretOffset(prevEl, enterOffset(prev.text.length, false));
                 }
             }
         }
@@ -492,20 +434,7 @@
             const el = blockEls.get(blockId);
             if (!el) return;
             el.focus();
-            const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
-            const textNode = walker.nextNode();
-            const range = document.createRange();
-            if (textNode) {
-                range.setStart(textNode, start);
-                range.setEnd(textNode, end);
-            } else {
-                range.selectNodeContents(el);
-            }
-            const sel = window.getSelection();
-            if (sel) {
-                sel.removeAllRanges();
-                sel.addRange(range);
-            }
+            setCaretRange(el, start, end);
         });
     });
 

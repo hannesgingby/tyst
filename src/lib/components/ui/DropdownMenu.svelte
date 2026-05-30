@@ -19,6 +19,7 @@
 		/** Background utility class for the field surface. */
 		bg?: string;
 		class?: ClassValue;
+		popupClass?: ClassValue;
 		/** Menu panel placement relative to the trigger. */
 		placement?: DropdownPopupPlacement;
 		/** Menu alignment when placed below the trigger. */
@@ -28,6 +29,8 @@
 		searchPlaceholder?: string;
 		onchange?: (value: T) => void;
 		menu?: Snippet;
+		/** Custom trigger; receives `{ open, toggle }` so the caller can style as needed. */
+		trigger?: Snippet<[{ open: boolean; toggle: () => void }]>;
 	}
 
 	let {
@@ -36,12 +39,14 @@
 		disabled = false,
 		bg = "bg-bg-950",
 		class: className,
+		popupClass,
 		placement = "below",
 		align = "stretch",
 		searchable = false,
 		searchPlaceholder = "Search…",
 		onchange,
 		menu,
+		trigger,
 	}: Props = $props();
 
 	let open = $state(false);
@@ -86,21 +91,25 @@
 </script>
 
 <div class={["relative", className]} bind:this={root}>
-	<button
-		type="button"
-		class={[
-			"field-shell flex w-full items-center gap-2 pl-3 pr-3",
-			bg,
-			disabled && "pointer-events-none opacity-50",
-		]}
-		aria-expanded={open}
-		aria-haspopup="listbox"
-		{disabled}
-		onclick={toggle}
-	>
-		<span class="min-w-0 flex-1 truncate text-left">{value}</span>
-		<Icon name="nav-arrow-down" class="size-4 shrink-0 text-text-150" />
-	</button>
+	{#if trigger}
+		{@render trigger({ open, toggle })}
+	{:else}
+		<button
+			type="button"
+			class={[
+				"field-shell flex w-full items-center gap-2 pl-3 pr-3",
+				bg,
+				disabled && "pointer-events-none opacity-50",
+			]}
+			aria-expanded={open}
+			aria-haspopup="listbox"
+			{disabled}
+			onclick={toggle}
+		>
+			<span class="min-w-0 flex-1 truncate text-left">{value}</span>
+			<Icon name="nav-arrow-down" class="size-4 shrink-0 text-text-150" />
+		</button>
+	{/if}
 
 	{#if open}
 		<DropdownPopup
@@ -108,6 +117,7 @@
 			{align}
 			{searchable}
 			{searchPlaceholder}
+			class={popupClass}
 			bind:searchQuery
 		>
 			{#if menu}

@@ -3,6 +3,7 @@
 	import { documentStore } from "$lib/document/store.svelte";
 	import { ptToPx } from "$lib/document/units";
 	import type { Block } from "$lib/document/types";
+	import { getCaretOffset } from "./caret";
 
 	const WEIGHT_CSS: Record<string, number> = { Regular: 400, Medium: 500, Bold: 700 };
 
@@ -134,35 +135,24 @@
 		}
 	});
 
-	function caretOffset(): number {
-		const sel = window.getSelection();
-		if (!sel || sel.rangeCount === 0 || !el) return 0;
-		const range = sel.getRangeAt(0);
-		const pre = document.createRange();
-		pre.selectNodeContents(el);
-		pre.setEnd(range.endContainer, range.endOffset);
-		return pre.toString().length;
-	}
-
 	function onInput(): void {
 		if (el) oninputblock(block.id, el.textContent ?? "");
 	}
 
 	function onKeydown(event: KeyboardEvent): void {
+		if (!el) return;
 		if (event.key === "Enter") {
 			// Every Enter ends the current line and starts a new block, so each
 			// keystroke reliably advances one line (no soft-break/split mixing).
 			// The serializer turns adjacent lines into `linebreak()` and blank
 			// lines into `parbreak()`.
 			event.preventDefault();
-			onsplit(block.id, caretOffset());
+			onsplit(block.id, getCaretOffset(el));
 		} else if (event.key === "Backspace") {
-			const sel = window.getSelection();
 			// Continuation blocks at offset 0 are handled in Document (capture).
 			if (
-				sel &&
-				sel.isCollapsed &&
-				caretOffset() === 0 &&
+				window.getSelection()?.isCollapsed &&
+				getCaretOffset(el) === 0 &&
 				!block.continuation
 			) {
 				event.preventDefault();

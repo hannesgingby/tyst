@@ -1,11 +1,6 @@
 <script lang="ts">
 	import Icon from "$lib/components/Icon.svelte";
-	import DropdownPopup from "$lib/components/ui/DropdownPopup.svelte";
-	import {
-		optionClass,
-		optionIdleClass,
-		optionSelectedClass,
-	} from "$lib/components/ui/dropdownMenuStyles";
+	import DropdownMenu from "$lib/components/ui/DropdownMenu.svelte";
 	import { documentStore } from "$lib/document/store.svelte";
 	import { PAPER_PRESETS } from "$lib/document/paperSizes";
 	import type { PaperPreset } from "$lib/document/types";
@@ -17,21 +12,7 @@
 	let { onMore }: Props = $props();
 
 	const model = documentStore.model;
-	const presetLabel = $derived(documentStore.defaultPage.preset);
-
-	let presetMenuOpen = $state(false);
-
-	function choosePreset(preset: PaperPreset): void {
-		documentStore.setDefaultPreset(preset);
-		presetMenuOpen = false;
-	}
-
-	$effect(() => {
-		if (!presetMenuOpen) return;
-		const close = () => (presetMenuOpen = false);
-		window.addEventListener("pointerdown", close);
-		return () => window.removeEventListener("pointerdown", close);
-	});
+	let preset = $derived(documentStore.defaultPage.preset);
 
 	let isEditing = $state(false);
 	let editValue = $state("");
@@ -107,45 +88,35 @@
 	<div class="flex shrink-0 items-center gap-6">
 		{@render action("Header", "plus")}
 		{@render action("Footer", "plus")}
-		<div class="relative">
-			<button
-				type="button"
-				class="{actionClass} gap-1"
-				aria-haspopup="listbox"
-				aria-expanded={presetMenuOpen}
-				onclick={(event) => {
-					event.stopPropagation();
-					presetMenuOpen = !presetMenuOpen;
-				}}
-			>
-				<span>{presetLabel}</span>
-				<Icon
-					name="nav-arrow-down"
-					class="size-3.5 transition-[opacity,color] duration-150 ease-out {presetMenuOpen
-						? 'opacity-100'
-						: 'opacity-0 group-hover:opacity-100'}"
-				/>
-			</button>
-
-			{#if presetMenuOpen}
-				<DropdownPopup class="z-50 min-w-[140px]" placement="below" align="end">
-					{#each PAPER_PRESETS as preset (preset)}
-						<button
-							type="button"
-							class={[
-								optionClass,
-								preset === presetLabel ? optionSelectedClass : optionIdleClass,
-							]}
-							role="option"
-							aria-selected={preset === presetLabel}
-							onclick={() => choosePreset(preset)}
-						>
-							{preset}
-						</button>
-					{/each}
-				</DropdownPopup>
-			{/if}
-		</div>
+		<DropdownMenu
+			bind:value={preset}
+			options={PAPER_PRESETS}
+			placement="below"
+			align="end"
+			popupClass="z-50 min-w-[140px]"
+			onchange={(value: PaperPreset) => documentStore.setDefaultPreset(value)}
+		>
+			{#snippet trigger({ open, toggle })}
+				<button
+					type="button"
+					class="{actionClass} gap-1"
+					aria-haspopup="listbox"
+					aria-expanded={open}
+					onclick={(event) => {
+						event.stopPropagation();
+						toggle();
+					}}
+				>
+					<span>{preset}</span>
+					<Icon
+						name="nav-arrow-down"
+						class="size-3.5 transition-[opacity,color] duration-150 ease-out {open
+							? 'opacity-100'
+							: 'opacity-0 group-hover:opacity-100'}"
+					/>
+				</button>
+			{/snippet}
+		</DropdownMenu>
 		<button type="button" class={actionClass} onclick={onMore}>More...</button>
 	</div>
 </div>

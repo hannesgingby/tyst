@@ -1,9 +1,12 @@
 <script lang="ts">
     import Icon from "$lib/components/Icon.svelte";
     import Tooltip from "$lib/components/Tooltip.svelte";
+    import HoverPopup from "$lib/components/ui/HoverPopup.svelte";
     import HeadingsPopup from "./HeadingsPopup.svelte";
     import ListPopup from "./ListPopup.svelte";
     import TypographyPopup from "./TypographyPopup.svelte";
+
+    type PopupKind = "typography" | "headings" | "list";
 
     type IconTool = {
         kind: "icon";
@@ -19,7 +22,7 @@
         label: string;
         iconClass?: string;
         shortcut?: string;
-        popup?: "typography" | "headings" | "list";
+        popup?: PopupKind;
     };
 
     type DotTool = { kind: "dot" };
@@ -159,14 +162,6 @@
             ],
         },
     ];
-
-    let typographyOpen = $state(false);
-    let headingsOpen = $state(false);
-    let listOpen = $state(false);
-
-    const iconClass = "text-icon";
-    const hoverClass =
-        "tool-btn transition-opacity duration-150 [transition-timing-function:cubic-bezier(0.33,1,0.68,1)] hover:opacity-50";
 </script>
 
 {#snippet toolIcon(
@@ -178,126 +173,11 @@
     <Tooltip {label} {shortcut} position="bottom">
         <button
             type="button"
-            class="flex h-6 items-center justify-center {hoverClass}"
+            class="flex h-6 items-center justify-center transition-opacity duration-150 [transition-timing-function:cubic-bezier(0.33,1,0.68,1)] hover:opacity-50"
         >
-            <Icon {name} class="{size} {iconClass}" />
+            <Icon {name} class="{size} text-icon" />
         </button>
     </Tooltip>
-{/snippet}
-
-{#snippet expandableContent(name: string, size: string, open: boolean)}
-    <Icon {name} class="{size} {iconClass}" />
-    <span class="chevron text-icon" class:open>
-        <Icon name="nav-arrow-down" class="size-3.5" />
-    </span>
-{/snippet}
-
-{#snippet toolExpandable(
-    name: string,
-    label: string,
-    size = "size-6",
-    shortcut?: string,
-)}
-    <Tooltip {label} {shortcut} position="bottom">
-        <button
-            type="button"
-            class="flex h-6 items-center gap-0.5 {hoverClass}"
-        >
-            {@render expandableContent(name, size, false)}
-        </button>
-    </Tooltip>
-{/snippet}
-
-{#snippet headingsControl(label: string)}
-    <!-- svelte-ignore a11y_no_static_element_interactions -->
-    <div
-        class="relative flex items-center"
-        onmouseenter={() => (headingsOpen = true)}
-        onmouseleave={() => (headingsOpen = false)}
-    >
-        <Tooltip {label} position="bottom" disabled={headingsOpen}>
-            <button
-                type="button"
-                class="flex h-6 items-center gap-0.5 {hoverClass}"
-                aria-expanded={headingsOpen}
-            >
-                <Icon name="headings" class="h-6 w-12 {iconClass}" />
-                <span class="chevron text-icon" class:open={headingsOpen}>
-                    <Icon name="nav-arrow-down" class="size-3.5" />
-                </span>
-            </button>
-        </Tooltip>
-
-        {#if headingsOpen}
-            <div
-                class="absolute bottom-full -left-8 z-[60] pb-2.5"
-                role="dialog"
-                aria-label="Heading level"
-            >
-                <HeadingsPopup />
-            </div>
-        {/if}
-    </div>
-{/snippet}
-
-{#snippet listControl(label: string)}
-    <!-- svelte-ignore a11y_no_static_element_interactions -->
-    <div
-        class="relative flex items-center"
-        onmouseenter={() => (listOpen = true)}
-        onmouseleave={() => (listOpen = false)}
-    >
-        <Tooltip {label} position="bottom" disabled={listOpen}>
-            <button
-                type="button"
-                class="flex h-6 items-center gap-0.5 {hoverClass}"
-                aria-expanded={listOpen}
-            >
-                {@render expandableContent("list", "size-6", listOpen)}
-            </button>
-        </Tooltip>
-
-        {#if listOpen}
-            <div
-                class="absolute bottom-full -left-8 z-[60] pb-2.5"
-                role="dialog"
-                aria-label="List settings"
-            >
-                <ListPopup />
-            </div>
-        {/if}
-    </div>
-{/snippet}
-
-{#snippet typographyControl(name: string, label: string, size = "size-6")}
-    <!-- Popup lives inside this wrapper so the 10px gap (the popup's bottom padding)
-	     stays inside the hover region. Leaving the wrapper closes it immediately. -->
-    <!-- svelte-ignore a11y_no_static_element_interactions -->
-    <div
-        class="relative flex items-center"
-        onmouseenter={() => (typographyOpen = true)}
-        onmouseleave={() => (typographyOpen = false)}
-    >
-        <Tooltip {label} position="bottom" disabled={typographyOpen}>
-            <button
-                type="button"
-                class="flex h-6 items-center gap-0.5 {hoverClass}"
-                aria-expanded={typographyOpen}
-            >
-                {@render expandableContent(name, size, typographyOpen)}
-            </button>
-        </Tooltip>
-
-        {#if typographyOpen}
-            <div
-                class="absolute bottom-full -left-8 pb-2.5"
-                role="dialog"
-                aria-label="Typography settings"
-            >
-                <TypographyPopup />
-            </div>
-        {/if}
-    </div>
 {/snippet}
 
 <div
@@ -322,22 +202,39 @@
                             tool.shortcut,
                         )}
                     {:else if tool.kind === "expandable" && tool.popup === "typography"}
-                        {@render typographyControl(
-                            tool.name,
-                            tool.label,
-                            tool.iconClass,
-                        )}
+                        <HoverPopup
+                            label={tool.label}
+                            icon={tool.name}
+                            iconClass={tool.iconClass}
+                            shortcut={tool.shortcut}
+                        >
+                            {#snippet popup()}<TypographyPopup />{/snippet}
+                        </HoverPopup>
                     {:else if tool.kind === "expandable" && tool.popup === "headings"}
-                        {@render headingsControl(tool.label)}
+                        <HoverPopup
+                            label={tool.label}
+                            icon={tool.name}
+                            iconClass={tool.iconClass}
+                            shortcut={tool.shortcut}
+                        >
+                            {#snippet popup()}<HeadingsPopup />{/snippet}
+                        </HoverPopup>
                     {:else if tool.kind === "expandable" && tool.popup === "list"}
-                        {@render listControl(tool.label)}
+                        <HoverPopup
+                            label={tool.label}
+                            icon={tool.name}
+                            iconClass={tool.iconClass}
+                            shortcut={tool.shortcut}
+                        >
+                            {#snippet popup()}<ListPopup />{/snippet}
+                        </HoverPopup>
                     {:else if tool.kind === "expandable"}
-                        {@render toolExpandable(
-                            tool.name,
-                            tool.label,
-                            tool.iconClass,
-                            tool.shortcut,
-                        )}
+                        <HoverPopup
+                            label={tool.label}
+                            icon={tool.name}
+                            iconClass={tool.iconClass}
+                            shortcut={tool.shortcut}
+                        />
                     {:else}
                         <span
                             class="size-1 shrink-0 rounded-full bg-bg-600"
@@ -349,17 +246,3 @@
         {/each}
     </div>
 </div>
-
-<style>
-    .chevron {
-        display: inline-flex;
-        transform: rotate(0deg);
-        transform-origin: center;
-        transition: transform 300ms cubic-bezier(0.33, 1, 0.68, 1);
-    }
-
-    .chevron.open,
-    .tool-btn:hover .chevron {
-        transform: rotate(180deg);
-    }
-</style>
