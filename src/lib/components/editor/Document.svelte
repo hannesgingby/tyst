@@ -57,8 +57,12 @@
 			if (b.text !== "") {
 				roles.set(b.id, "text");
 			} else {
-				const prevHasText = i > 0 && blocks[i - 1].text !== "";
-				roles.set(b.id, prevHasText ? "parbreak" : "linebreak");
+				// Only show the parbreak gap when the empty block sits *between*
+				// content on both sides. A trailing empty block (or one followed by
+				// another empty block) uses normal linebreak height so the caret
+				// lands on a consistent new line without a visual jump on typing.
+				const nextHasText = i < blocks.length - 1 && blocks[i + 1].text !== "";
+				roles.set(b.id, nextHasText ? "parbreak" : "linebreak");
 			}
 		}
 		return roles;
