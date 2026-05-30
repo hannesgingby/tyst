@@ -1,6 +1,8 @@
 <script lang="ts">
 	import Checkbox from "$lib/components/ui/Checkbox.svelte";
+	import FieldLabel from "$lib/components/ui/FieldLabel.svelte";
 	import Icon from "$lib/components/Icon.svelte";
+	import Input from "$lib/components/ui/Input.svelte";
 	import PopupSectionHeader from "$lib/components/ui/PopupSectionHeader.svelte";
 	import Tag from "$lib/components/ui/Tag.svelte";
 	import { documentStore } from "$lib/document/store.svelte";
@@ -27,6 +29,22 @@
 
 	<div class="mt-[13px]">
 		<Checkbox label="Outlined" bind:checked={documentStore.popupHeadingOutlined} />
+	</div>
+
+	<div class="mt-[13px]">
+		<PopupSectionHeader title="Spacing">
+			<span class="flex h-5 items-center rounded px-2 text-body-12 bg-tag-blue-bg text-tag-blue-text">
+				heading {documentStore.headingEditLevel}
+			</span>
+		</PopupSectionHeader>
+		<div class="mt-[13px] grid grid-cols-2 gap-2">
+			<FieldLabel label="Above">
+				<Input bind:value={documentStore.popupHeadingSpacingAbove} unit="em" min={0} max={20} step={0.05} decimals={2} />
+			</FieldLabel>
+			<FieldLabel label="Below">
+				<Input bind:value={documentStore.popupHeadingSpacingBelow} unit="em" min={0} max={20} step={0.05} decimals={2} />
+			</FieldLabel>
+		</div>
 	</div>
 
 	<button

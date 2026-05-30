@@ -30,6 +30,8 @@
 		listTight?: boolean;
 		/** Another item follows in the same list group. */
 		listHasNext?: boolean;
+		/** This block is the first item in its list group. */
+		listGroupFirst?: boolean;
 		registerel: (id: string, el: HTMLElement | null) => void;
 		onheight: (id: string, px: number) => void;
 		onfocusblock: (id: string) => void;
@@ -50,6 +52,7 @@
 		headingPrefix = "",
 		listTight = true,
 		listHasNext = false,
+		listGroupFirst = false,
 		registerel,
 		onheight,
 		onfocusblock,
@@ -68,7 +71,7 @@
 		3: 1.06,
 		4: 1.0,
 	};
-	const HEADING_TOP_MARGIN_EM: Record<number, number> = {
+	const HEADING_TOP_MARGIN_EM_FALLBACK: Record<number, number> = {
 		0: 1.4,
 		1: 1.2,
 		2: 1.0,
@@ -104,9 +107,28 @@
 		block.alignment ?? (paragraph.justify ? "justify" : "left"),
 	);
 
-	const headingTopMarginEm = $derived(
-		block.heading ? (HEADING_TOP_MARGIN_EM[block.heading.level] ?? 0) : 0,
-	);
+	const headingTopMarginEm = $derived.by(() => {
+		if (!block.heading) return 0;
+		const level = block.heading.level;
+		if (level === 0) return HEADING_TOP_MARGIN_EM_FALLBACK[0] ?? 0;
+		const spacing = documentStore.model.headingSpacing?.[level as 1 | 2 | 3 | 4];
+		return spacing?.above ?? (HEADING_TOP_MARGIN_EM_FALLBACK[level] ?? 0);
+	});
+
+	const headingBottomMarginEm = $derived.by(() => {
+		if (!block.heading || block.heading.level === 0) return 0;
+		return documentStore.model.headingSpacing?.[block.heading.level as 1 | 2 | 3 | 4]?.below ?? 0;
+	});
+
+	const listAboveEm = $derived.by(() => {
+		if (!block.list) return 0;
+		return documentStore.model.listSpacing?.[block.list.kind]?.above ?? 0;
+	});
+
+	const listBelowEm = $derived.by(() => {
+		if (!block.list) return 0;
+		return documentStore.model.listSpacing?.[block.list.kind]?.below ?? 0;
+	});
 
 	const isInline = $derived(block.continuation || renderInline);
 	const isList = $derived(!!block.list);
@@ -160,6 +182,7 @@
 		void fontSizePx;
 		void effectiveLineHeight;
 		void headingTopMarginEm;
+		void headingBottomMarginEm;
 		void markerText;
 		reportHeight();
 	});
@@ -261,7 +284,8 @@
 		bind:this={outerEl}
 		class="flex w-full"
 		style:padding-left="{listIndentPt}pt"
-		style:margin-bottom={listHasNext ? `${listItemGapEm}em` : undefined}
+		style:margin-top={listGroupFirst ? `${listAboveEm}em` : undefined}
+		style:margin-bottom={listHasNext ? `${listItemGapEm}em` : `${listBelowEm}em`}
 		style:text-indent="0"
 	>
 		<span
@@ -282,6 +306,7 @@
 		bind:this={outerEl}
 		class="flex w-full"
 		style:margin-top="{headingTopMarginEm}em"
+		style:margin-bottom="{headingBottomMarginEm}em"
 	>
 		{#if headingPrefix}
 			<span

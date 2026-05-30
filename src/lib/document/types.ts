@@ -144,6 +144,12 @@ export interface ListSettings {
 
 export type HorizontalAlignment = "left" | "center" | "right";
 
+/** Space above and below a block element, in em. */
+export interface BlockSpacing {
+	above: number;
+	below: number;
+}
+
 /**
  * A content block. In the default model each block is one "line" (no internal
  * line breaks). Blocks marked `continuation: true` are logically part of the
@@ -183,6 +189,10 @@ export interface DocumentModel {
 	headingLinks: HeadingLinks;
 	/** Per-level overrides when unlinked from `headings`. */
 	headingLevels: Partial<Record<HeadingLevel, HeadingNumberingSettings>>;
+	/** Above/below spacing for each heading level, serialized as #block(above:, below:). */
+	headingSpacing?: Partial<Record<HeadingLevel, BlockSpacing>>;
+	/** Above/below spacing for list groups, serialized as #block(above:, below:). */
+	listSpacing?: { bullet?: BlockSpacing; numbered?: BlockSpacing };
 	/** Document body as an ordered list of paragraph blocks. */
 	blocks: Block[];
 }

@@ -1,10 +1,12 @@
 import type {
 	Block,
+	BlockSpacing,
 	DocumentModel,
 	HeadingLevel,
 	HeadingNumberingSettings,
 	HeadingSettings,
 	HorizontalAlignment,
+	ListKind,
 	ListSettings,
 	PageSection,
 	PageSettings,
@@ -53,6 +55,16 @@ function defaultModel(): DocumentModel {
 		headings: { outlined: true },
 		headingLinks: { 1: true, 2: true, 3: true, 4: true },
 		headingLevels: {},
+		headingSpacing: {
+			1: { above: 1.5, below: 0.5 },
+			2: { above: 1.2, below: 0.35 },
+			3: { above: 1.0, below: 0.25 },
+			4: { above: 0.85, below: 0.2 },
+		},
+		listSpacing: {
+			bullet: { above: 0.8, below: 0.8 },
+			numbered: { above: 0.8, below: 0.8 },
+		},
 		blocks: [{ id: newId(), text: "" }],
 	};
 }
@@ -231,6 +243,64 @@ class DocumentStore {
 		} else {
 			(this.model.headingLevels[level] ??= {}).outlined = value;
 		}
+	}
+
+	private ensureHeadingSpacing(level: HeadingLevel): BlockSpacing {
+		if (!this.model.headingSpacing) this.model.headingSpacing = {};
+		return (this.model.headingSpacing[level] ??= { above: 1.0, below: 0.3 });
+	}
+
+	get popupHeadingSpacingAbove(): number {
+		return this.model.headingSpacing?.[this.headingEditLevel]?.above ?? 1.0;
+	}
+
+	set popupHeadingSpacingAbove(value: number) {
+		this.ensureHeadingSpacing(this.headingEditLevel).above = value;
+	}
+
+	get popupHeadingSpacingBelow(): number {
+		return this.model.headingSpacing?.[this.headingEditLevel]?.below ?? 0.3;
+	}
+
+	set popupHeadingSpacingBelow(value: number) {
+		this.ensureHeadingSpacing(this.headingEditLevel).below = value;
+	}
+
+	private ensureListSpacing(kind: ListKind): BlockSpacing {
+		if (!this.model.listSpacing) this.model.listSpacing = {};
+		return (this.model.listSpacing[kind] ??= { above: 0.8, below: 0.8 });
+	}
+
+	get popupBulletListSpacingAbove(): number {
+		return this.model.listSpacing?.bullet?.above ?? 0.8;
+	}
+
+	set popupBulletListSpacingAbove(value: number) {
+		this.ensureListSpacing("bullet").above = value;
+	}
+
+	get popupBulletListSpacingBelow(): number {
+		return this.model.listSpacing?.bullet?.below ?? 0.8;
+	}
+
+	set popupBulletListSpacingBelow(value: number) {
+		this.ensureListSpacing("bullet").below = value;
+	}
+
+	get popupNumberedListSpacingAbove(): number {
+		return this.model.listSpacing?.numbered?.above ?? 0.8;
+	}
+
+	set popupNumberedListSpacingAbove(value: number) {
+		this.ensureListSpacing("numbered").above = value;
+	}
+
+	get popupNumberedListSpacingBelow(): number {
+		return this.model.listSpacing?.numbered?.below ?? 0.8;
+	}
+
+	set popupNumberedListSpacingBelow(value: number) {
+		this.ensureListSpacing("numbered").below = value;
 	}
 
 	// --- Blocks ---------------------------------------------------------------

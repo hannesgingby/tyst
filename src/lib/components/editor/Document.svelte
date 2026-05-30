@@ -115,7 +115,7 @@
 
     // Per list item: tight spacing flag and whether another item follows in the group.
     const listItemLayout = $derived.by(() => {
-        const map = new Map<string, { tight: boolean; hasNext: boolean }>();
+        const map = new Map<string, { tight: boolean; hasNext: boolean; isFirst: boolean }>();
         let i = 0;
         while (i < blocks.length) {
             const b = blocks[i];
@@ -132,7 +132,7 @@
             }
             const tight = blocks[i].list?.tight !== false;
             for (let k = 0; k < ids.length; k++) {
-                map.set(ids[k], { tight, hasNext: k < ids.length - 1 });
+                map.set(ids[k], { tight, hasNext: k < ids.length - 1, isFirst: k === 0 });
             }
             i = j;
         }
@@ -619,6 +619,7 @@
                         headingPrefix={headingNumbers.get(block.id)}
                         listTight={listItemLayout.get(block.id)?.tight}
                         listHasNext={listItemLayout.get(block.id)?.hasNext}
+                        listGroupFirst={listItemLayout.get(block.id)?.isFirst}
                         placeholder={pageIdx === 0 &&
                         i === 0 &&
                         blocks.length === 1

@@ -1,7 +1,9 @@
 import type {
 	Block,
+	BlockSpacing,
 	DocumentModel,
 	FontWeightName,
+	HeadingLevel,
 	HeadingSettings,
 	HorizontalAlignment,
 	ListSettings,
@@ -13,7 +15,6 @@ import type {
 import { isHeadingLevelLinked, resolveHeadingLevelStyle } from "./headingStyle";
 import { TYPST_PAPER_NAME } from "./paperSizes";
 import { typstNumber } from "./units";
-import type { HeadingLevel } from "./types";
 
 const WEIGHT_KEYWORD: Record<FontWeightName, string> = {
 	Regular: "regular",
@@ -166,6 +167,11 @@ function serializePreamble(doc: DocumentModel): string {
 	const parts = [serializePageSetFull(doc.pages[0]), textRule, parRule];
 	if (headingRule) parts.push(headingRule);
 	return parts.join("\n\n");
+}
+
+/** Wrap `content` in `#block(above:, below:)[…]` for explicit element spacing. */
+function wrapBlock(content: string, spacing: BlockSpacing): string {
+	return `#block(above: ${typstNumber(spacing.above)}em, below: ${typstNumber(spacing.below)}em)[${content}]`;
 }
 
 /** Wrap `content` in `#align(...)[…]` when alignment is set and non-default. */
@@ -329,7 +335,9 @@ export function serializeDocument(
 				j++;
 			}
 			if (hasContent) parts.push("");
-			parts.push(wrapAligned(serializeListGroup(items), block.alignment));
+			const listSpacing = doc.listSpacing?.[kind];
+			const listContent = serializeListGroup(items);
+			parts.push(wrapAligned(listSpacing ? wrapBlock(listContent, listSpacing) : listContent, block.alignment));
 			pushBlockSeparator();
 			hasContent = true;
 			pendingBlanks = 0;
@@ -342,7 +350,10 @@ export function serializeDocument(
 		// ── Heading ─────────────────────────────────────────────────────────────
 		if (block.heading) {
 			if (hasContent) parts.push("");
-			parts.push(wrapAligned(serializeHeading(block, block.heading, doc), block.alignment));
+			const headingContent = serializeHeading(block, block.heading, doc);
+			const hLevel = block.heading.level;
+			const headingSpacing = hLevel > 0 ? doc.headingSpacing?.[hLevel as HeadingLevel] : undefined;
+			parts.push(wrapAligned(headingSpacing ? wrapBlock(headingContent, headingSpacing) : headingContent, block.alignment));
 			pushBlockSeparator();
 			hasContent = true;
 			afterList = false;
@@ -368,11 +379,11 @@ export function serializeDocument(
 			parts[parts.length - 1] += serialized;
 		} else {
 			if (hasContent) {
-				if (afterHeading) {
-					// Headings already end a paragraph in Typst. The first blank block is
-					// just the "exit" keypress — only additional blanks add linebreaks.
+				if (afterHeading || afterList) {
+					// Headings and lists already end a paragraph in Typst. The first blank
+					// block is just the "exit" keypress — only additional blanks add linebreaks.
 					for (let k = 1; k < pendingBlanks; k++) parts.push("#linebreak()");
-				} else if (!afterList) {
+				} else {
 					if (pendingBlanks === 0) {
 						parts.push("#linebreak()");
 					} else {

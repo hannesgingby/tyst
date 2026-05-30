@@ -2,6 +2,8 @@
 	import Checkbox from "$lib/components/ui/Checkbox.svelte";
 	import FieldLabel from "$lib/components/ui/FieldLabel.svelte";
 	import Input from "$lib/components/ui/Input.svelte";
+	import PopupSectionHeader from "$lib/components/ui/PopupSectionHeader.svelte";
+	import { documentStore } from "$lib/document/store.svelte";
 
 	interface Props {
 		marker?: string;
@@ -62,5 +64,21 @@
 		<Checkbox label="Tight" bind:checked={tight} />
 		<Checkbox label="Full" bind:checked={full} />
 		<Checkbox label="Reversed" bind:checked={reversed} />
+	</div>
+
+	<div class="mt-[13px]">
+		<PopupSectionHeader title="Spacing">
+			<span class="flex h-5 items-center rounded px-2 text-body-12 bg-tag-blue-bg text-tag-blue-text">
+				numbered-list
+			</span>
+		</PopupSectionHeader>
+		<div class="mt-[13px] grid grid-cols-2 gap-2">
+			<FieldLabel label="Above">
+				<Input bind:value={documentStore.popupNumberedListSpacingAbove} unit="em" min={0} max={20} step={0.05} decimals={2} />
+			</FieldLabel>
+			<FieldLabel label="Below">
+				<Input bind:value={documentStore.popupNumberedListSpacingBelow} unit="em" min={0} max={20} step={0.05} decimals={2} />
+			</FieldLabel>
+		</div>
 	</div>
 </div>
