@@ -9,29 +9,34 @@
 </script>
 
 <div class="shell relative z-[60] w-[324px] rounded-lg p-3">
-	{#if !documentStore.headingMenuIsTitle}
-		<PopupSectionHeader title="Numbering">
-			<Tag label="headings" variant="blue" bind:linked={documentStore.headingNumberingLinked} />
-		</PopupSectionHeader>
+	<div
+		class="grid transition-[grid-template-rows] duration-100 ease-[cubic-bezier(0.33,1,0.68,1)]"
+		style:grid-template-rows={documentStore.headingMenuIsTitle ? "0fr" : "1fr"}
+	>
+		<div class="min-h-0 overflow-hidden">
+			<PopupSectionHeader title="Numbering">
+				<Tag label="headings" variant="blue" bind:linked={documentStore.headingNumberingLinked} />
+			</PopupSectionHeader>
 
-		<div class="mt-[13px]">
-			<label class="field-shell flex w-full items-center justify-between bg-bg-950 pl-4 pr-4">
-				<input
-					type="text"
-					class="h-full flex-1 border-none bg-transparent text-body-14-tight text-text-100 outline-none placeholder:text-text-250"
-					placeholder="None"
-					bind:value={documentStore.popupHeadingNumbering}
-					spellcheck="false"
-					autocomplete="off"
-				/>
-				<span class="ml-3 shrink-0 text-text-250">ex. 1.a)</span>
-			</label>
-		</div>
+			<div class="mt-[13px]">
+				<label class="field-shell flex w-full items-center justify-between bg-bg-950 pl-4 pr-4">
+					<input
+						type="text"
+						class="h-full flex-1 border-none bg-transparent text-body-14-tight text-text-100 outline-none placeholder:text-text-250"
+						placeholder="None"
+						bind:value={documentStore.popupHeadingNumbering}
+						spellcheck="false"
+						autocomplete="off"
+					/>
+					<span class="ml-3 shrink-0 text-text-250">ex. 1.a)</span>
+				</label>
+			</div>
 
-		<div class="mt-[13px]">
-			<Checkbox label="Outlined" bind:checked={documentStore.popupHeadingOutlined} />
+			<div class="mt-[13px]">
+				<Checkbox label="Outlined" bind:checked={documentStore.popupHeadingOutlined} />
+			</div>
 		</div>
-	{/if}
+	</div>
 
 	<div class="mt-[13px]">
 		<PopupSectionHeader title="Spacing">

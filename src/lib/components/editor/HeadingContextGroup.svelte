@@ -60,7 +60,7 @@
 		/>
 	{/snippet}
 	{#snippet menu()}
-		<div bind:this={menuEl} class="absolute inset-x-0 bottom-0">
+		<div bind:this={menuEl} class="w-full">
 			<HeadingNumberingMenu />
 		</div>
 	{/snippet}

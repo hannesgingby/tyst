@@ -10,8 +10,10 @@
 		menuWidth?: number;
 		/** Currently active row element; the menu aligns its bottom to this row. */
 		activeRowEl?: HTMLElement | null;
-		/** The currently visible menu panel; observed for height changes. */
+		/** Element whose height drives the clip (may differ from visible panel while shrinking). */
 		menuEl?: HTMLElement | null;
+		/** Fired when the clip height transition finishes. */
+		onClipHeightTransitionEnd?: () => void;
 		list: Snippet;
 		menu?: Snippet;
 	}
@@ -21,6 +23,7 @@
 		menuWidth = 324,
 		activeRowEl = null,
 		menuEl = null,
+		onClipHeightTransitionEnd,
 		list,
 		menu,
 	}: Props = $props();
@@ -44,6 +47,11 @@
 		const rowRect = activeRowEl.getBoundingClientRect();
 		const rowBottom = rowRect.top - trackTop + rowRect.height;
 		menuBottom = rowBottom - menuHeight < 0 ? 0 : trackHeight - rowBottom;
+	}
+
+	function handleClipTransitionEnd(event: TransitionEvent): void {
+		if (event.propertyName !== "height") return;
+		onClipHeightTransitionEnd?.();
 	}
 
 	$effect(() => {
@@ -80,9 +88,10 @@
 			<div class="shrink-0" style:width="{GAP_PX}px" aria-hidden="true"></div>
 			<div class="relative shrink-0" style:width="{menuWidth}px">
 				<div
-					class="absolute inset-x-0 overflow-hidden transition-[height,bottom] duration-100 ease-[cubic-bezier(0.33,1,0.68,1)]"
+					class="absolute inset-x-0 flex flex-col justify-end overflow-hidden transition-[height,bottom] duration-100 ease-[cubic-bezier(0.33,1,0.68,1)]"
 					style:bottom="{menuBottom}px"
 					style:height="{menuHeight}px"
+					ontransitionend={handleClipTransitionEnd}
 				>
 					{@render menu()}
 				</div>

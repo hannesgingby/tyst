@@ -24,6 +24,9 @@
 	let rowEls = $state<HTMLElement[]>([]);
 	let bulletPanelEl = $state<HTMLElement | null>(null);
 	let numberedPanelEl = $state<HTMLElement | null>(null);
+	/** Keep the taller numbered panel visible while the clip shrinks to bullet height. */
+	let holdNumbered = $state(false);
+	let prevActiveIndex = 0;
 
 	// Bullet settings
 	let bulletMarker = $state("");
@@ -43,8 +46,25 @@
 	let numberedReversed = $state(false);
 
 	const isNumbered = $derived(activeIndex === 1);
+	const showNumbered = $derived(isNumbered || holdNumbered);
 	const activeRowEl = $derived(rowEls[activeIndex] ?? null);
-	const menuEl = $derived(isNumbered ? numberedPanelEl : bulletPanelEl);
+	const menuEl = $derived(
+		holdNumbered ? bulletPanelEl : isNumbered ? numberedPanelEl : bulletPanelEl,
+	);
+
+	$effect(() => {
+		if (prevActiveIndex === 1 && activeIndex === 0) {
+			holdNumbered = true;
+		}
+		if (activeIndex === 1) {
+			holdNumbered = false;
+		}
+		prevActiveIndex = activeIndex;
+	});
+
+	function finishHeightTransition(): void {
+		holdNumbered = false;
+	}
 
 	function handleSelect(index: number): void {
 		if (index === 0) {
@@ -72,7 +92,7 @@
 	}
 </script>
 
-<ContextGroup {activeRowEl} {menuEl}>
+<ContextGroup {activeRowEl} {menuEl} onClipHeightTransitionEnd={finishHeightTransition}>
 	{#snippet list()}
 		<SelectableList
 			items={LIST_TYPES}
@@ -85,40 +105,36 @@
 		/>
 	{/snippet}
 	{#snippet menu()}
-		<div
-			bind:this={bulletPanelEl}
-			class={[
-				"absolute inset-x-0 bottom-0",
-				isNumbered && "pointer-events-none invisible",
-			]}
-			aria-hidden={isNumbered}
-		>
-			<ListBulletSettingsMenu
-				bind:marker={bulletMarker}
-				bind:spacing={bulletSpacing}
-				bind:indent={bulletIndent}
-				bind:bodyIndent={bulletBodyIndent}
-				bind:tight={bulletTight}
-			/>
-		</div>
-		<div
-			bind:this={numberedPanelEl}
-			class={[
-				"absolute inset-x-0 bottom-0",
-				!isNumbered && "pointer-events-none invisible",
-			]}
-			aria-hidden={!isNumbered}
-		>
-			<ListNumberedSettingsMenu
-				bind:marker={numberedMarker}
-				bind:start={numberedStart}
-				bind:spacing={numberedSpacing}
-				bind:indent={numberedIndent}
-				bind:bodyIndent={numberedBodyIndent}
-				bind:tight={numberedTight}
-				bind:full={numberedFull}
-				bind:reversed={numberedReversed}
-			/>
+		<div class="relative w-full">
+			<div
+				bind:this={numberedPanelEl}
+				class={[!showNumbered && "pointer-events-none invisible absolute inset-x-0 top-0"]}
+				aria-hidden={!showNumbered}
+			>
+				<ListNumberedSettingsMenu
+					bind:marker={numberedMarker}
+					bind:start={numberedStart}
+					bind:spacing={numberedSpacing}
+					bind:indent={numberedIndent}
+					bind:bodyIndent={numberedBodyIndent}
+					bind:tight={numberedTight}
+					bind:full={numberedFull}
+					bind:reversed={numberedReversed}
+				/>
+			</div>
+			<div
+				bind:this={bulletPanelEl}
+				class={[showNumbered && "pointer-events-none invisible absolute inset-x-0 top-0"]}
+				aria-hidden={showNumbered}
+			>
+				<ListBulletSettingsMenu
+					bind:marker={bulletMarker}
+					bind:spacing={bulletSpacing}
+					bind:indent={bulletIndent}
+					bind:bodyIndent={bulletBodyIndent}
+					bind:tight={bulletTight}
+				/>
+			</div>
 		</div>
 	{/snippet}
 </ContextGroup>
