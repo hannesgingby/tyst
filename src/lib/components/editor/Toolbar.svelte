@@ -185,11 +185,11 @@
         <button
             type="button"
             class={[
-                "flex h-6 items-center justify-center rounded-md transition-opacity duration-150 [transition-timing-function:cubic-bezier(0.33,1,0.68,1)]",
-                active ? "bg-[#E3F0FB] text-[#3D9EEE]" : "hover:opacity-50",
+                "relative flex h-6 items-center justify-center rounded-md transition-opacity duration-150 [transition-timing-function:cubic-bezier(0.33,1,0.68,1)]",
+                active ? "toolbar-tool-active" : "hover:opacity-50",
             ]}
         >
-            <Icon {name} class="{size} {active ? 'text-[#3D9EEE]' : 'text-icon'}" />
+            <Icon {name} class="{size} {active ? 'text-current' : 'text-icon'}" />
         </button>
     </Tooltip>
 {/snippet}
