@@ -432,13 +432,8 @@
     function onMergePrev(id: string): void {
         const result = documentStore.mergeWithPrevious(id);
         if (!result) return;
-        const merged = documentStore.findBlock(result.id);
-        const el = blockEls.get(result.id);
-        if (!el || !merged) return;
-        documentStore.activeBlockId = result.id;
-        syncBlockDom(el, merged.text);
-        el.focus();
-        setCaretOffset(el, result.offset);
+        pendingCaret = result;
+        focusPending();
     }
 
     /** Offset after crossing into a sibling inline segment (skips a dead keypress at 0 / length). */
@@ -477,15 +472,35 @@
                 if (!window.getSelection()?.isCollapsed) return;
                 const offset = getCaretOffset(active);
                 const text = blocks[idx].text;
+                const isCont = blocks[idx].continuation;
+
+                if (offset === 0) {
+                    if (isCont) {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        onMergePrev(id);
+                    }
+                    // Non-continuation at offset 0: let Block.svelte handle via bubble phase.
+                    return;
+                }
 
                 // Mirror enterOffset: backspace at inline boundaries often needs two presses.
-                if (offset === 1 && text.length >= 1) {
+                // For non-continuation blocks only — continuation blocks are fully handled below.
+                if (!isCont && offset === 1 && text.length >= 1) {
                     event.preventDefault();
                     event.stopPropagation();
                     const newText = text.slice(1);
                     documentStore.setBlockText(id, newText);
-                    syncBlockDom(active, newText);
-                    setCaretOffset(active, 0);
+                    if (newText === "") {
+                        // setBlockText("") may strip heading/list metadata, causing the block
+                        // element to remount. Use pendingCaret so we focus the new element
+                        // after Svelte's DOM update rather than the now-stale one.
+                        pendingCaret = { id, offset: 0 };
+                        focusPending();
+                    } else {
+                        syncBlockDom(active, newText);
+                        setCaretOffset(active, 0);
+                    }
                     return;
                 }
 
@@ -504,12 +519,23 @@
                     return;
                 }
 
-                if (offset === 0 && blocks[idx].continuation) {
+                // Take over all backspace events inside continuation blocks to prevent
+                // browsers from jumping the cursor out of inline contenteditable spans.
+                // Merge immediately when the block becomes empty (no two-step dance).
+                if (isCont) {
                     event.preventDefault();
                     event.stopPropagation();
-                    onMergePrev(id);
+                    const newText = text.slice(0, offset - 1) + text.slice(offset);
+                    if (newText === "") {
+                        documentStore.setBlockText(id, "");
+                        onMergePrev(id);
+                    } else {
+                        documentStore.setBlockText(id, newText);
+                        syncBlockDom(active, newText);
+                        setCaretOffset(active, offset - 1);
+                    }
+                    return;
                 }
-                return;
             }
 
             if (event.key === "ArrowRight") {
