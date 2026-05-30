@@ -98,6 +98,9 @@
 			<DropdownMenu
 				value={typography.fontFamily}
 				options={fontOptions}
+				placement="right"
+				searchable
+				searchPlaceholder="Search fonts…"
 				onchange={(v) => documentStore.setTypography("fontFamily", v)}
 			/>
 

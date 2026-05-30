@@ -1,6 +1,12 @@
 <script lang="ts">
     import ColorSelect from "$lib/components/ui/ColorSelect.svelte";
     import DropdownMenu from "$lib/components/ui/DropdownMenu.svelte";
+    import DropdownPopup from "$lib/components/ui/DropdownPopup.svelte";
+    import {
+        optionClass,
+        optionIdleClass,
+        optionSelectedClass,
+    } from "$lib/components/ui/dropdownMenuStyles";
     import Icon from "$lib/components/Icon.svelte";
     import Input from "$lib/components/ui/Input.svelte";
     import Switch from "$lib/components/ui/Switch.svelte";
@@ -90,26 +96,24 @@
         </button>
 
         {#if pageMenuOpen}
-            <!-- svelte-ignore a11y_no_static_element_interactions -->
-            <div
-                class="absolute top-full left-0 z-10 mt-1 min-w-[160px] overflow-hidden rounded-md border border-border-checkbox-off bg-bg-950 py-1 shadow-tooltip"
-                onpointerdown={(event) => event.stopPropagation()}
-            >
+            <DropdownPopup class="min-w-[160px]" align="start">
                 {#each Array(pageCount) as _, index (index)}
                     <button
                         type="button"
                         class={[
-                            "flex w-full px-3 py-1.5 text-left text-body-14-tight transition-colors duration-150",
+                            optionClass,
                             index === activeIndex
-                                ? "bg-bg-850 text-text-100"
-                                : "text-text-100 hover:bg-bg-850",
+                                ? optionSelectedClass
+                                : optionIdleClass,
                         ]}
+                        role="option"
+                        aria-selected={index === activeIndex}
                         onclick={() => selectPage(index)}
                     >
                         Page {index + 1}
                     </button>
                 {/each}
-            </div>
+            </DropdownPopup>
         {/if}
     </div>
     <p class="text-body-16 text-text-200">

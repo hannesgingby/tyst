@@ -1,5 +1,11 @@
 <script lang="ts">
 	import Icon from "$lib/components/Icon.svelte";
+	import DropdownPopup from "$lib/components/ui/DropdownPopup.svelte";
+	import {
+		optionClass,
+		optionIdleClass,
+		optionSelectedClass,
+	} from "$lib/components/ui/dropdownMenuStyles";
 	import { documentStore } from "$lib/document/store.svelte";
 	import { PAPER_PRESETS } from "$lib/document/paperSizes";
 	import type { PaperPreset } from "$lib/document/types";
@@ -122,24 +128,22 @@
 			</button>
 
 			{#if presetMenuOpen}
-				<!-- svelte-ignore a11y_no_static_element_interactions -->
-				<div
-					class="absolute top-full right-0 z-50 mt-1 min-w-[140px] overflow-hidden rounded-md border border-border-checkbox-off bg-bg-950 py-1 shadow-tooltip"
-					onpointerdown={(event) => event.stopPropagation()}
-				>
+				<DropdownPopup class="z-50 min-w-[140px]" placement="below" align="end">
 					{#each PAPER_PRESETS as preset (preset)}
 						<button
 							type="button"
 							class={[
-								"flex w-full px-3 py-1.5 text-left text-body-14-tight transition-colors duration-150",
-								preset === presetLabel ? "bg-bg-850 text-text-100" : "text-text-100 hover:bg-bg-850",
+								optionClass,
+								preset === presetLabel ? optionSelectedClass : optionIdleClass,
 							]}
+							role="option"
+							aria-selected={preset === presetLabel}
 							onclick={() => choosePreset(preset)}
 						>
 							{preset}
 						</button>
 					{/each}
-				</div>
+				</DropdownPopup>
 			{/if}
 		</div>
 		<button type="button" class={actionClass} onclick={onMore}>More...</button>

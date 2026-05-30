@@ -2,6 +2,15 @@
 	import type { Snippet } from "svelte";
 	import type { ClassValue } from "svelte/elements";
 	import Icon from "$lib/components/Icon.svelte";
+	import DropdownPopup, {
+		type DropdownPopupAlign,
+		type DropdownPopupPlacement,
+	} from "$lib/components/ui/DropdownPopup.svelte";
+	import {
+		optionClass,
+		optionIdleClass,
+		optionSelectedClass,
+	} from "$lib/components/ui/dropdownMenuStyles";
 
 	interface Props {
 		value: T;
@@ -10,6 +19,13 @@
 		/** Background utility class for the field surface. */
 		bg?: string;
 		class?: ClassValue;
+		/** Menu panel placement relative to the trigger. */
+		placement?: DropdownPopupPlacement;
+		/** Menu alignment when placed below the trigger. */
+		align?: DropdownPopupAlign;
+		/** Show a filter field at the top of the menu. */
+		searchable?: boolean;
+		searchPlaceholder?: string;
 		onchange?: (value: T) => void;
 		menu?: Snippet;
 	}
@@ -20,12 +36,25 @@
 		disabled = false,
 		bg = "bg-bg-950",
 		class: className,
+		placement = "below",
+		align = "stretch",
+		searchable = false,
+		searchPlaceholder = "Search…",
 		onchange,
 		menu,
 	}: Props = $props();
 
 	let open = $state(false);
 	let root = $state<HTMLDivElement | null>(null);
+	let searchQuery = $state("");
+
+	const filteredOptions = $derived(
+		searchable && searchQuery.trim() !== ""
+			? options.filter((o) =>
+					o.toLowerCase().includes(searchQuery.trim().toLowerCase()),
+				)
+			: options,
+	);
 
 	function toggle(): void {
 		if (disabled) return;
@@ -44,6 +73,10 @@
 		if (target instanceof Node && root.contains(target)) return;
 		open = false;
 	}
+
+	$effect(() => {
+		if (!open) searchQuery = "";
+	});
 
 	$effect(() => {
 		if (!open) return;
@@ -70,21 +103,22 @@
 	</button>
 
 	{#if open}
-		<div
-			class="absolute top-full right-0 left-0 z-10 mt-1 overflow-hidden rounded-md border border-border-checkbox-off bg-bg-950 py-1 shadow-tooltip"
-			role="listbox"
+		<DropdownPopup
+			{placement}
+			{align}
+			{searchable}
+			{searchPlaceholder}
+			bind:searchQuery
 		>
 			{#if menu}
 				{@render menu()}
 			{:else}
-				{#each options as option}
+				{#each filteredOptions as option (option)}
 					<button
 						type="button"
 						class={[
-							"flex w-full px-3 py-1.5 text-left text-body-14-tight transition-colors duration-150",
-							option === value
-								? "bg-bg-850 text-text-100"
-								: "text-text-100 hover:bg-bg-850",
+							optionClass,
+							option === value ? optionSelectedClass : optionIdleClass,
 						]}
 						role="option"
 						aria-selected={option === value}
@@ -93,7 +127,10 @@
 						{option}
 					</button>
 				{/each}
+				{#if searchable && searchQuery.trim() !== "" && filteredOptions.length === 0}
+					<p class="px-3 py-1.5 text-body-14-tight text-text-250">No results</p>
+				{/if}
 			{/if}
-		</div>
+		</DropdownPopup>
 	{/if}
 </div>

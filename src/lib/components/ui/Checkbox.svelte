@@ -27,9 +27,10 @@
 		]}
 		aria-hidden="true"
 	>
-		{#if checked}
-			<Icon name="check" class="size-4 text-tag-blue-text" />
-		{/if}
+		<Icon
+			name="check"
+			class="size-4 text-tag-blue-text {!checked ? 'opacity-0' : ''}"
+		/>
 	</span>
 	<span class="text-body-14-tight text-text-100">{label}</span>
 </label>

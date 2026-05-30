@@ -158,7 +158,13 @@
 			onsplit(block.id, caretOffset());
 		} else if (event.key === "Backspace") {
 			const sel = window.getSelection();
-			if (sel && sel.isCollapsed && caretOffset() === 0) {
+			// Continuation blocks at offset 0 are handled in Document (capture).
+			if (
+				sel &&
+				sel.isCollapsed &&
+				caretOffset() === 0 &&
+				!block.continuation
+			) {
 				event.preventDefault();
 				onmergeprev(block.id);
 			}

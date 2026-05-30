@@ -1,6 +1,7 @@
 <script lang="ts">
     import Icon from "$lib/components/Icon.svelte";
     import Tooltip from "$lib/components/Tooltip.svelte";
+    import HeadingsPopup from "./HeadingsPopup.svelte";
     import TypographyPopup from "./TypographyPopup.svelte";
 
     type IconTool = {
@@ -17,7 +18,7 @@
         label: string;
         iconClass?: string;
         shortcut?: string;
-        popup?: "typography";
+        popup?: "typography" | "headings";
     };
 
     type DotTool = { kind: "dot" };
@@ -40,6 +41,7 @@
                     name: "headings",
                     label: "Headings",
                     iconClass: "h-6 w-12",
+                    popup: "headings",
                 },
             ],
         },
@@ -153,6 +155,7 @@
     ];
 
     let typographyOpen = $state(false);
+    let headingsOpen = $state(false);
 
     const iconClass = "text-icon";
     const hoverClass =
@@ -196,6 +199,38 @@
             {@render expandableContent(name, size, false)}
         </button>
     </Tooltip>
+{/snippet}
+
+{#snippet headingsControl(label: string)}
+    <!-- svelte-ignore a11y_no_static_element_interactions -->
+    <div
+        class="relative flex items-center"
+        onmouseenter={() => (headingsOpen = true)}
+        onmouseleave={() => (headingsOpen = false)}
+    >
+        <Tooltip {label} position="bottom" disabled={headingsOpen}>
+            <button
+                type="button"
+                class="flex h-6 items-center gap-0.5 {hoverClass}"
+                aria-expanded={headingsOpen}
+            >
+                <Icon name="headings" class="h-6 w-12 {iconClass}" />
+                <span class="chevron text-icon" class:open={headingsOpen}>
+                    <Icon name="nav-arrow-down" class="size-3.5" />
+                </span>
+            </button>
+        </Tooltip>
+
+        {#if headingsOpen}
+            <div
+                class="absolute bottom-full -left-8 z-[60] pb-2.5"
+                role="dialog"
+                aria-label="Heading level"
+            >
+                <HeadingsPopup />
+            </div>
+        {/if}
+    </div>
 {/snippet}
 
 {#snippet typographyControl(name: string, label: string, size = "size-6")}
@@ -256,6 +291,8 @@
                             tool.label,
                             tool.iconClass,
                         )}
+                    {:else if tool.kind === "expandable" && tool.popup === "headings"}
+                        {@render headingsControl(tool.label)}
                     {:else if tool.kind === "expandable"}
                         {@render toolExpandable(
                             tool.name,
