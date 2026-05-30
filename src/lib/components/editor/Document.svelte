@@ -167,15 +167,17 @@
             } else {
                 const prev = i > 0 ? blocks[i - 1] : undefined;
                 const next = i < blocks.length - 1 ? blocks[i + 1] : undefined;
-                // Lists auto-parbreak in Typst — keep a minimal gap before body text.
-                if (isListBlock(prev) && next != null && !next.list && !next.heading) {
+                // Blanks after headings/lists keep linebreak height — those elements
+                // carry their own visual spacing via margin-top/bottom.
+                // Otherwise: parbreak when something follows this blank (another blank
+                // or text), linebreak when this blank is terminal (end of doc, or the
+                // next element is a heading/list that handles its own spacing).
+                if (prev?.heading || isListBlock(prev)) {
+                    roles.set(b.id, "linebreak");
+                } else if (next == null || next.heading || isListBlock(next) || next.continuation) {
                     roles.set(b.id, "linebreak");
                 } else {
-                    const nextHasText =
-                        next != null &&
-                        next.text !== "" &&
-                        !next.continuation;
-                    roles.set(b.id, nextHasText ? "parbreak" : "linebreak");
+                    roles.set(b.id, "parbreak");
                 }
             }
         }
