@@ -491,14 +491,13 @@
                     event.stopPropagation();
                     const newText = text.slice(1);
                     documentStore.setBlockText(id, newText);
+                    syncBlockDom(active, newText);
                     if (newText === "") {
-                        // setBlockText("") may strip heading/list metadata, causing the block
-                        // element to remount. Use pendingCaret so we focus the new element
-                        // after Svelte's DOM update rather than the now-stale one.
+                        // setBlockText("") may strip heading/list metadata causing a remount;
+                        // pendingCaret handles focus on the new element after Svelte's update.
                         pendingCaret = { id, offset: 0 };
                         focusPending();
                     } else {
-                        syncBlockDom(active, newText);
                         setCaretOffset(active, 0);
                     }
                     return;
