@@ -59,6 +59,18 @@
 
 	const scale = $derived(viewportWidth > 0 ? viewportWidth / pageWidthPx : 1);
 
+	// Non-continuation blocks that directly precede a continuation block must
+	// also render inline so all segments flow on one visual line.
+	const renderInlineIds = $derived.by(() => {
+		const set = new Set<string>();
+		for (let i = 0; i < blocks.length - 1; i++) {
+			if (!blocks[i].continuation && blocks[i + 1].continuation) {
+				set.add(blocks[i].id);
+			}
+		}
+		return set;
+	});
+
 	// Classify each block based on its neighbours so Block can render empty
 	// blocks at the correct height (parbreak gap vs regular linebreak advance).
 	// Continuation blocks are always "text" regardless of content.
@@ -320,6 +332,151 @@
 		focusPending();
 	}
 
+	function caretOffsetIn(el: HTMLElement): number {
+		const sel = window.getSelection();
+		if (!sel?.rangeCount) return 0;
+		const range = sel.getRangeAt(0);
+		const pre = document.createRange();
+		pre.selectNodeContents(el);
+		pre.setEnd(range.endContainer, range.endOffset);
+		return pre.toString().length;
+	}
+
+	function selectionAnchorIn(el: HTMLElement): boolean {
+		const sel = window.getSelection();
+		if (!sel) return false;
+		const anchor = sel.anchorNode;
+		return anchor != null && el.contains(anchor);
+	}
+
+	function caretAtBlockEnd(el: HTMLElement, textLen: number): boolean {
+		const sel = window.getSelection();
+		if (!el || !sel?.isCollapsed || !selectionAnchorIn(el)) return false;
+		if (caretOffsetIn(el) >= textLen) return true;
+		const end = document.createRange();
+		end.selectNodeContents(el);
+		end.collapse(false);
+		return sel.getRangeAt(0).compareBoundaryPoints(Range.END_TO_END, end) >= 0;
+	}
+
+	function caretAtBlockStart(el: HTMLElement): boolean {
+		const sel = window.getSelection();
+		if (!el || !sel?.isCollapsed || !selectionAnchorIn(el)) return false;
+		if (caretOffsetIn(el) === 0) return true;
+		const start = document.createRange();
+		start.selectNodeContents(el);
+		start.collapse(true);
+		return sel.getRangeAt(0).compareBoundaryPoints(Range.START_TO_START, start) <= 0;
+	}
+
+	/** Caret offset after crossing into a sibling inline segment (avoids a dead keypress at the boundary). */
+	function enterOffset(textLen: number, fromRight: boolean): number {
+		if (textLen === 0) return 0;
+		return fromRight ? 1 : textLen - 1;
+	}
+
+	function onMoveNext(id: string): void {
+		const idx = blocks.findIndex((b) => b.id === id);
+		if (idx < 0 || idx >= blocks.length - 1) return;
+		const next = blocks[idx + 1];
+		if (!next.continuation) return;
+		const nextEl = blockEls.get(next.id);
+		if (!nextEl) return;
+		documentStore.activeBlockId = next.id;
+		nextEl.focus();
+		setCaret(nextEl, enterOffset(next.text.length, true));
+	}
+
+	function onMovePrev(id: string): void {
+		const idx = blocks.findIndex((b) => b.id === id);
+		if (idx <= 0 || !blocks[idx].continuation) return;
+		const prev = blocks[idx - 1];
+		const prevEl = blockEls.get(prev.id);
+		if (!prevEl) return;
+		documentStore.activeBlockId = prev.id;
+		prevEl.focus();
+		setCaret(prevEl, enterOffset(prev.text.length, false));
+	}
+
+	// Capture-phase: cross inline segments before the browser's default (which
+	// often cannot move between adjacent contenteditable elements).
+	$effect(() => {
+		const editorRoot = viewportEl;
+		if (!editorRoot) return;
+		const root = editorRoot;
+
+		// If focus lags behind a cross-block move, ignore one boundary hop on the source block.
+		let skipBoundaryForId: string | null = null;
+
+		function onKeydownCapture(event: KeyboardEvent): void {
+			if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+			const active = document.activeElement;
+			if (!(active instanceof HTMLElement) || !active.matches(".doc-block[contenteditable]")) {
+				return;
+			}
+			if (!root.contains(active)) return;
+
+			const id = active.dataset.blockId;
+			if (!id) return;
+			if (id === skipBoundaryForId) return;
+
+			const idx = blocks.findIndex((b) => b.id === id);
+			if (idx < 0) return;
+
+			if (event.key === "ArrowRight") {
+				if (idx >= blocks.length - 1 || !blocks[idx + 1].continuation) return;
+				if (!caretAtBlockEnd(active, blocks[idx].text.length)) return;
+				event.preventDefault();
+				event.stopPropagation();
+				skipBoundaryForId = id;
+				queueMicrotask(() => {
+					skipBoundaryForId = null;
+				});
+				onMoveNext(id);
+			} else {
+				if (!blocks[idx].continuation) return;
+				if (!caretAtBlockStart(active)) return;
+				event.preventDefault();
+				event.stopPropagation();
+				skipBoundaryForId = id;
+				queueMicrotask(() => {
+					skipBoundaryForId = null;
+				});
+				onMovePrev(id);
+			}
+		}
+
+		window.addEventListener("keydown", onKeydownCapture, true);
+		return () => window.removeEventListener("keydown", onKeydownCapture, true);
+	});
+
+	// Restore selection after a block split (e.g. inline unlink).
+	$effect(() => {
+		const ps = documentStore.pendingSelection;
+		if (!ps) return;
+		documentStore.pendingSelection = null;
+		const { blockId, start, end } = ps;
+		tick().then(() => {
+			const el = blockEls.get(blockId);
+			if (!el) return;
+			el.focus();
+			const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+			const textNode = walker.nextNode();
+			const range = document.createRange();
+			if (textNode) {
+				range.setStart(textNode, start);
+				range.setEnd(textNode, end);
+			} else {
+				range.selectNodeContents(el);
+			}
+			const sel = window.getSelection();
+			if (sel) {
+				sel.removeAllRanges();
+				sel.addRange(range);
+			}
+		});
+	});
+
 	function onHeight(id: string, px: number): void {
 		const b = blocks.find((b) => b.id === id);
 		const h = b?.continuation ? 0 : px;
@@ -360,6 +517,7 @@
 						scale={RENDER_SCALE}
 						role={blockRoles.get(block.id)}
 						spacingEm={parbreakSpacings.get(block.id)}
+						renderInline={renderInlineIds.has(block.id)}
 						placeholder={pageIdx === 0 && i === 0 && blocks.length === 1
 							? "Start writing…"
 							: undefined}

@@ -85,6 +85,9 @@ class DocumentStore {
 	/** Block IDs that start a new page (derived from layout, set by Document). */
 	pageBreakBlockIds = $state<string[]>([]);
 
+	/** Pending text-range selection to restore after a DOM update (e.g. after split). */
+	pendingSelection = $state<{ blockId: string; start: number; end: number } | null>(null);
+
 	/** Number of laid-out pages, reported by the paginating editor. */
 	pageCount = $state(1);
 
@@ -122,7 +125,10 @@ class DocumentStore {
 			const midId = this.splitBlockAtSelection(blockId, start, end);
 			if (midId) {
 				const mid = this.model.blocks.find((b) => b.id === midId);
-				if (mid) mid.typography = { ...this.resolveTypography(mid) };
+				if (mid) {
+					mid.typography = { ...this.resolveTypography(mid) };
+					this.pendingSelection = { blockId: midId, start: 0, end: mid.text.length };
+				}
 				return;
 			}
 		}

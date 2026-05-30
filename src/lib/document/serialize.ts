@@ -168,10 +168,23 @@ function blockText(block: Block): string {
 }
 
 /** Serialize a single block, wrapping it in scoped set rules if it has overrides. */
-function serializeBlock(block: Block): string {
+function serializeBlock(block: Block, docTypo: TypographySettings): string {
 	const text = blockText(block);
 	const typo = block.typography ?? {};
 	const para = block.paragraph ?? {};
+
+	if (block.continuation) {
+		// Inline block: use #text(...)[content] with only the args that differ
+		// from the document defaults. The #[...] scoped-block form is block-level
+		// in Typst and would break the line — the function-call form stays inline.
+		const diffTypo: Partial<TypographySettings> = {};
+		for (const key of Object.keys(typo) as (keyof TypographySettings)[]) {
+			if (typo[key] !== docTypo[key]) diffTypo[key] = typo[key] as never;
+		}
+		const tArgs = textArgs(diffTypo);
+		if (tArgs.length === 0) return text;
+		return `#text(${tArgs.join(", ")})[${text}]`;
+	}
 
 	const overrides: string[] = [];
 	const tArgs = textArgs(typo);
@@ -244,17 +257,22 @@ export function serializeDocument(
 		}
 
 		// ── Content block ────────────────────────────────────────────────────
-		if (hasContent) {
-			if (block.continuation) {
-				// No separator — inline continuation of the previous block.
-			} else if (pendingBlanks === 0) {
-				parts.push("#linebreak()");
-			} else {
-				parts.push("#parbreak()");
-				for (let k = 1; k < pendingBlanks; k++) parts.push("#linebreak()");
+		const serialized = serializeBlock(block, doc.typography);
+		if (hasContent && block.continuation) {
+			// Concatenate directly onto the previous part — no newline so Typst
+			// keeps everything on the same line without inserting extra whitespace.
+			parts[parts.length - 1] += serialized;
+		} else {
+			if (hasContent) {
+				if (pendingBlanks === 0) {
+					parts.push("#linebreak()");
+				} else {
+					parts.push("#parbreak()");
+					for (let k = 1; k < pendingBlanks; k++) parts.push("#linebreak()");
+				}
 			}
+			parts.push(serialized);
 		}
-		parts.push(serializeBlock(block));
 		pendingBlanks = 0;
 		hasContent = true;
 	}

@@ -26,6 +26,11 @@
 		 */
 		spacingEm?: number;
 		placeholder?: string;
+		/**
+		 * Force inline rendering for a non-continuation block that immediately
+		 * precedes a continuation block, so all three segments flow on one line.
+		 */
+		renderInline?: boolean;
 		registerel: (id: string, el: HTMLElement | null) => void;
 		onheight: (id: string, px: number) => void;
 		onfocusblock: (id: string) => void;
@@ -41,6 +46,7 @@
 		role = "text",
 		spacingEm,
 		placeholder,
+		renderInline = false,
 		registerel,
 		onheight,
 		onfocusblock,
@@ -73,7 +79,9 @@
 		role === "parbreak" ? (spacingEm ?? paragraph.spacing) : lineHeight,
 	);
 
-	let el = $state<HTMLDivElement | null>(null);
+	const isInline = $derived(block.continuation || renderInline);
+
+	let el = $state<HTMLElement | null>(null);
 
 	function reportHeight(): void {
 		if (el) onheight(block.id, el.offsetHeight);
@@ -189,17 +197,13 @@
 </script>
 
 <!--
-  Continuation blocks are inline with their predecessor (same visual line).
-  The outer element uses display:inline so it doesn't introduce a line break;
-  the inner contenteditable is also inline so it flows in-text.
-  Regular blocks are block-level (the default).
+  Continuation blocks and the segment before them share one visual line.
+  Each block is a single contenteditable (span inline, div block-level).
 -->
-<svelte:element
-	this={block.continuation ? "span" : "div"}
->
-	<div
+{#if isInline}
+	<span
 		bind:this={el}
-		class={["doc-block outline-none", block.continuation ? "" : "w-full"]}
+		class={["doc-block outline-none"]}
 		contenteditable="true"
 		spellcheck="false"
 		role="textbox"
@@ -207,7 +211,31 @@
 		aria-multiline="false"
 		data-block-id={block.id}
 		data-placeholder={placeholder}
-		style:display={block.continuation ? "inline" : undefined}
+		style:display="inline"
+		style:font-family={`"${typography.fontFamily}", serif`}
+		style:font-size="{fontSizePx}px"
+		style:font-weight={fontWeight}
+		style:line-height={effectiveLineHeight}
+		style:letter-spacing="{letterSpacingPx}px"
+		style:color={typography.color}
+		style:text-align={paragraph.justify ? "justify" : "left"}
+		style:text-indent="{firstLineIndentEm}em"
+		onfocus={() => onfocusblock(block.id)}
+		oninput={onInput}
+		onkeydown={onKeydown}
+		onpaste={onPaste}
+	></span>
+{:else}
+	<div
+		bind:this={el}
+		class={["doc-block outline-none w-full"]}
+		contenteditable="true"
+		spellcheck="false"
+		role="textbox"
+		tabindex="0"
+		aria-multiline="false"
+		data-block-id={block.id}
+		data-placeholder={placeholder}
 		style:font-family={`"${typography.fontFamily}", serif`}
 		style:font-size="{fontSizePx}px"
 		style:font-weight={fontWeight}
@@ -221,7 +249,7 @@
 		onkeydown={onKeydown}
 		onpaste={onPaste}
 	></div>
-</svelte:element>
+{/if}
 
 <style>
 	.doc-block {
