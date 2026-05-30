@@ -8,15 +8,16 @@
         children: Snippet;
         padding?: PopupPadding;
         class?: ClassValue;
+        style?: string;
     }
 
-    let { children, padding = 16, class: className }: Props = $props();
+    let { children, padding = 16, class: className, style }: Props = $props();
 
     const paddingClass = $derived(
         padding === 16 ? "p-4" : padding === 12 ? "p-3" : "p-2",
     );
 </script>
 
-<div class={["shell rounded-lg my-4 mx-6", paddingClass, className]}>
+<div class={["shell rounded-lg my-4 mx-6", paddingClass, className]} {style}>
     {@render children()}
 </div>

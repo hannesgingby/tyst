@@ -1,26 +1,28 @@
+<script lang="ts" module>
+	export type SelectableItem = { label: string; hint?: string };
+</script>
+
 <script lang="ts">
 	import Popup from "$lib/components/ui/Popup.svelte";
 
-	export type ListType = {
-		label: string;
-		marker: string;
-	};
-
-	export const LIST_TYPES: ListType[] = [
-		{ label: "Bullet list", marker: "*" },
-		{ label: "Numbered list", marker: "1." },
-	];
-
 	interface Props {
+		items: readonly SelectableItem[];
 		activeIndex?: number;
-		onrows?: (rows: HTMLElement[]) => void;
+		width: number;
+		ariaLabel: string;
+		/** When false, renders without the Popup wrapper (for use inside a group). */
 		shell?: boolean;
+		/** Called when row elements change (for aligning a side panel). */
+		onrows?: (rows: HTMLElement[]) => void;
 	}
 
 	let {
+		items,
 		activeIndex = $bindable(0),
-		onrows,
+		width,
+		ariaLabel,
 		shell = true,
+		onrows,
 	}: Props = $props();
 
 	let rowEls = $state<HTMLElement[]>([]);
@@ -42,8 +44,8 @@
 </script>
 
 {#snippet listContent()}
-	<ul class="flex flex-col gap-0.5" role="listbox" aria-label="List type">
-		{#each LIST_TYPES as type, i (type.label)}
+	<ul class="flex flex-col gap-0.5" role="listbox" aria-label={ariaLabel}>
+		{#each items as item, i (item.label)}
 			<li role="presentation">
 				<button
 					type="button"
@@ -58,8 +60,10 @@
 					aria-selected={i === activeIndex}
 					onmouseenter={() => (activeIndex = i)}
 				>
-					<span>{type.label}</span>
-					<span class="text-text-250">{type.marker}</span>
+					<span>{item.label}</span>
+					{#if item.hint}
+						<span class="text-text-250">{item.hint}</span>
+					{/if}
 				</button>
 			</li>
 		{/each}
@@ -67,11 +71,11 @@
 {/snippet}
 
 {#if shell}
-	<Popup padding={8} class="w-[280px]">
+	<Popup padding={8} style="width:{width}px">
 		{@render listContent()}
 	</Popup>
 {:else}
-	<div class="shell w-[280px] shrink-0 rounded-lg px-2 py-2.5">
+	<div class="shell shrink-0 rounded-lg px-2 py-2.5" style:width="{width}px">
 		{@render listContent()}
 	</div>
 {/if}

@@ -1,9 +1,19 @@
-<script lang="ts">
-	import { tick } from "svelte";
-	import HeadingNumberingMenu from "./HeadingNumberingMenu.svelte";
-	import HeadingsLevelList from "./HeadingsLevelList.svelte";
+<script lang="ts" module>
+	import type { SelectableItem } from "./SelectableList.svelte";
 
-	const GAP_PX = 10;
+	export const HEADING_LEVELS: SelectableItem[] = [
+		{ label: "Title", hint: "#title" },
+		{ label: "Heading 1", hint: "=" },
+		{ label: "Heading 2", hint: "==" },
+		{ label: "Heading 3", hint: "===" },
+		{ label: "Heading 4", hint: "====" },
+	];
+</script>
+
+<script lang="ts">
+	import ContextGroup from "./ContextGroup.svelte";
+	import HeadingNumberingMenu from "./HeadingNumberingMenu.svelte";
+	import SelectableList from "./SelectableList.svelte";
 
 	interface Props {
 		levelIndex?: number;
@@ -13,96 +23,30 @@
 
 	let activeIndex = $state(0);
 	let rowEls = $state<HTMLElement[]>([]);
-	let trackEl = $state<HTMLElement | null>(null);
-	let listShellEl = $state<HTMLElement | null>(null);
-	let menuPanelEl = $state<HTMLElement | null>(null);
-	let trackHeight = $state(0);
-	let listWidth = $state(0);
-	let menuBottom = $state(0);
-	let menuHeight = $state(0);
-
-	const showNumbering = $derived(activeIndex > 0);
+	let menuEl = $state<HTMLElement | null>(null);
 
 	$effect(() => {
 		activeIndex = levelIndex;
 	});
 
-	function updateLayout(): void {
-		const track = trackEl;
-		const listShell = listShellEl;
-		const row = rowEls[activeIndex];
-		const menuPanel = menuPanelEl;
-
-		if (listShell) {
-			trackHeight = listShell.offsetHeight;
-			listWidth = listShell.offsetWidth;
-		}
-
-		menuHeight = menuPanel?.offsetHeight ?? 0;
-
-		if (!showNumbering || !track || !row || menuHeight === 0) {
-			menuBottom = 0;
-			return;
-		}
-
-		const trackTop = track.getBoundingClientRect().top;
-		const rowRect = row.getBoundingClientRect();
-		const rowBottom = rowRect.top - trackTop + rowRect.height;
-
-		let bottom = trackHeight - rowBottom;
-		if (rowBottom - menuHeight < 0) {
-			bottom = 0;
-		}
-		menuBottom = bottom;
-	}
-
-	$effect(() => {
-		activeIndex;
-		showNumbering;
-		rowEls;
-		trackEl;
-		listShellEl;
-		menuPanelEl;
-		tick().then(updateLayout);
-	});
-
-	$effect(() => {
-		const track = trackEl;
-		const listShell = listShellEl;
-		const menuPanel = menuPanelEl;
-		if (!track && !listShell && !menuPanel) return;
-		const ro = new ResizeObserver(() => updateLayout());
-		if (track) ro.observe(track);
-		if (listShell) ro.observe(listShell);
-		if (menuPanel) ro.observe(menuPanel);
-		return () => ro.disconnect();
-	});
-
-	function onRows(rows: HTMLElement[]): void {
-		rowEls = rows;
-	}
+	const activeRowEl = $derived(rowEls[activeIndex] ?? null);
+	const showNumbering = $derived(activeIndex > 0);
 </script>
 
-<div
-	class="relative z-[60] mb-4"
-	bind:this={trackEl}
-	style:height={trackHeight > 0 ? `${trackHeight}px` : undefined}
->
-	<div class="flex gap-2.5">
-		<div bind:this={listShellEl} class="shrink-0">
-			<HeadingsLevelList bind:activeIndex shell={false} onrows={onRows} />
+<ContextGroup showMenu={showNumbering} {activeRowEl} {menuEl}>
+	{#snippet list()}
+		<SelectableList
+			items={HEADING_LEVELS}
+			bind:activeIndex
+			width={316}
+			ariaLabel="Heading level"
+			shell={false}
+			onrows={(rows) => (rowEls = rows)}
+		/>
+	{/snippet}
+	{#snippet menu()}
+		<div bind:this={menuEl} class="absolute inset-x-0 bottom-0">
+			<HeadingNumberingMenu />
 		</div>
-	</div>
-	{#if showNumbering}
-		<div
-			class="absolute w-[324px] overflow-hidden transition-[height,bottom] duration-100 ease-[cubic-bezier(0.33,1,0.68,1)]"
-			style:left="{listWidth + GAP_PX}px"
-			style:bottom="{menuBottom}px"
-			style:height="{menuHeight}px"
-		>
-			<div bind:this={menuPanelEl} class="absolute inset-x-0 bottom-0">
-				<HeadingNumberingMenu />
-			</div>
-		</div>
-	{/if}
-</div>
+	{/snippet}
+</ContextGroup>

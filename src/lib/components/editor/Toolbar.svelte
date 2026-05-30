@@ -2,11 +2,12 @@
     import Icon from "$lib/components/Icon.svelte";
     import Tooltip from "$lib/components/Tooltip.svelte";
     import HoverPopup from "$lib/components/ui/HoverPopup.svelte";
+    import AlignmentPopup from "./AlignmentPopup.svelte";
     import HeadingsPopup from "./HeadingsPopup.svelte";
     import ListPopup from "./ListPopup.svelte";
     import TypographyPopup from "./TypographyPopup.svelte";
 
-    type PopupKind = "typography" | "headings" | "list";
+    type PopupKind = "typography" | "headings" | "list" | "alignment";
 
     type IconTool = {
         kind: "icon";
@@ -80,6 +81,7 @@
                     kind: "expandable",
                     name: "align-center",
                     label: "Alignment",
+                    popup: "alignment",
                 },
                 {
                     kind: "expandable",
@@ -227,6 +229,15 @@
                             shortcut={tool.shortcut}
                         >
                             {#snippet popup()}<ListPopup />{/snippet}
+                        </HoverPopup>
+                    {:else if tool.kind === "expandable" && tool.popup === "alignment"}
+                        <HoverPopup
+                            label={tool.label}
+                            icon={tool.name}
+                            iconClass={tool.iconClass}
+                            shortcut={tool.shortcut}
+                        >
+                            {#snippet popup()}<AlignmentPopup />{/snippet}
                         </HoverPopup>
                     {:else if tool.kind === "expandable"}
                         <HoverPopup
