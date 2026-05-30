@@ -54,7 +54,8 @@
 	// Walk the blocks, assigning each to a page. A block that doesn't fit in the
 	// remaining space on the current page is pushed to the top of the next page.
 	const layout = $derived.by(() => {
-		const gapPush = marginsPx.bottom + PAGE_GAP_PX + marginsPx.top;
+		// Distance from one page's content bottom to the next page's content top.
+		const interPageGap = marginsPx.bottom + PAGE_GAP_PX + marginsPx.top;
 		const items = new Map<string, { page: number; marginTop: number }>();
 		let pageIndex = 0;
 		let y = 0;
@@ -64,7 +65,10 @@
 			let marginTop = 0;
 			if (i > 0 && y > 0 && y + h > contentHeightPx) {
 				pageIndex += 1;
-				marginTop = gapPush;
+				// Fill the leftover space on the current page *plus* the gap, so the
+				// block lands exactly at the next page's content top — never above
+				// the paper edge.
+				marginTop = contentHeightPx - y + interPageGap;
 				y = 0;
 			}
 			items.set(id, { page: pageIndex, marginTop });
@@ -145,19 +149,27 @@
 		const block = blocks.find((b) => b.id === id);
 		if (!block) return;
 		const text = block.text;
-		// Drop the soft break that triggered the split.
-		const before = text.slice(0, caretOffset - 1);
+		const before = text.slice(0, caretOffset);
 		const after = text.slice(caretOffset);
 		documentStore.setBlockText(id, before);
 		const el = blockEls.get(id);
 		if (el) {
 			el.textContent = before;
-			// Resetting textContent drops the sentinel <br>; restore it so the now
-			// unfocused block keeps a consistent line box (and caret height).
-			if (before === "" || before.endsWith("\n")) el.append(document.createElement("br"));
+			// Resetting textContent drops the sentinel <br>; an emptied block needs
+			// it back to keep a line box (and consistent caret height).
+			if (before === "") el.append(document.createElement("br"));
 		}
 		const newId = documentStore.insertBlockAfter(id, after);
 		pendingCaret = { id: newId, offset: 0 };
+		focusPending();
+	}
+
+	function onPasteLines(id: string, lines: string[]): void {
+		// The first pasted line was inserted into `id`; turn the rest into blocks.
+		let prevId = id;
+		for (const line of lines) prevId = documentStore.insertBlockAfter(prevId, line);
+		const lastLine = lines[lines.length - 1] ?? "";
+		pendingCaret = { id: prevId, offset: lastLine.length };
 		focusPending();
 	}
 
@@ -212,6 +224,7 @@
 					oninputblock={onInputBlock}
 					onsplit={onSplit}
 					onmergeprev={onMergePrev}
+					onpastelines={onPasteLines}
 				/>
 			{/each}
 		</div>

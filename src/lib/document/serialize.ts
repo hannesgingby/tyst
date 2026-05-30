@@ -86,17 +86,9 @@ function serializePreamble(doc: DocumentModel): string {
 	return [`#set page(\n${pageLines.join("\n")}\n)`, textRule, parRule].join("\n\n");
 }
 
-/**
- * Serialize a block's text, escaping markup and turning each soft `\n` into an
- * explicit `#linebreak()`. Explicit breaks are used (instead of a trailing `\`)
- * because Typst collapses repeated markup line breaks, whereas `linebreak()`
- * calls are always preserved.
- */
+/** Serialize a block's text. Each block is a single line (no internal breaks). */
 function blockText(block: Block): string {
-	return block.text
-		.split("\n")
-		.map(escapeText)
-		.join("#linebreak()\n");
+	return escapeText(block.text);
 }
 
 /** Serialize a single block, wrapping it in scoped set rules if it has overrides. */
@@ -115,21 +107,39 @@ function serializeBlock(block: Block): string {
 	return ["#[", ...overrides.map((o) => `  ${o}`), `  ${text}`, "]"].join("\n");
 }
 
-/** Serialize the whole document model into a `.typ` source string. */
+/**
+ * Serialize the whole document model into a `.typ` source string.
+ *
+ * The body is a sequence of single-line blocks. Two adjacent non-empty lines
+ * are joined by `#linebreak()` (a forced soft break). One or more blank lines
+ * between content become a `#parbreak()` (paragraph break) followed by an extra
+ * `#linebreak()` for each additional blank line — Typst collapses repeated
+ * paragraph breaks, so explicit line breaks are needed to preserve blank space.
+ * Leading/trailing blank lines are dropped (Typst ignores them).
+ */
 export function serializeDocument(doc: DocumentModel): string {
 	const preamble = serializePreamble(doc);
 
-	// Typst collapses consecutive paragraph breaks, so only the first break after
-	// real content becomes a `#parbreak()`; further blank lines (empty blocks)
-	// become `#linebreak()`, which Typst preserves.
 	const parts: string[] = [];
-	doc.blocks.forEach((block, i) => {
-		if (i > 0) {
-			const prevEmpty = doc.blocks[i - 1].text === "";
-			parts.push(prevEmpty ? "#linebreak()" : "#parbreak()");
+	let pendingBlanks = 0;
+	let hasContent = false;
+	for (const block of doc.blocks) {
+		if (block.text === "") {
+			if (hasContent) pendingBlanks += 1;
+			continue;
 		}
-		if (block.text !== "") parts.push(serializeBlock(block));
-	});
+		if (hasContent) {
+			if (pendingBlanks === 0) {
+				parts.push("#linebreak()");
+			} else {
+				parts.push("#parbreak()");
+				for (let k = 1; k < pendingBlanks; k++) parts.push("#linebreak()");
+			}
+		}
+		parts.push(serializeBlock(block));
+		pendingBlanks = 0;
+		hasContent = true;
+	}
 	const body = parts.join("\n");
 
 	return `${preamble}\n\n${body}\n`;

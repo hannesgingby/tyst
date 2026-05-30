@@ -17,6 +17,7 @@
 		oninputblock: (id: string, text: string) => void;
 		onsplit: (id: string, caretOffset: number) => void;
 		onmergeprev: (id: string) => void;
+		onpastelines: (id: string, lines: string[]) => void;
 	}
 
 	let {
@@ -30,44 +31,44 @@
 		oninputblock,
 		onsplit,
 		onmergeprev,
+		onpastelines,
 	}: Props = $props();
 
 	const typography = $derived(documentStore.resolveTypography(block));
 	const paragraph = $derived(documentStore.resolveParagraph(block));
 
-	// Typst's line advance is `leading + ~0.66em` (the cap-height-ish base it uses
-	// at zero leading, measured against the compiler). `1 + leading` is too loose.
-	const LINE_ADVANCE_BASE = 0.66;
+	// Typst's line advance is `leading + 0.658em` (the intrinsic line height it
+	// uses at zero leading for Libertinus Serif, measured against the compiler).
+	// `1 + leading` is too loose; this matches the PDF's line spacing exactly.
+	const LINE_ADVANCE_BASE = 0.658;
 
 	const fontSizePx = $derived(ptToPx(typography.size) * scale);
 	const lineHeight = $derived(typography.leading + LINE_ADVANCE_BASE);
 	const letterSpacingPx = $derived((typography.tracking / 100) * fontSizePx);
 	const fontWeight = $derived(WEIGHT_CSS[typography.weight] ?? 400);
-	// Empty blocks are blank lines (serialized as `linebreak()`), so they stay
-	// tight — only real paragraphs carry paragraph spacing.
-	const isEmpty = $derived(block.text === "");
-	const marginBottomPx = $derived(isEmpty ? 0 : paragraph.spacing * fontSizePx);
 	const firstLineIndentEm = $derived(paragraph.firstLineIndent ?? 0);
 
 	let el = $state<HTMLDivElement | null>(null);
 
 	function reportHeight(): void {
-		if (el) onheight(block.id, el.offsetHeight + marginBottomPx);
+		if (el) onheight(block.id, el.offsetHeight);
 	}
 
 	/**
-	 * A trailing newline (or a completely empty block) isn't rendered with a line
-	 * box of its own, so the caret height collapses/varies — notably in WebKit.
-	 * A sentinel `<br>` gives every line a consistent box. `textContent` ignores
-	 * `<br>`, so this never leaks into the model. The placeholder block is left
-	 * truly empty so its `:empty` placeholder still shows.
+	 * Each block is a single logical line. An empty block has no line box of its
+	 * own (so its height/caret collapses — notably in WebKit), so we give it a
+	 * sentinel `<br>`. `textContent` ignores `<br>`, so it never leaks into the
+	 * model. The placeholder block stays truly empty so its `:empty` hint shows.
 	 */
 	function ensureTrailingBr(): void {
 		if (!el) return;
-		const text = el.textContent ?? "";
-		const needsLineBox = text.endsWith("\n") || (text === "" && !placeholder);
+		const isEmpty = (el.textContent ?? "") === "";
 		const hasTrailingBr = el.lastChild?.nodeName === "BR";
-		if (needsLineBox && !hasTrailingBr) el.append(document.createElement("br"));
+		if (isEmpty && !placeholder && !hasTrailingBr) {
+			el.append(document.createElement("br"));
+		} else if ((!isEmpty || placeholder) && hasTrailingBr) {
+			el.lastChild?.remove();
+		}
 	}
 
 	$effect(() => {
@@ -86,7 +87,6 @@
 
 	// Re-measure when style inputs that affect height change.
 	$effect(() => {
-		void marginBottomPx;
 		void fontSizePx;
 		void lineHeight;
 		reportHeight();
@@ -115,33 +115,14 @@
 		if (el) oninputblock(block.id, el.textContent ?? "");
 	}
 
-	function insertSoftBreak(): void {
-		const sel = window.getSelection();
-		if (!sel || sel.rangeCount === 0) return;
-		const range = sel.getRangeAt(0);
-		range.deleteContents();
-		const node = document.createTextNode("\n");
-		range.insertNode(node);
-		ensureTrailingBr();
-		range.setStartAfter(node);
-		range.collapse(true);
-		sel.removeAllRanges();
-		sel.addRange(range);
-		onInput();
-	}
-
 	function onKeydown(event: KeyboardEvent): void {
 		if (event.key === "Enter") {
+			// Every Enter ends the current line and starts a new block, so each
+			// keystroke reliably advances one line (no soft-break/split mixing).
+			// The serializer turns adjacent lines into `linebreak()` and blank
+			// lines into `parbreak()`.
 			event.preventDefault();
-			const offset = caretOffset();
-			const text = el?.textContent ?? "";
-			// Single Enter inserts a soft line break; a second Enter (the char
-			// before the caret is already a newline) starts a new paragraph block.
-			if (text[offset - 1] === "\n") {
-				onsplit(block.id, offset);
-			} else {
-				insertSoftBreak();
-			}
+			onsplit(block.id, caretOffset());
 		} else if (event.key === "Backspace") {
 			const sel = window.getSelection();
 			if (sel && sel.isCollapsed && caretOffset() === 0) {
@@ -153,25 +134,38 @@
 
 	function onPaste(event: ClipboardEvent): void {
 		event.preventDefault();
-		const text = event.clipboardData?.getData("text/plain") ?? "";
+		const raw = event.clipboardData?.getData("text/plain") ?? "";
+		const lines = raw.replace(/\r\n/g, "\n").split("\n");
 		const sel = window.getSelection();
 		if (!sel || sel.rangeCount === 0) return;
 		const range = sel.getRangeAt(0);
 		range.deleteContents();
-		const node = document.createTextNode(text.replace(/\r\n/g, "\n"));
-		range.insertNode(node);
-		ensureTrailingBr();
-		range.setStartAfter(node);
-		range.collapse(true);
-		sel.removeAllRanges();
-		sel.addRange(range);
-		onInput();
+		if (lines.length <= 1) {
+			// Single-line paste: insert inline.
+			const node = document.createTextNode(lines[0] ?? "");
+			range.insertNode(node);
+			range.setStartAfter(node);
+			range.collapse(true);
+			sel.removeAllRanges();
+			sel.addRange(range);
+			ensureTrailingBr();
+			onInput();
+		} else {
+			// Multi-line paste: keep the first line here, hand the rest to the
+			// parent so each becomes its own block (matching the line model).
+			const node = document.createTextNode(lines[0]);
+			range.insertNode(node);
+			range.setStartAfter(node);
+			range.collapse(true);
+			onInput();
+			onpastelines(block.id, lines.slice(1));
+		}
 	}
 </script>
 
-<!-- The spacing lives on this wrapper so the editable element (and therefore the
-     caret) is contained to exactly the text's line box. -->
-<div style:margin-top="{marginTopPx}px" style:margin-bottom="{marginBottomPx}px">
+<!-- The page-break offset lives on this wrapper so the editable element (and
+     therefore the caret) is contained to exactly the text's line box. -->
+<div style:margin-top="{marginTopPx}px">
 	<div
 		bind:this={el}
 		class="doc-block w-full outline-none"
