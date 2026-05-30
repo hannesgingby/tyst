@@ -189,8 +189,8 @@ export interface DocumentModel {
 	headingLinks: HeadingLinks;
 	/** Per-level overrides when unlinked from `headings`. */
 	headingLevels: Partial<Record<HeadingLevel, HeadingNumberingSettings>>;
-	/** Above/below spacing for each heading level, serialized as #block(above:, below:). */
-	headingSpacing?: Partial<Record<HeadingLevel, BlockSpacing>>;
+	/** Above/below spacing for each heading level (0 = title), serialized as #block(above:, below:). */
+	headingSpacing?: Partial<Record<0 | HeadingLevel, BlockSpacing>>;
 	/** Above/below spacing for list groups, serialized as #block(above:, below:). */
 	listSpacing?: { bullet?: BlockSpacing; numbered?: BlockSpacing };
 	/** Document body as an ordered list of paragraph blocks. */

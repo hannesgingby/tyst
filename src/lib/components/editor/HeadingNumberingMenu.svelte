@@ -9,32 +9,34 @@
 </script>
 
 <div class="shell relative z-[60] w-[324px] rounded-lg p-3">
-	<PopupSectionHeader title="Numbering">
-		<Tag label="headings" variant="blue" bind:linked={documentStore.headingNumberingLinked} />
-	</PopupSectionHeader>
+	{#if !documentStore.headingMenuIsTitle}
+		<PopupSectionHeader title="Numbering">
+			<Tag label="headings" variant="blue" bind:linked={documentStore.headingNumberingLinked} />
+		</PopupSectionHeader>
 
-	<div class="mt-[13px]">
-		<label class="field-shell flex w-full items-center justify-between bg-bg-950 pl-4 pr-4">
-			<input
-				type="text"
-				class="h-full flex-1 border-none bg-transparent text-body-14-tight text-text-100 outline-none placeholder:text-text-250"
-				placeholder="None"
-				bind:value={documentStore.popupHeadingNumbering}
-				spellcheck="false"
-				autocomplete="off"
-			/>
-			<span class="ml-3 shrink-0 text-text-250">ex. 1.a)</span>
-		</label>
-	</div>
+		<div class="mt-[13px]">
+			<label class="field-shell flex w-full items-center justify-between bg-bg-950 pl-4 pr-4">
+				<input
+					type="text"
+					class="h-full flex-1 border-none bg-transparent text-body-14-tight text-text-100 outline-none placeholder:text-text-250"
+					placeholder="None"
+					bind:value={documentStore.popupHeadingNumbering}
+					spellcheck="false"
+					autocomplete="off"
+				/>
+				<span class="ml-3 shrink-0 text-text-250">ex. 1.a)</span>
+			</label>
+		</div>
 
-	<div class="mt-[13px]">
-		<Checkbox label="Outlined" bind:checked={documentStore.popupHeadingOutlined} />
-	</div>
+		<div class="mt-[13px]">
+			<Checkbox label="Outlined" bind:checked={documentStore.popupHeadingOutlined} />
+		</div>
+	{/if}
 
 	<div class="mt-[13px]">
 		<PopupSectionHeader title="Spacing">
 			<span class="flex h-5 items-center rounded px-2 text-body-12 bg-tag-blue-bg text-tag-blue-text">
-				heading {documentStore.headingEditLevel}
+				{documentStore.headingSpacingLevel === 0 ? "title" : `heading ${documentStore.headingEditLevel}`}
 			</span>
 		</PopupSectionHeader>
 		<div class="mt-[13px] grid grid-cols-2 gap-2">

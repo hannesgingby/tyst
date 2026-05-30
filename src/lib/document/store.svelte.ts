@@ -56,6 +56,7 @@ function defaultModel(): DocumentModel {
 		headingLinks: { 1: true, 2: true, 3: true, 4: true },
 		headingLevels: {},
 		headingSpacing: {
+			0: { above: 1.4, below: 0.5 },
 			1: { above: 1.5, below: 0.5 },
 			2: { above: 1.2, below: 0.35 },
 			3: { above: 1.0, below: 0.25 },
@@ -114,6 +115,9 @@ class DocumentStore {
 
 	/** Heading level currently shown in the headings popup (1–4). */
 	headingMenuLevel = $state<HeadingLevel>(1);
+
+	/** True when the title entry is selected in the headings popup. */
+	headingMenuIsTitle = $state(false);
 
 	/** Number of laid-out pages, reported by the paginating editor. */
 	pageCount = $state(1);
@@ -245,25 +249,31 @@ class DocumentStore {
 		}
 	}
 
-	private ensureHeadingSpacing(level: HeadingLevel): BlockSpacing {
+	/** Level key used for spacing — includes 0 (title) unlike headingEditLevel. */
+	get headingSpacingLevel(): 0 | HeadingLevel {
+		if (this.headingMenuIsTitle || this.activeBlock.heading?.level === 0) return 0;
+		return this.headingEditLevel;
+	}
+
+	private ensureHeadingSpacing(level: 0 | HeadingLevel): BlockSpacing {
 		if (!this.model.headingSpacing) this.model.headingSpacing = {};
 		return (this.model.headingSpacing[level] ??= { above: 1.0, below: 0.3 });
 	}
 
 	get popupHeadingSpacingAbove(): number {
-		return this.model.headingSpacing?.[this.headingEditLevel]?.above ?? 1.0;
+		return this.model.headingSpacing?.[this.headingSpacingLevel]?.above ?? 1.0;
 	}
 
 	set popupHeadingSpacingAbove(value: number) {
-		this.ensureHeadingSpacing(this.headingEditLevel).above = value;
+		this.ensureHeadingSpacing(this.headingSpacingLevel).above = value;
 	}
 
 	get popupHeadingSpacingBelow(): number {
-		return this.model.headingSpacing?.[this.headingEditLevel]?.below ?? 0.3;
+		return this.model.headingSpacing?.[this.headingSpacingLevel]?.below ?? 0.3;
 	}
 
 	set popupHeadingSpacingBelow(value: number) {
-		this.ensureHeadingSpacing(this.headingEditLevel).below = value;
+		this.ensureHeadingSpacing(this.headingSpacingLevel).below = value;
 	}
 
 	private ensureListSpacing(kind: ListKind): BlockSpacing {

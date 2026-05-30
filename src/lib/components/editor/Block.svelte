@@ -110,14 +110,13 @@
 	const headingTopMarginEm = $derived.by(() => {
 		if (!block.heading) return 0;
 		const level = block.heading.level;
-		if (level === 0) return HEADING_TOP_MARGIN_EM_FALLBACK[0] ?? 0;
-		const spacing = documentStore.model.headingSpacing?.[level as 1 | 2 | 3 | 4];
+		const spacing = documentStore.model.headingSpacing?.[level as 0 | 1 | 2 | 3 | 4];
 		return spacing?.above ?? (HEADING_TOP_MARGIN_EM_FALLBACK[level] ?? 0);
 	});
 
 	const headingBottomMarginEm = $derived.by(() => {
-		if (!block.heading || block.heading.level === 0) return 0;
-		return documentStore.model.headingSpacing?.[block.heading.level as 1 | 2 | 3 | 4]?.below ?? 0;
+		if (!block.heading) return 0;
+		return documentStore.model.headingSpacing?.[block.heading.level as 0 | 1 | 2 | 3 | 4]?.below ?? 0;
 	});
 
 	const listAboveEm = $derived.by(() => {

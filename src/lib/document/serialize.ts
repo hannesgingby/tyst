@@ -352,7 +352,7 @@ export function serializeDocument(
 			if (hasContent) parts.push("");
 			const headingContent = serializeHeading(block, block.heading, doc);
 			const hLevel = block.heading.level;
-			const headingSpacing = hLevel > 0 ? doc.headingSpacing?.[hLevel as HeadingLevel] : undefined;
+			const headingSpacing = doc.headingSpacing?.[hLevel as 0 | HeadingLevel];
 			parts.push(wrapAligned(headingSpacing ? wrapBlock(headingContent, headingSpacing) : headingContent, block.alignment));
 			pushBlockSeparator();
 			hasContent = true;

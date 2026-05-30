@@ -34,20 +34,20 @@
 	});
 
 	$effect(() => {
+		documentStore.headingMenuIsTitle = activeIndex === 0;
 		if (activeIndex > 0) {
 			documentStore.headingMenuLevel = activeIndex as HeadingLevel;
 		}
 	});
 
 	const activeRowEl = $derived(rowEls[activeIndex] ?? null);
-	const showNumbering = $derived(activeIndex > 0);
 
 	function handleSelect(index: number): void {
 		onselect?.(index as 0 | 1 | 2 | 3 | 4);
 	}
 </script>
 
-<ContextGroup showMenu={showNumbering} {activeRowEl} {menuEl}>
+<ContextGroup showMenu={true} {activeRowEl} {menuEl}>
 	{#snippet list()}
 		<SelectableList
 			items={HEADING_LEVELS}
