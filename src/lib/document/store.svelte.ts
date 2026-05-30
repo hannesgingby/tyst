@@ -66,17 +66,95 @@ class DocumentStore {
 
 	/** Editor UI state (not part of the serialized document). */
 	activeBlockId = $state<string | null>(null);
-	/** Whether typography edits target the shared "body" style (true) or the active block. */
-	typographyLinked = $state(true);
-	/** Whether paragraph edits target the shared default (true) or the active block. */
-	paragraphLinked = $state(true);
+
+	/**
+	 * Block IDs currently covered by the user's text selection (may span
+	 * multiple blocks). Empty means only the active block is the target.
+	 */
+	selectionBlockIds = $state<string[]>([]);
+
+	/**
+	 * A partial (intra-block) text selection: start and end character offsets
+	 * within a single block. Used for inline-range formatting (splitting a
+	 * block at the selection boundary to apply overrides to just that range).
+	 * Null when there is no partial selection, or the selection spans multiple
+	 * blocks (which is handled via selectionBlockIds instead).
+	 */
+	intraBlockSelection = $state<{ blockId: string; start: number; end: number } | null>(null);
+
+	/** Block IDs that start a new page (derived from layout, set by Document). */
+	pageBreakBlockIds = $state<string[]>([]);
+
 	/** Number of laid-out pages, reported by the paginating editor. */
 	pageCount = $state(1);
 
-	readonly typ = $derived.by(() => serializeDocument(this.model));
+	readonly typ = $derived.by(() =>
+		serializeDocument(this.model, this.pageBreakBlockIds),
+	);
 
 	/** The document's default page (index 0). */
 	readonly defaultPage = $derived(this.model.pages[0]);
+
+	// --- Linked-state getters/setters -----------------------------------------
+	//
+	// "Linked" means the selection/active block inherits the global default.
+	// The state is derived from whether the target blocks carry overrides.
+
+	/** IDs of the blocks to consider when reading/writing linked state. */
+	private get targetBlockIds(): string[] {
+		return this.selectionBlockIds.length > 0
+			? this.selectionBlockIds
+			: [this.activeBlock.id];
+	}
+
+	get typographyLinked(): boolean {
+		return this.targetBlockIds.every((id) => {
+			const b = this.model.blocks.find((b) => b.id === id);
+			return !b?.typography || Object.keys(b.typography).length === 0;
+		});
+	}
+
+	set typographyLinked(value: boolean) {
+		// Unlinking a partial selection splits the block first so only the
+		// selected range gets the override.
+		if (!value && this.intraBlockSelection) {
+			const { blockId, start, end } = this.intraBlockSelection;
+			const midId = this.splitBlockAtSelection(blockId, start, end);
+			if (midId) {
+				const mid = this.model.blocks.find((b) => b.id === midId);
+				if (mid) mid.typography = { ...this.resolveTypography(mid) };
+				return;
+			}
+		}
+		for (const id of this.targetBlockIds) {
+			const b = this.model.blocks.find((b) => b.id === id);
+			if (!b) continue;
+			if (value) {
+				b.typography = undefined;
+			} else {
+				b.typography = { ...this.resolveTypography(b) };
+			}
+		}
+	}
+
+	get paragraphLinked(): boolean {
+		return this.targetBlockIds.every((id) => {
+			const b = this.model.blocks.find((b) => b.id === id);
+			return !b?.paragraph || Object.keys(b.paragraph).length === 0;
+		});
+	}
+
+	set paragraphLinked(value: boolean) {
+		for (const id of this.targetBlockIds) {
+			const b = this.model.blocks.find((b) => b.id === id);
+			if (!b) continue;
+			if (value) {
+				b.paragraph = undefined;
+			} else {
+				b.paragraph = { ...this.resolveParagraph(b) };
+			}
+		}
+	}
 
 	get activeBlock(): Block {
 		const found = this.model.blocks.find((b) => b.id === this.activeBlockId);
@@ -127,21 +205,34 @@ class DocumentStore {
 		return { ...this.model.paragraph, ...(block.paragraph ?? {}) };
 	}
 
-	/** Values shown in the typography popup (default when linked, else the active block). */
-	readonly popupTypography = $derived.by(() =>
-		this.typographyLinked ? this.model.typography : this.resolveTypography(this.activeBlock),
-	);
-	readonly popupParagraph = $derived.by(() =>
-		this.paragraphLinked ? this.model.paragraph : this.resolveParagraph(this.activeBlock),
-	);
+	/**
+	 * Values shown in the typography popup. When linked, shows the global
+	 * default. When unlinked, shows the resolved style of the first target block.
+	 */
+	readonly popupTypography = $derived.by(() => {
+		if (this.typographyLinked) return this.model.typography;
+		const id = this.targetBlockIds[0];
+		const b = this.model.blocks.find((b) => b.id === id) ?? this.activeBlock;
+		return this.resolveTypography(b);
+	});
+
+	readonly popupParagraph = $derived.by(() => {
+		if (this.paragraphLinked) return this.model.paragraph;
+		const id = this.targetBlockIds[0];
+		const b = this.model.blocks.find((b) => b.id === id) ?? this.activeBlock;
+		return this.resolveParagraph(b);
+	});
 
 	setTypography<K extends keyof TypographySettings>(key: K, value: TypographySettings[K]): void {
 		if (this.typographyLinked) {
 			this.model.typography[key] = value;
 		} else {
-			const block = this.activeBlock;
-			if (!block.typography) block.typography = {};
-			block.typography[key] = value;
+			for (const id of this.targetBlockIds) {
+				const b = this.model.blocks.find((b) => b.id === id);
+				if (!b) continue;
+				if (!b.typography) b.typography = {};
+				b.typography[key] = value;
+			}
 		}
 	}
 
@@ -149,10 +240,59 @@ class DocumentStore {
 		if (this.paragraphLinked) {
 			this.model.paragraph[key] = value;
 		} else {
-			const block = this.activeBlock;
-			if (!block.paragraph) block.paragraph = {};
-			block.paragraph[key] = value;
+			for (const id of this.targetBlockIds) {
+				const b = this.model.blocks.find((b) => b.id === id);
+				if (!b) continue;
+				if (!b.paragraph) b.paragraph = {};
+				b.paragraph[key] = value;
+			}
 		}
+	}
+
+	/**
+	 * Split block `id` at `startOffset`..`endOffset`, turning the selected
+	 * range into its own block (with any typography/paragraph overrides from the
+	 * original) so that inline-range formatting can be applied to it.
+	 * Returns the ID of the middle (selected) block.
+	 */
+	splitBlockAtSelection(
+		id: string,
+		startOffset: number,
+		endOffset: number,
+	): string | null {
+		const index = this.blockIndex(id);
+		if (index < 0) return null;
+		const block = this.model.blocks[index];
+		const text = block.text;
+		if (startOffset >= endOffset || startOffset < 0 || endOffset > text.length) return null;
+
+		const before = text.slice(0, startOffset);
+		const selected = text.slice(startOffset, endOffset);
+		const after = text.slice(endOffset);
+
+		// Update original block to hold only the "before" text.
+		block.text = before;
+
+		// Middle block (the selection) inherits the original block's overrides.
+		const midId = newId();
+		const midBlock: Block = {
+			id: midId,
+			text: selected,
+			continuation: true,
+			typography: block.typography ? { ...block.typography } : undefined,
+			paragraph: block.paragraph ? { ...block.paragraph } : undefined,
+		};
+
+		// Trailing block continues on the same line with no overrides.
+		const afterId = newId();
+		const afterBlock: Block = {
+			id: afterId,
+			text: after,
+			continuation: true,
+		};
+
+		this.model.blocks.splice(index + 1, 0, midBlock, afterBlock);
+		return midId;
 	}
 
 	// --- Pages (with per-section "default" tag scoping) -----------------------

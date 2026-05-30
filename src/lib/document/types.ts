@@ -84,17 +84,21 @@ export interface ParagraphSettings {
 
 /** Per-block overrides of the document's default typography ("body" tag). */
 export type TypographyOverride = Partial<TypographySettings>;
+
 /** Per-block overrides of the document's default paragraph settings. */
 export type ParagraphOverride = Partial<ParagraphSettings>;
 
 /**
- * A content block. A block is one paragraph (the unit at which the "body" tag
- * can be unlinked to apply formatting without affecting the rest of the text).
- * `text` is plain text; a single `\n` is a soft line break within the block.
+ * A content block. In the default model each block is one "line" (no internal
+ * line breaks). Blocks marked `continuation: true` are logically part of the
+ * same visual line as their predecessor — no line break is inserted between
+ * them in the serialized output, enabling inline-range formatting.
  */
 export interface Block {
 	id: string;
 	text: string;
+	/** If true, this block continues on the same line as the previous block. */
+	continuation?: boolean;
 	typography?: TypographyOverride;
 	paragraph?: ParagraphOverride;
 }

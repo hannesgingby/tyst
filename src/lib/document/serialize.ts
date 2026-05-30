@@ -2,6 +2,8 @@ import type {
 	Block,
 	DocumentModel,
 	FontWeightName,
+	Margins,
+	PageSettings,
 	ParagraphSettings,
 	TypographySettings,
 } from "./types";
@@ -52,30 +54,104 @@ function setCall(name: string, args: string[]): string {
 	return `#set ${name}(${args.join(", ")})`;
 }
 
-/** The document preamble: page, default text and default paragraph set rules. */
-function serializePreamble(doc: DocumentModel): string {
-	const page = doc.pages[0];
+/** Serialize margins to a Typst margin(...) expression. */
+function serializeMargins(m: Margins): string {
+	const parts: string[] = [];
+	if (m.x != null) parts.push(`x: ${typstNumber(m.x)}pt`);
+	if (m.y != null) parts.push(`y: ${typstNumber(m.y)}pt`);
+	parts.push(`left: ${typstNumber(m.left)}cm`);
+	parts.push(`right: ${typstNumber(m.right)}cm`);
+	parts.push(`top: ${typstNumber(m.top)}cm`);
+	parts.push(`bottom: ${typstNumber(m.bottom)}cm`);
+	return `(${parts.join(", ")})`;
+}
 
-	const pageLines: string[] = [];
+/** Serialize a full #set page(...) call for a given PageSettings. */
+function serializePageSetFull(page: PageSettings): string {
+	const lines: string[] = [];
 	const paperName = TYPST_PAPER_NAME[page.preset];
 	if (paperName) {
-		pageLines.push(`  paper: "${paperName}",`);
+		lines.push(`  paper: "${paperName}",`);
 	} else {
-		pageLines.push(`  width: ${typstNumber(page.size.width)}pt,`);
-		pageLines.push(`  height: ${typstNumber(page.size.height)}pt,`);
+		lines.push(`  width: ${typstNumber(page.size.width)}pt,`);
+		lines.push(`  height: ${typstNumber(page.size.height)}pt,`);
 	}
-	if (page.landscape) pageLines.push(`  flipped: true,`);
-	const m = page.margins;
-	const marginParts: string[] = [];
-	if (m.x != null) marginParts.push(`x: ${typstNumber(m.x)}pt`);
-	if (m.y != null) marginParts.push(`y: ${typstNumber(m.y)}pt`);
-	marginParts.push(`left: ${typstNumber(m.left)}cm`);
-	marginParts.push(`right: ${typstNumber(m.right)}cm`);
-	marginParts.push(`top: ${typstNumber(m.top)}cm`);
-	marginParts.push(`bottom: ${typstNumber(m.bottom)}cm`);
-	pageLines.push(`  margin: (${marginParts.join(", ")}),`);
-	pageLines.push(`  fill: ${hexToRgb(page.fill)},`);
+	if (page.landscape) lines.push(`  flipped: true,`);
+	lines.push(`  margin: ${serializeMargins(page.margins)},`);
+	lines.push(`  fill: ${hexToRgb(page.fill)},`);
+	return `#set page(\n${lines.join("\n")}\n)`;
+}
 
+/**
+ * Compute the `#set page(...)` calls needed to transition from `prev`'s
+ * resolved settings to `curr`'s resolved settings. Returns an empty array when
+ * nothing changed. Only outputs the sections that actually differ, since Typst's
+ * `#set page` is additive (unchanged properties keep their previous value).
+ */
+function serializePageTransition(
+	defaultPage: PageSettings,
+	prev: PageSettings,
+	curr: PageSettings,
+	currIndex: number,
+): string[] {
+	const out: string[] = [];
+
+	// Resolve each section through the link system.
+	const prevMargin = prev.linked.margin ? defaultPage : prev;
+	const currMargin = curr.linked.margin ? defaultPage : curr;
+	const prevPaper = prev.linked.paper ? defaultPage : prev;
+	const currPaper = curr.linked.paper ? defaultPage : curr;
+	const prevColor = prev.linked.color ? defaultPage : prev;
+	const currColor = curr.linked.color ? defaultPage : curr;
+
+	const pageArgs: string[] = [];
+
+	// Paper / size
+	if (
+		currPaper.preset !== prevPaper.preset ||
+		currPaper.size.width !== prevPaper.size.width ||
+		currPaper.size.height !== prevPaper.size.height ||
+		currPaper.landscape !== prevPaper.landscape
+	) {
+		const paperName = TYPST_PAPER_NAME[currPaper.preset];
+		if (paperName) {
+			pageArgs.push(`paper: "${paperName}"`);
+		} else {
+			pageArgs.push(`width: ${typstNumber(currPaper.size.width)}pt`);
+			pageArgs.push(`height: ${typstNumber(currPaper.size.height)}pt`);
+		}
+		if (currPaper.landscape !== prevPaper.landscape) {
+			pageArgs.push(`flipped: ${currPaper.landscape}`);
+		}
+	}
+
+	// Margins
+	const pm = prevMargin.margins;
+	const cm = currMargin.margins;
+	if (
+		pm.left !== cm.left || pm.right !== cm.right ||
+		pm.top !== cm.top || pm.bottom !== cm.bottom ||
+		pm.x !== cm.x || pm.y !== cm.y
+	) {
+		pageArgs.push(`margin: ${serializeMargins(cm)}`);
+	}
+
+	// Fill / color
+	if (currColor.fill !== prevColor.fill) {
+		pageArgs.push(`fill: ${hexToRgb(currColor.fill)}`);
+	}
+
+	// Only emit #set page() if something changed, but always emit #pagebreak().
+	// For page 2+ we always emit the break; settings only when they differ.
+	if (pageArgs.length > 0) {
+		out.push(`#set page(${pageArgs.join(", ")})`);
+	}
+
+	return out;
+}
+
+/** The document preamble: page, default text and default paragraph set rules. */
+function serializePreamble(doc: DocumentModel): string {
 	const textRule = `#set text(\n${textArgs(doc.typography)
 		.map((l) => `  ${l},`)
 		.join("\n")}\n)`;
@@ -83,7 +159,7 @@ function serializePreamble(doc: DocumentModel): string {
 		.map((l) => `  ${l},`)
 		.join("\n")}\n)`;
 
-	return [`#set page(\n${pageLines.join("\n")}\n)`, textRule, parRule].join("\n\n");
+	return [serializePageSetFull(doc.pages[0]), textRule, parRule].join("\n\n");
 }
 
 /** Serialize a block's text. Each block is a single line (no internal breaks). */
@@ -110,26 +186,68 @@ function serializeBlock(block: Block): string {
 /**
  * Serialize the whole document model into a `.typ` source string.
  *
- * The body is a sequence of single-line blocks. Two adjacent non-empty lines
- * are joined by `#linebreak()` (a forced soft break). One or more blank lines
- * between content become a `#parbreak()` (paragraph break) followed by an extra
- * `#linebreak()` for each additional blank line — Typst collapses repeated
- * paragraph breaks, so explicit line breaks are needed to preserve blank space.
- * Leading/trailing blank lines are dropped (Typst ignores them).
+ * `pageBreakBlockIds` is an ordered list of block IDs that each start a new
+ * page in the editor's visual layout. A `#pagebreak()` (plus any changed
+ * `#set page(...)` calls) is inserted before each such block.
+ *
+ * Continuation blocks (marked `block.continuation`) are joined to the previous
+ * block without any separator — they're inline on the same line.
+ *
+ * Two adjacent non-continuation, non-empty lines become `#linebreak()`.
+ * One or more blank lines become `#parbreak()` + extra `#linebreak()`s.
  */
-export function serializeDocument(doc: DocumentModel): string {
+export function serializeDocument(
+	doc: DocumentModel,
+	pageBreakBlockIds: string[] = [],
+): string {
 	const preamble = serializePreamble(doc);
+
+	const pageBreakSet = new Set(pageBreakBlockIds);
+	const defaultPage = doc.pages[0];
+
+	// Build a map: blockId → page index (1-based for pages after the first).
+	// We walk pageBreakBlockIds in order to assign increasing page indices.
+	const blockPageIndex = new Map<string, number>();
+	let pi = 1;
+	for (const id of pageBreakBlockIds) blockPageIndex.set(id, pi++);
+
+	let currentPageIdx = 0;
 
 	const parts: string[] = [];
 	let pendingBlanks = 0;
 	let hasContent = false;
+
 	for (const block of doc.blocks) {
+		// ── Page break ──────────────────────────────────────────────────────
+		if (pageBreakSet.has(block.id)) {
+			const nextPageIdx = blockPageIndex.get(block.id)!;
+			const prevPage = doc.pages[currentPageIdx] ?? defaultPage;
+			const nextPage = doc.pages[nextPageIdx] ?? defaultPage;
+			currentPageIdx = nextPageIdx;
+			hasContent = false;
+			pendingBlanks = 0;
+
+			parts.push("#pagebreak()");
+			const transition = serializePageTransition(
+				defaultPage,
+				prevPage,
+				nextPage,
+				nextPageIdx,
+			);
+			parts.push(...transition);
+		}
+
+		// ── Blank block (empty line / parbreak placeholder) ──────────────────
 		if (block.text === "") {
-			if (hasContent) pendingBlanks += 1;
+			if (hasContent && !block.continuation) pendingBlanks += 1;
 			continue;
 		}
+
+		// ── Content block ────────────────────────────────────────────────────
 		if (hasContent) {
-			if (pendingBlanks === 0) {
+			if (block.continuation) {
+				// No separator — inline continuation of the previous block.
+			} else if (pendingBlanks === 0) {
 				parts.push("#linebreak()");
 			} else {
 				parts.push("#parbreak()");
@@ -140,7 +258,7 @@ export function serializeDocument(doc: DocumentModel): string {
 		pendingBlanks = 0;
 		hasContent = true;
 	}
-	const body = parts.join("\n");
 
+	const body = parts.join("\n");
 	return `${preamble}\n\n${body}\n`;
 }

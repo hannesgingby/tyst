@@ -11,28 +11,39 @@
 	const PAGE_GAP_PX = 40;
 
 	const model = $derived(documentStore.model);
-	// Live layout uses the document's default page geometry for all sheets.
-	const page = $derived(documentStore.defaultPage);
 	const blocks = $derived(model.blocks);
 
+	// Paper size comes from the default page (we assume uniform paper across all pages).
+	const defaultPage = $derived(documentStore.defaultPage);
 	const sizePt = $derived(
-		page.landscape
-			? { width: page.size.height, height: page.size.width }
-			: page.size,
+		defaultPage.landscape
+			? { width: defaultPage.size.height, height: defaultPage.size.width }
+			: defaultPage.size,
 	);
-
 	const pageWidthPx = $derived(ptToPx(sizePt.width) * RENDER_SCALE);
 	const pageHeightPx = $derived(ptToPx(sizePt.height) * RENDER_SCALE);
 
-	const marginsPx = $derived({
-		left: cmToPx(page.margins.left) * RENDER_SCALE,
-		right: cmToPx(page.margins.right) * RENDER_SCALE,
-		top: cmToPx(page.margins.top) * RENDER_SCALE,
-		bottom: cmToPx(page.margins.bottom) * RENDER_SCALE,
-	});
+	/**
+	 * Resolve the margin settings for a given page index, honouring the per-section
+	 * link/unlink state. Reads model.$state so is reactive inside $derived.
+	 */
+	function resolveMarginsPx(pageIdx: number) {
+		const def = model.pages[0];
+		const pg = model.pages[pageIdx] ?? def;
+		const src = pg.linked.margin ? def : pg;
+		return {
+			left: cmToPx(src.margins.left) * RENDER_SCALE,
+			right: cmToPx(src.margins.right) * RENDER_SCALE,
+			top: cmToPx(src.margins.top) * RENDER_SCALE,
+			bottom: cmToPx(src.margins.bottom) * RENDER_SCALE,
+		};
+	}
 
-	const contentWidthPx = $derived(pageWidthPx - marginsPx.left - marginsPx.right);
-	const contentHeightPx = $derived(pageHeightPx - marginsPx.top - marginsPx.bottom);
+	function resolvePageFill(pageIdx: number): string {
+		const def = model.pages[0];
+		const pg = model.pages[pageIdx] ?? def;
+		return (pg.linked.color ? def : pg).fill;
+	}
 
 	let viewportEl = $state<HTMLDivElement | null>(null);
 	let viewportWidth = $state(0);
@@ -50,48 +61,74 @@
 
 	// Classify each block based on its neighbours so Block can render empty
 	// blocks at the correct height (parbreak gap vs regular linebreak advance).
+	// Continuation blocks are always "text" regardless of content.
 	const blockRoles = $derived.by(() => {
 		const roles = new Map<string, "text" | "parbreak" | "linebreak">();
 		for (let i = 0; i < blocks.length; i++) {
 			const b = blocks[i];
-			if (b.text !== "") {
+			if (b.continuation || b.text !== "") {
 				roles.set(b.id, "text");
 			} else {
-				// Only show the parbreak gap when the empty block sits *between*
-				// content on both sides. A trailing empty block (or one followed by
-				// another empty block) uses normal linebreak height so the caret
-				// lands on a consistent new line without a visual jump on typing.
-				const nextHasText = i < blocks.length - 1 && blocks[i + 1].text !== "";
+				const nextHasText =
+					i < blocks.length - 1 &&
+					blocks[i + 1].text !== "" &&
+					!blocks[i + 1].continuation;
 				roles.set(b.id, nextHasText ? "parbreak" : "linebreak");
 			}
 		}
 		return roles;
 	});
 
-	// Measured block heights (id -> internal px).
+	// For each parbreak empty block: the visual gap should reflect the maximum
+	// paragraph spacing of the adjacent content blocks (matching Typst's model).
+	const parbreakSpacings = $derived.by(() => {
+		const spacings = new Map<string, number>();
+		for (let i = 0; i < blocks.length; i++) {
+			const b = blocks[i];
+			if (b.text !== "" || b.continuation) continue;
+			if (blockRoles.get(b.id) !== "parbreak") continue;
+			let prev = model.paragraph.spacing;
+			let next = model.paragraph.spacing;
+			for (let j = i - 1; j >= 0; j--) {
+				if (blocks[j].text !== "" && !blocks[j].continuation) {
+					prev = documentStore.resolveParagraph(blocks[j]).spacing;
+					break;
+				}
+			}
+			for (let j = i + 1; j < blocks.length; j++) {
+				if (blocks[j].text !== "" && !blocks[j].continuation) {
+					next = documentStore.resolveParagraph(blocks[j]).spacing;
+					break;
+				}
+			}
+			spacings.set(b.id, Math.max(prev, next));
+		}
+		return spacings;
+	});
+
+	// Measured block heights (id -> internal px). Continuation blocks report 0.
 	let heights = $state<Record<string, number>>({});
 
-	// Walk the blocks, assigning each to a page. A block that doesn't fit in the
-	// remaining space on the current page is pushed to the top of the next page.
+	// Walk blocks, assigning each to a page using per-page content heights.
+	// Continuation blocks don't contribute to height and inherit the current page.
 	const layout = $derived.by(() => {
-		// Distance from one page's content bottom to the next page's content top.
-		const interPageGap = marginsPx.bottom + PAGE_GAP_PX + marginsPx.top;
-		const items = new Map<string, { page: number; marginTop: number }>();
+		const items = new Map<string, { page: number }>();
 		let pageIndex = 0;
 		let y = 0;
 		for (let i = 0; i < blocks.length; i++) {
-			const id = blocks[i].id;
-			const h = heights[id] ?? 0;
-			let marginTop = 0;
-			if (i > 0 && y > 0 && y + h > contentHeightPx) {
+			const b = blocks[i];
+			if (b.continuation) {
+				items.set(b.id, { page: pageIndex });
+				continue;
+			}
+			const h = heights[b.id] ?? 0;
+			const mp = resolveMarginsPx(pageIndex);
+			const chPx = pageHeightPx - mp.top - mp.bottom;
+			if (i > 0 && y > 0 && y + h > chPx) {
 				pageIndex += 1;
-				// Fill the leftover space on the current page *plus* the gap, so the
-				// block lands exactly at the next page's content top — never above
-				// the paper edge.
-				marginTop = contentHeightPx - y + interPageGap;
 				y = 0;
 			}
-			items.set(id, { page: pageIndex, marginTop });
+			items.set(b.id, { page: pageIndex });
 			y += h;
 		}
 		return { items, pageCount: pageIndex + 1 };
@@ -99,11 +136,94 @@
 
 	$effect(() => {
 		documentStore.pageCount = layout.pageCount;
+		// Identify which block IDs start each new page (first block of pages 1+).
+		const ids: string[] = [];
+		let lastPage = 0;
+		for (const b of blocks) {
+			const pg = layout.items.get(b.id)?.page ?? 0;
+			if (pg > lastPage) {
+				ids.push(b.id);
+				lastPage = pg;
+			}
+		}
+		documentStore.pageBreakBlockIds = ids;
+	});
+
+	// Group blocks by page for per-page rendering.
+	const blocksByPage = $derived.by(() => {
+		const groups = new Map<number, (typeof blocks)[number][]>();
+		for (const b of blocks) {
+			const pg = layout.items.get(b.id)?.page ?? 0;
+			if (!groups.has(pg)) groups.set(pg, []);
+			groups.get(pg)!.push(b);
+		}
+		return groups;
 	});
 
 	const totalHeightPx = $derived(
 		layout.pageCount * pageHeightPx + (layout.pageCount - 1) * PAGE_GAP_PX,
 	);
+
+	// --- Cross-block selection detection -------------------------------------
+	//
+	// The browser allows drag-selecting across separate contenteditable divs.
+	// We watch selectionchange and record which block IDs are covered so the
+	// store can apply formatting to all of them.
+	$effect(() => {
+		function measureOffset(el: HTMLElement, container: Node, offset: number): number {
+			try {
+				const r = document.createRange();
+				r.selectNodeContents(el);
+				r.setEnd(container, offset);
+				return r.toString().length;
+			} catch {
+				return 0;
+			}
+		}
+
+		function onSelectionChange(): void {
+			const sel = window.getSelection();
+			if (!sel || sel.isCollapsed || sel.rangeCount === 0) {
+				documentStore.selectionBlockIds = [];
+				documentStore.intraBlockSelection = null;
+				return;
+			}
+			const range = sel.getRangeAt(0);
+			const covered = blocks
+				.filter((b) => {
+					const el = blockEls.get(b.id);
+					return el != null && range.intersectsNode(el);
+				})
+				.map((b) => b.id);
+
+			if (covered.length > 1) {
+				documentStore.selectionBlockIds = covered;
+				documentStore.intraBlockSelection = null;
+			} else if (covered.length === 1) {
+				documentStore.selectionBlockIds = [];
+				// Track the partial selection within this single block.
+				const el = blockEls.get(covered[0]);
+				if (el && el.contains(range.startContainer) && el.contains(range.endContainer)) {
+					const start = measureOffset(el, range.startContainer, range.startOffset);
+					const end = measureOffset(el, range.endContainer, range.endOffset);
+					documentStore.intraBlockSelection =
+						start < end ? { blockId: covered[0], start, end } : null;
+				} else {
+					documentStore.intraBlockSelection = null;
+				}
+			} else {
+				documentStore.selectionBlockIds = [];
+				documentStore.intraBlockSelection = null;
+			}
+		}
+
+		document.addEventListener("selectionchange", onSelectionChange);
+		return () => {
+			document.removeEventListener("selectionchange", onSelectionChange);
+			documentStore.selectionBlockIds = [];
+			documentStore.intraBlockSelection = null;
+		};
+	});
 
 	// --- Block element registry + caret handling -----------------------------
 	const blockEls = new Map<string, HTMLElement>();
@@ -201,7 +321,9 @@
 	}
 
 	function onHeight(id: string, px: number): void {
-		if (heights[id] !== px) heights[id] = px;
+		const b = blocks.find((b) => b.id === id);
+		const h = b?.continuation ? 0 : px;
+		if (heights[id] !== h) heights[id] = h;
 	}
 </script>
 
@@ -213,41 +335,44 @@
 		style:transform="scale({scale})"
 		style:transform-origin="top left"
 	>
-		<!-- Page sheets -->
-		{#each Array(layout.pageCount) as _, i (i)}
+		{#each Array(layout.pageCount) as _, pageIdx (pageIdx)}
+			{@const mp = resolveMarginsPx(pageIdx)}
+			{@const pageTop = pageIdx * (pageHeightPx + PAGE_GAP_PX)}
+			<!-- Page sheet -->
 			<div
 				class="absolute left-0 shadow-page"
-				style:top="{i * (pageHeightPx + PAGE_GAP_PX)}px"
+				style:top="{pageTop}px"
 				style:width="{pageWidthPx}px"
 				style:height="{pageHeightPx}px"
-				style:background-color={page.fill}
+				style:background-color={resolvePageFill(pageIdx)}
 				aria-hidden="true"
 			></div>
+			<!-- Content area for this page (margins are per-page) -->
+			<div
+				class="absolute"
+				style:top="{pageTop + mp.top}px"
+				style:left="{mp.left}px"
+				style:width="{pageWidthPx - mp.left - mp.right}px"
+			>
+				{#each blocksByPage.get(pageIdx) ?? [] as block, i (block.id)}
+					<Block
+						{block}
+						scale={RENDER_SCALE}
+						role={blockRoles.get(block.id)}
+						spacingEm={parbreakSpacings.get(block.id)}
+						placeholder={pageIdx === 0 && i === 0 && blocks.length === 1
+							? "Start writing…"
+							: undefined}
+						registerel={registerEl}
+						onheight={onHeight}
+						onfocusblock={onFocusBlock}
+						oninputblock={onInputBlock}
+						onsplit={onSplit}
+						onmergeprev={onMergePrev}
+						onpastelines={onPasteLines}
+					/>
+				{/each}
+			</div>
 		{/each}
-
-		<!-- Continuous content flow (positioned over the first page's content area) -->
-		<div
-			class="absolute"
-			style:top="{marginsPx.top}px"
-			style:left="{marginsPx.left}px"
-			style:width="{contentWidthPx}px"
-		>
-			{#each blocks as block, index (block.id)}
-				<Block
-					{block}
-					scale={RENDER_SCALE}
-					role={blockRoles.get(block.id)}
-					marginTopPx={layout.items.get(block.id)?.marginTop ?? 0}
-					placeholder={index === 0 && blocks.length === 1 ? "Start writing…" : undefined}
-					registerel={registerEl}
-					onheight={onHeight}
-					onfocusblock={onFocusBlock}
-					oninputblock={onInputBlock}
-					onsplit={onSplit}
-					onmergeprev={onMergePrev}
-					onpastelines={onPasteLines}
-				/>
-			{/each}
-		</div>
 	</div>
 </div>

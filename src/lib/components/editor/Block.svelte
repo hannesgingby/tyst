@@ -18,7 +18,13 @@
 		block: Block;
 		scale: number;
 		role?: BlockRole;
-		marginTopPx?: number;
+		/**
+		 * Override for the parbreak empty block's effective spacing (em). When
+		 * provided, the visual gap is `spacingEm * fontSizePx` instead of the
+		 * block's own `paragraph.spacing`. Used to reflect adjacent paragraph
+		 * spacing overrides on empty gap blocks.
+		 */
+		spacingEm?: number;
 		placeholder?: string;
 		registerel: (id: string, el: HTMLElement | null) => void;
 		onheight: (id: string, px: number) => void;
@@ -33,7 +39,7 @@
 		block,
 		scale,
 		role = "text",
-		marginTopPx = 0,
+		spacingEm,
 		placeholder,
 		registerel,
 		onheight,
@@ -43,6 +49,7 @@
 		onmergeprev,
 		onpastelines,
 	}: Props = $props();
+
 
 	const typography = $derived(documentStore.resolveTypography(block));
 	const paragraph = $derived(documentStore.resolveParagraph(block));
@@ -58,11 +65,12 @@
 	const fontWeight = $derived(WEIGHT_CSS[typography.weight] ?? 400);
 	const firstLineIndentEm = $derived(paragraph.firstLineIndent ?? 0);
 
-	// A parbreak block should look exactly as wide as Typst's paragraph gap
-	// (= spacing, which replaces leading between paragraphs). A linebreak block
-	// is a regular blank line (leading + base). Text blocks always use lineHeight.
+	// A parbreak block should look exactly as wide as Typst's paragraph gap.
+	// Use the caller-supplied `spacingEm` (max of adjacent paragraph spacings) when
+	// available, otherwise fall back to this block's own paragraph.spacing.
+	// Linebreak and text blocks always use lineHeight.
 	const effectiveLineHeight = $derived(
-		role === "parbreak" ? paragraph.spacing : lineHeight,
+		role === "parbreak" ? (spacingEm ?? paragraph.spacing) : lineHeight,
 	);
 
 	let el = $state<HTMLDivElement | null>(null);
@@ -180,18 +188,26 @@
 	}
 </script>
 
-<!-- The page-break offset lives on this wrapper so the editable element (and
-     therefore the caret) is contained to exactly the text's line box. -->
-<div style:margin-top="{marginTopPx}px">
+<!--
+  Continuation blocks are inline with their predecessor (same visual line).
+  The outer element uses display:inline so it doesn't introduce a line break;
+  the inner contenteditable is also inline so it flows in-text.
+  Regular blocks are block-level (the default).
+-->
+<svelte:element
+	this={block.continuation ? "span" : "div"}
+>
 	<div
 		bind:this={el}
-		class="doc-block w-full outline-none"
+		class={["doc-block outline-none", block.continuation ? "" : "w-full"]}
 		contenteditable="true"
 		spellcheck="false"
 		role="textbox"
 		tabindex="0"
 		aria-multiline="false"
+		data-block-id={block.id}
 		data-placeholder={placeholder}
+		style:display={block.continuation ? "inline" : undefined}
 		style:font-family={`"${typography.fontFamily}", serif`}
 		style:font-size="{fontSizePx}px"
 		style:font-weight={fontWeight}
@@ -205,7 +221,7 @@
 		onkeydown={onKeydown}
 		onpaste={onPaste}
 	></div>
-</div>
+</svelte:element>
 
 <style>
 	.doc-block {
