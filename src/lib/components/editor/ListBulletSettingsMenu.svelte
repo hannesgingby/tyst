@@ -36,7 +36,7 @@
 				/>
 			</label>
 		</FieldLabel>
-		<FieldLabel label="Spacing">
+		<FieldLabel label="Item spacing">
 			<Input bind:value={spacing} emptyLabel="Auto" unit="em" min={0} max={10} step={0.1} decimals={1} />
 		</FieldLabel>
 		<FieldLabel label="Indent">
@@ -51,7 +51,7 @@
 		<Checkbox label="Tight" bind:checked={tight} />
 	</div>
 
-	<div class="mt-[13px]">
+	<div class="mt-[41px]">
 		<PopupSectionHeader title="Spacing">
 			<span class="flex h-5 items-center rounded px-2 text-body-12 bg-tag-blue-bg text-tag-blue-text">
 				bullet-list
