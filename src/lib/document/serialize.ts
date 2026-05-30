@@ -388,9 +388,9 @@ export function serializeDocument(
 		} else {
 			if (hasContent) {
 				if (afterHeading || afterList) {
-					// Headings and lists already end a paragraph in Typst. The first blank
-					// block is just the "exit" keypress — only additional blanks add linebreaks.
-					for (let k = 1; k < pendingBlanks; k++) parts.push("#linebreak()");
+					// Headings/lists already end a paragraph in Typst; blank blocks become
+					// explicit #linebreak()s before the next body text.
+					for (let k = 0; k < pendingBlanks; k++) parts.push("#linebreak()");
 				} else {
 					if (pendingBlanks === 0) {
 						parts.push("#linebreak()");
