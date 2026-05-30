@@ -6,9 +6,18 @@
 
 	const WEIGHT_CSS: Record<string, number> = { Regular: 400, Medium: 500, Bold: 700 };
 
+	/**
+	 * Role of this block in the paragraph structure:
+	 * - "text"      – contains text (or is the sole placeholder block)
+	 * - "parbreak"  – first consecutive empty block after content → #parbreak()
+	 * - "linebreak" – second+ consecutive empty block → #linebreak()
+	 */
+	type BlockRole = "text" | "parbreak" | "linebreak";
+
 	interface Props {
 		block: Block;
 		scale: number;
+		role?: BlockRole;
 		marginTopPx?: number;
 		placeholder?: string;
 		registerel: (id: string, el: HTMLElement | null) => void;
@@ -23,6 +32,7 @@
 	let {
 		block,
 		scale,
+		role = "text",
 		marginTopPx = 0,
 		placeholder,
 		registerel,
@@ -47,6 +57,13 @@
 	const letterSpacingPx = $derived((typography.tracking / 100) * fontSizePx);
 	const fontWeight = $derived(WEIGHT_CSS[typography.weight] ?? 400);
 	const firstLineIndentEm = $derived(paragraph.firstLineIndent ?? 0);
+
+	// A parbreak block should look exactly as wide as Typst's paragraph gap
+	// (= spacing, which replaces leading between paragraphs). A linebreak block
+	// is a regular blank line (leading + base). Text blocks always use lineHeight.
+	const effectiveLineHeight = $derived(
+		role === "parbreak" ? paragraph.spacing : lineHeight,
+	);
 
 	let el = $state<HTMLDivElement | null>(null);
 
@@ -88,7 +105,7 @@
 	// Re-measure when style inputs that affect height change.
 	$effect(() => {
 		void fontSizePx;
-		void lineHeight;
+		void effectiveLineHeight;
 		reportHeight();
 	});
 
@@ -178,7 +195,7 @@
 		style:font-family={`"${typography.fontFamily}", serif`}
 		style:font-size="{fontSizePx}px"
 		style:font-weight={fontWeight}
-		style:line-height={lineHeight}
+		style:line-height={effectiveLineHeight}
 		style:letter-spacing="{letterSpacingPx}px"
 		style:color={typography.color}
 		style:text-align={paragraph.justify ? "justify" : "left"}

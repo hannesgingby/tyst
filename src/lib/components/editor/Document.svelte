@@ -48,7 +48,23 @@
 
 	const scale = $derived(viewportWidth > 0 ? viewportWidth / pageWidthPx : 1);
 
-	// Measured block heights (id -> internal px, including paragraph spacing).
+	// Classify each block based on its neighbours so Block can render empty
+	// blocks at the correct height (parbreak gap vs regular linebreak advance).
+	const blockRoles = $derived.by(() => {
+		const roles = new Map<string, "text" | "parbreak" | "linebreak">();
+		for (let i = 0; i < blocks.length; i++) {
+			const b = blocks[i];
+			if (b.text !== "") {
+				roles.set(b.id, "text");
+			} else {
+				const prevHasText = i > 0 && blocks[i - 1].text !== "";
+				roles.set(b.id, prevHasText ? "parbreak" : "linebreak");
+			}
+		}
+		return roles;
+	});
+
+	// Measured block heights (id -> internal px).
 	let heights = $state<Record<string, number>>({});
 
 	// Walk the blocks, assigning each to a page. A block that doesn't fit in the
@@ -216,6 +232,7 @@
 				<Block
 					{block}
 					scale={RENDER_SCALE}
+					role={blockRoles.get(block.id)}
 					marginTopPx={layout.items.get(block.id)?.marginTop ?? 0}
 					placeholder={index === 0 && blocks.length === 1 ? "Start writing…" : undefined}
 					registerel={registerEl}
