@@ -19,19 +19,11 @@
 		block: Block;
 		scale: number;
 		role?: BlockRole;
-		/**
-		 * Override for the parbreak empty block's effective spacing (em). When
-		 * provided, the visual gap is `spacingEm * fontSizePx` instead of the
-		 * block's own `paragraph.spacing`. Used to reflect adjacent paragraph
-		 * spacing overrides on empty gap blocks.
-		 */
 		spacingEm?: number;
 		placeholder?: string;
-		/**
-		 * Force inline rendering for a non-continuation block that immediately
-		 * precedes a continuation block, so all three segments flow on one line.
-		 */
 		renderInline?: boolean;
+		/** Pre-rendered list marker (e.g. "•", "1."). Set only on list items. */
+		marker?: string;
 		registerel: (id: string, el: HTMLElement | null) => void;
 		onheight: (id: string, px: number) => void;
 		onfocusblock: (id: string) => void;
@@ -48,6 +40,7 @@
 		spacingEm,
 		placeholder,
 		renderInline = false,
+		marker,
 		registerel,
 		onheight,
 		onfocusblock,
@@ -57,50 +50,81 @@
 		onpastelines,
 	}: Props = $props();
 
+	// Default heading font-size multipliers, chosen to approximate Typst's
+	// out-of-the-box heading scale. `0` is the document title.
+	const HEADING_SCALE: Record<number, number> = {
+		0: 2.0,
+		1: 1.4,
+		2: 1.2,
+		3: 1.06,
+		4: 1.0,
+	};
+	const HEADING_TOP_MARGIN_EM: Record<number, number> = {
+		0: 1.4,
+		1: 1.2,
+		2: 1.0,
+		3: 0.8,
+		4: 0.6,
+	};
 
 	const typography = $derived(documentStore.resolveTypography(block));
 	const paragraph = $derived(documentStore.resolveParagraph(block));
 
-	// Typst's line advance is `leading + 0.658em` (the intrinsic line height it
-	// uses at zero leading for Libertinus Serif, measured against the compiler).
-	// `1 + leading` is too loose; this matches the PDF's line spacing exactly.
 	const LINE_ADVANCE_BASE = 0.658;
 
-	const fontSizePx = $derived(ptToPx(typography.size) * scale);
-	const lineHeight = $derived(typography.leading + LINE_ADVANCE_BASE);
+	const headingScale = $derived(
+		block.heading ? (HEADING_SCALE[block.heading.level] ?? 1) : 1,
+	);
+	const fontSizePx = $derived(ptToPx(typography.size) * scale * headingScale);
+	const lineHeight = $derived(
+		block.heading ? 1.2 : typography.leading + LINE_ADVANCE_BASE,
+	);
 	const letterSpacingPx = $derived((typography.tracking / 100) * fontSizePx);
-	const fontWeight = $derived(WEIGHT_CSS[typography.weight] ?? 400);
-	const firstLineIndentEm = $derived(paragraph.firstLineIndent ?? 0);
+	const fontWeight = $derived(
+		block.heading ? 700 : (WEIGHT_CSS[typography.weight] ?? 400),
+	);
+	const firstLineIndentEm = $derived(
+		block.heading || block.list ? 0 : (paragraph.firstLineIndent ?? 0),
+	);
 
-	// A parbreak block should look exactly as wide as Typst's paragraph gap.
-	// Use the caller-supplied `spacingEm` (max of adjacent paragraph spacings) when
-	// available, otherwise fall back to this block's own paragraph.spacing.
-	// Linebreak and text blocks always use lineHeight.
 	const effectiveLineHeight = $derived(
 		role === "parbreak" ? (spacingEm ?? paragraph.spacing) : lineHeight,
 	);
 
+	const textAlign = $derived(
+		block.alignment ?? (paragraph.justify ? "justify" : "left"),
+	);
+
+	const headingTopMarginEm = $derived(
+		block.heading ? (HEADING_TOP_MARGIN_EM[block.heading.level] ?? 0) : 0,
+	);
+
 	const isInline = $derived(block.continuation || renderInline);
+	const isList = $derived(!!block.list);
+
+	// Marker glyph and the space it reserves on the left.
+	const markerText = $derived(marker ?? "");
+	// body-indent (em): space between marker and text. Defaults to 0.5em.
+	const bodyIndentEm = $derived(block.list?.bodyIndent ?? 0.5);
+	const listIndentPt = $derived(block.list?.indent ?? 0);
+
+	const effectivePlaceholder = $derived(block.placeholder ?? placeholder);
 
 	let el = $state<HTMLElement | null>(null);
+	let outerEl = $state<HTMLElement | null>(null);
 
 	function reportHeight(): void {
-		if (el) onheight(block.id, el.offsetHeight);
+		const target = outerEl ?? el;
+		if (target) onheight(block.id, target.offsetHeight);
 	}
 
-	/**
-	 * Each block is a single logical line. An empty block has no line box of its
-	 * own (so its height/caret collapses — notably in WebKit), so we give it a
-	 * sentinel `<br>`. `textContent` ignores `<br>`, so it never leaks into the
-	 * model. The placeholder block stays truly empty so its `:empty` hint shows.
-	 */
 	function ensureTrailingBr(): void {
 		if (!el) return;
 		const isEmpty = (el.textContent ?? "") === "";
 		const hasTrailingBr = el.lastChild?.nodeName === "BR";
-		if (isEmpty && !placeholder && !hasTrailingBr) {
+		if (isEmpty && !effectivePlaceholder && !hasTrailingBr) {
 			el.append(document.createElement("br"));
-		} else if ((!isEmpty || placeholder) && hasTrailingBr) {
+		} else if ((!isEmpty || effectivePlaceholder) && hasTrailingBr) {
 			el.lastChild?.remove();
 		}
 	}
@@ -111,28 +135,36 @@
 		registerel(block.id, node);
 		node.textContent = untrack(() => block.text);
 		ensureTrailingBr();
+		const target = outerEl ?? node;
 		const observer = new ResizeObserver(() => reportHeight());
-		observer.observe(node);
+		observer.observe(target);
 		return () => {
 			observer.disconnect();
 			registerel(block.id, null);
 		};
 	});
 
-	// Re-measure when style inputs that affect height change.
 	$effect(() => {
 		void fontSizePx;
 		void effectiveLineHeight;
+		void headingTopMarginEm;
+		void markerText;
 		reportHeight();
 	});
 
-	// Keep the (uncontrolled) DOM in sync when the model changes externally.
 	$effect(() => {
 		const text = block.text;
 		if (el && el.textContent !== text && document.activeElement !== el) {
 			el.textContent = text;
 			ensureTrailingBr();
 		}
+	});
+
+	// Toggling the placeholder on an empty block must re-evaluate the sentinel <br>:
+	// BR fills the line box when there's no placeholder, but stops :empty from matching.
+	$effect(() => {
+		void effectivePlaceholder;
+		ensureTrailingBr();
 	});
 
 	function onInput(): void {
@@ -142,14 +174,9 @@
 	function onKeydown(event: KeyboardEvent): void {
 		if (!el) return;
 		if (event.key === "Enter") {
-			// Every Enter ends the current line and starts a new block, so each
-			// keystroke reliably advances one line (no soft-break/split mixing).
-			// The serializer turns adjacent lines into `linebreak()` and blank
-			// lines into `parbreak()`.
 			event.preventDefault();
 			onsplit(block.id, getCaretOffset(el));
 		} else if (event.key === "Backspace") {
-			// Continuation blocks at offset 0 are handled in Document (capture).
 			if (
 				window.getSelection()?.isCollapsed &&
 				getCaretOffset(el) === 0 &&
@@ -170,7 +197,6 @@
 		const range = sel.getRangeAt(0);
 		range.deleteContents();
 		if (lines.length <= 1) {
-			// Single-line paste: insert inline.
 			const node = document.createTextNode(lines[0] ?? "");
 			range.insertNode(node);
 			range.setStartAfter(node);
@@ -180,8 +206,6 @@
 			ensureTrailingBr();
 			onInput();
 		} else {
-			// Multi-line paste: keep the first line here, hand the rest to the
-			// parent so each becomes its own block (matching the line model).
 			const node = document.createTextNode(lines[0]);
 			range.insertNode(node);
 			range.setStartAfter(node);
@@ -192,35 +216,65 @@
 	}
 </script>
 
-<!--
-  Continuation blocks and the segment before them share one visual line.
-  Each block is a single contenteditable (span inline, div block-level).
--->
-<svelte:element
-	this={isInline ? "span" : "div"}
-	bind:this={el}
-	class={isInline ? "doc-block outline-none" : "doc-block outline-none w-full"}
-	contenteditable="true"
-	spellcheck="false"
-	role="textbox"
-	tabindex="0"
-	aria-multiline="false"
-	data-block-id={block.id}
-	data-placeholder={placeholder}
-	style:display={isInline ? "inline" : undefined}
-	style:font-family={`"${typography.fontFamily}", serif`}
-	style:font-size="{fontSizePx}px"
-	style:font-weight={fontWeight}
-	style:line-height={effectiveLineHeight}
-	style:letter-spacing="{letterSpacingPx}px"
-	style:color={typography.color}
-	style:text-align={paragraph.justify ? "justify" : "left"}
-	style:text-indent="{firstLineIndentEm}em"
-	onfocus={() => onfocusblock(block.id)}
-	oninput={onInput}
-	onkeydown={onKeydown}
-	onpaste={onPaste}
-></svelte:element>
+{#snippet editable()}
+	<svelte:element
+		this={isInline ? "span" : "div"}
+		bind:this={el}
+		class={["doc-block outline-none", !isInline && "w-full"]}
+		contenteditable="true"
+		spellcheck="false"
+		role="textbox"
+		tabindex="0"
+		aria-multiline="false"
+		data-block-id={block.id}
+		data-placeholder={effectivePlaceholder}
+		style:display={isInline ? "inline" : undefined}
+		style:font-family={`"${typography.fontFamily}", serif`}
+		style:font-size="{fontSizePx}px"
+		style:font-weight={fontWeight}
+		style:line-height={effectiveLineHeight}
+		style:letter-spacing="{letterSpacingPx}px"
+		style:color={typography.color}
+		style:text-align={textAlign}
+		style:text-indent="{firstLineIndentEm}em"
+		onfocus={() => onfocusblock(block.id)}
+		oninput={onInput}
+		onkeydown={onKeydown}
+		onpaste={onPaste}
+	></svelte:element>
+{/snippet}
+
+{#if isList}
+	<div
+		bind:this={outerEl}
+		class="relative w-full"
+		style:padding-left="calc({listIndentPt}pt + {bodyIndentEm}em)"
+		style:text-indent="0"
+	>
+		<span
+			class="absolute pointer-events-none select-none"
+			style:left="{listIndentPt}pt"
+			style:top="0"
+			style:font-family={`"${typography.fontFamily}", serif`}
+			style:font-size="{fontSizePx}px"
+			style:font-weight={fontWeight}
+			style:line-height={effectiveLineHeight}
+			style:color={typography.color}
+			aria-hidden="true">{markerText}</span
+		>
+		{@render editable()}
+	</div>
+{:else if block.heading}
+	<div
+		bind:this={outerEl}
+		class="w-full"
+		style:margin-top="{headingTopMarginEm}em"
+	>
+		{@render editable()}
+	</div>
+{:else}
+	{@render editable()}
+{/if}
 
 <style>
 	.doc-block {

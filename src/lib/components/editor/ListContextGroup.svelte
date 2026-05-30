@@ -8,19 +8,68 @@
 </script>
 
 <script lang="ts">
+	import type { ListSettings } from "$lib/document/types";
 	import ContextGroup from "./ContextGroup.svelte";
 	import ListBulletSettingsMenu from "./ListBulletSettingsMenu.svelte";
 	import ListNumberedSettingsMenu from "./ListNumberedSettingsMenu.svelte";
 	import SelectableList from "./SelectableList.svelte";
+
+	interface Props {
+		onselect?: (settings: ListSettings) => void;
+	}
+
+	let { onselect }: Props = $props();
 
 	let activeIndex = $state(0);
 	let rowEls = $state<HTMLElement[]>([]);
 	let bulletPanelEl = $state<HTMLElement | null>(null);
 	let numberedPanelEl = $state<HTMLElement | null>(null);
 
+	// Bullet settings
+	let bulletMarker = $state("");
+	let bulletSpacing = $state<number | null>(null);
+	let bulletIndent = $state(0);
+	let bulletBodyIndent = $state(0.5);
+	let bulletTight = $state(true);
+
+	// Numbered settings
+	let numberedMarker = $state("1.");
+	let numberedStart = $state<number | null>(null);
+	let numberedSpacing = $state<number | null>(null);
+	let numberedIndent = $state(0);
+	let numberedBodyIndent = $state(0.5);
+	let numberedTight = $state(true);
+	let numberedFull = $state(false);
+	let numberedReversed = $state(false);
+
 	const isNumbered = $derived(activeIndex === 1);
 	const activeRowEl = $derived(rowEls[activeIndex] ?? null);
 	const menuEl = $derived(isNumbered ? numberedPanelEl : bulletPanelEl);
+
+	function handleSelect(index: number): void {
+		if (index === 0) {
+			onselect?.({
+				kind: "bullet",
+				marker: bulletMarker.trim() || undefined,
+				spacing: bulletSpacing,
+				indent: bulletIndent,
+				bodyIndent: bulletBodyIndent,
+				tight: bulletTight,
+			});
+		} else {
+			onselect?.({
+				kind: "numbered",
+				marker: numberedMarker.trim() || undefined,
+				start: numberedStart,
+				spacing: numberedSpacing,
+				indent: numberedIndent,
+				bodyIndent: numberedBodyIndent,
+				tight: numberedTight,
+				full: numberedFull,
+				reversed: numberedReversed,
+			});
+		}
+	}
 </script>
 
 <ContextGroup {activeRowEl} {menuEl}>
@@ -32,6 +81,7 @@
 			ariaLabel="List type"
 			shell={false}
 			onrows={(rows) => (rowEls = rows)}
+			onselect={handleSelect}
 		/>
 	{/snippet}
 	{#snippet menu()}
@@ -43,7 +93,13 @@
 			]}
 			aria-hidden={isNumbered}
 		>
-			<ListBulletSettingsMenu />
+			<ListBulletSettingsMenu
+				bind:marker={bulletMarker}
+				bind:spacing={bulletSpacing}
+				bind:indent={bulletIndent}
+				bind:bodyIndent={bulletBodyIndent}
+				bind:tight={bulletTight}
+			/>
 		</div>
 		<div
 			bind:this={numberedPanelEl}
@@ -53,7 +109,16 @@
 			]}
 			aria-hidden={!isNumbered}
 		>
-			<ListNumberedSettingsMenu />
+			<ListNumberedSettingsMenu
+				bind:marker={numberedMarker}
+				bind:start={numberedStart}
+				bind:spacing={numberedSpacing}
+				bind:indent={numberedIndent}
+				bind:bodyIndent={numberedBodyIndent}
+				bind:tight={numberedTight}
+				bind:full={numberedFull}
+				bind:reversed={numberedReversed}
+			/>
 		</div>
 	{/snippet}
 </ContextGroup>

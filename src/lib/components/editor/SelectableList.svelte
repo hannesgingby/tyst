@@ -14,6 +14,8 @@
 		shell?: boolean;
 		/** Called when row elements change (for aligning a side panel). */
 		onrows?: (rows: HTMLElement[]) => void;
+		/** Called when the user clicks a row. */
+		onselect?: (index: number) => void;
 	}
 
 	let {
@@ -23,6 +25,7 @@
 		ariaLabel,
 		shell = true,
 		onrows,
+		onselect,
 	}: Props = $props();
 
 	let rowEls = $state<HTMLElement[]>([]);
@@ -59,6 +62,7 @@
 					role="option"
 					aria-selected={i === activeIndex}
 					onmouseenter={() => (activeIndex = i)}
+					onclick={() => onselect?.(i)}
 				>
 					<span>{item.label}</span>
 					{#if item.hint}

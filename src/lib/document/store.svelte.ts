@@ -1,6 +1,9 @@
 import type {
 	Block,
 	DocumentModel,
+	HeadingSettings,
+	HorizontalAlignment,
+	ListSettings,
 	PageSection,
 	PageSettings,
 	ParagraphSettings,
@@ -87,6 +90,9 @@ class DocumentStore {
 
 	/** Pending text-range selection to restore after a DOM update (e.g. after split). */
 	pendingSelection = $state<{ blockId: string; start: number; end: number } | null>(null);
+
+	/** Block to focus after a DOM update (e.g. after inserting from a toolbar popup). */
+	pendingFocus = $state<string | null>(null);
 
 	/** Number of laid-out pages, reported by the paginating editor. */
 	pageCount = $state(1);
@@ -178,6 +184,65 @@ class DocumentStore {
 		const created: Block = { id: newId(), text };
 		this.model.blocks.splice(index + 1, 0, created);
 		return created.id;
+	}
+
+	/** Insert a fully-built block after `id`, returning its id. */
+	insertBlockObjectAfter(id: string, block: Omit<Block, "id">): string {
+		const index = this.blockIndex(id);
+		const created: Block = { ...block, id: newId() };
+		this.model.blocks.splice(index + 1, 0, created);
+		return created.id;
+	}
+
+	/**
+	 * Either turn the active block into the given configuration (if it is
+	 * empty), or insert a new configured block after it.
+	 */
+	insertOrTransformActive(block: Omit<Block, "id">): string {
+		const active = this.activeBlock;
+		// Empty default block? Reuse it so we don't leave an orphan above.
+		let id: string;
+		if (
+			active.text === "" &&
+			!active.continuation &&
+			!active.heading &&
+			!active.list &&
+			!active.alignment
+		) {
+			Object.assign(active, block);
+			id = active.id;
+		} else {
+			id = this.insertBlockObjectAfter(active.id, block);
+		}
+		this.activeBlockId = id;
+		this.pendingFocus = id;
+		return id;
+	}
+
+	setHeading(id: string, heading: HeadingSettings | undefined): void {
+		const b = this.findBlock(id);
+		if (!b) return;
+		b.heading = heading;
+		if (heading) b.list = undefined;
+	}
+
+	setHeadingNumbering(id: string, numbering: string | undefined): void {
+		const b = this.findBlock(id);
+		if (!b?.heading) return;
+		b.heading.numbering = numbering && numbering.length > 0 ? numbering : undefined;
+	}
+
+	setList(id: string, list: ListSettings | undefined): void {
+		const b = this.findBlock(id);
+		if (!b) return;
+		b.list = list;
+		if (list) b.heading = undefined;
+	}
+
+	setAlignment(id: string, alignment: HorizontalAlignment | undefined): void {
+		const b = this.findBlock(id);
+		if (!b) return;
+		b.alignment = alignment;
 	}
 
 	/**

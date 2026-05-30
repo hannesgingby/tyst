@@ -89,6 +89,43 @@ export type TypographyOverride = Partial<TypographySettings>;
 export type ParagraphOverride = Partial<ParagraphSettings>;
 
 /**
+ * Heading metadata. `level: 0` is the document title (`#title[…]`); levels 1-4
+ * map to `#heading(level: N, …)[…]`. `numbering` is a Typst numbering pattern
+ * (e.g. "1.", "1.a.") — empty/undefined means no numbering.
+ */
+export interface HeadingSettings {
+	level: 0 | 1 | 2 | 3 | 4;
+	numbering?: string;
+	outlined?: boolean;
+}
+
+export type ListKind = "bullet" | "numbered";
+
+/**
+ * Settings for a single list item. Contiguous blocks with the same `kind`
+ * group into one `#list(…)` / `#enum(…)` call; the settings of the first item
+ * in the group govern the whole call.
+ */
+export interface ListSettings {
+	kind: ListKind;
+	/** Marker glyph (bullet) or numbering pattern (numbered). Empty for default. */
+	marker?: string;
+	/** `par(spacing)` equivalent in em; null for Typst default. */
+	spacing?: number | null;
+	/** Indent of the whole list in pt. */
+	indent?: number;
+	/** Indent between marker and body in em. */
+	bodyIndent?: number;
+	tight?: boolean;
+	/** Numbered-only. */
+	start?: number | null;
+	full?: boolean;
+	reversed?: boolean;
+}
+
+export type HorizontalAlignment = "left" | "center" | "right";
+
+/**
  * A content block. In the default model each block is one "line" (no internal
  * line breaks). Blocks marked `continuation: true` are logically part of the
  * same visual line as their predecessor — no line break is inserted between
@@ -101,6 +138,14 @@ export interface Block {
 	continuation?: boolean;
 	typography?: TypographyOverride;
 	paragraph?: ParagraphOverride;
+	/** Marks this block as a heading / title. */
+	heading?: HeadingSettings;
+	/** Marks this block as a list item. */
+	list?: ListSettings;
+	/** Per-block horizontal alignment. Undefined = inherit document default. */
+	alignment?: HorizontalAlignment;
+	/** Placeholder shown when the block has no text (e.g. "Heading 1", "Item"). */
+	placeholder?: string;
 }
 
 export interface DocumentModel {

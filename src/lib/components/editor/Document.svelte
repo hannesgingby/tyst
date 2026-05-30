@@ -2,6 +2,7 @@
     import { tick } from "svelte";
     import Block from "./Block.svelte";
     import { documentStore } from "$lib/document/store.svelte";
+    import { formatItem } from "$lib/document/numbering";
     import { cmToPx, ptToPx } from "$lib/document/units";
     import {
         caretAtEnd,
@@ -58,6 +59,41 @@
     });
 
     const scale = $derived(viewportWidth > 0 ? viewportWidth / pageWidthPx : 1);
+
+    // List marker text per block (computed across contiguous groups).
+    const listMarkers = $derived.by(() => {
+        const map = new Map<string, string>();
+        let i = 0;
+        while (i < blocks.length) {
+            const b = blocks[i];
+            if (!b.list) {
+                i++;
+                continue;
+            }
+            const first = b.list;
+            const kind = first.kind;
+            // Gather contiguous block IDs in this list group.
+            const ids: string[] = [];
+            let j = i;
+            while (j < blocks.length && blocks[j].list?.kind === kind) {
+                ids.push(blocks[j].id);
+                j++;
+            }
+            if (kind === "bullet") {
+                for (const id of ids) map.set(id, first.marker ?? "•");
+            } else {
+                const pattern = first.marker ?? "1.";
+                // When reversed and no explicit start, count down from the total.
+                const start = first.start ?? (first.reversed ? ids.length : 1);
+                for (let k = 0; k < ids.length; k++) {
+                    const n = first.reversed ? start - k : start + k;
+                    map.set(ids[k], formatItem(pattern, n));
+                }
+            }
+            i = j;
+        }
+        return map;
+    });
 
     // Non-continuation blocks that directly precede a continuation block must
     // also render inline so all segments flow on one visual line.
@@ -273,17 +309,43 @@
         const block = blocks.find((b) => b.id === id);
         if (!block) return;
         const text = block.text;
+
+        // Pressing Enter on an empty list item exits the list; on an empty
+        // heading converts it to a plain block. Caret stays in the same block.
+        if (text === "" && block.list) {
+            documentStore.setList(id, undefined);
+            block.placeholder = undefined;
+            const el = blockEls.get(id);
+            if (el) syncBlockDom(el, "");
+            return;
+        }
+        if (text === "" && block.heading) {
+            documentStore.setHeading(id, undefined);
+            block.placeholder = undefined;
+            const el = blockEls.get(id);
+            if (el) syncBlockDom(el, "");
+            return;
+        }
+
         const before = text.slice(0, caretOffset);
         const after = text.slice(caretOffset);
         documentStore.setBlockText(id, before);
         const el = blockEls.get(id);
         if (el) {
             el.textContent = before;
-            // Resetting textContent drops the sentinel <br>; an emptied block needs
-            // it back to keep a line box (and consistent caret height).
             if (before === "") el.append(document.createElement("br"));
         }
-        const newId = documentStore.insertBlockAfter(id, after);
+        // List items continue the list; headings end and the next block is plain.
+        let newId: string;
+        if (block.list) {
+            newId = documentStore.insertBlockObjectAfter(id, {
+                text: after,
+                list: { ...block.list },
+                placeholder: "Item",
+            });
+        } else {
+            newId = documentStore.insertBlockAfter(id, after);
+        }
         pendingCaret = { id: newId, offset: 0 };
         focusPending();
     }
@@ -424,6 +486,19 @@
             window.removeEventListener("keydown", onKeydownCapture, true);
     });
 
+    // Focus a block requested by an external action (e.g. inserting from a popup).
+    $effect(() => {
+        const id = documentStore.pendingFocus;
+        if (!id) return;
+        documentStore.pendingFocus = null;
+        tick().then(() => {
+            const el = blockEls.get(id);
+            if (!el) return;
+            el.focus();
+            setCaretOffset(el, el.textContent?.length ?? 0);
+        });
+    });
+
     // Restore selection after a block split (e.g. inline unlink).
     $effect(() => {
         const ps = documentStore.pendingSelection;
@@ -483,6 +558,7 @@
                         role={blockRoles.get(block.id)}
                         spacingEm={parbreakSpacings.get(block.id)}
                         renderInline={renderInlineIds.has(block.id)}
+                        marker={listMarkers.get(block.id)}
                         placeholder={pageIdx === 0 &&
                         i === 0 &&
                         blocks.length === 1

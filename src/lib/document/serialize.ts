@@ -2,6 +2,9 @@ import type {
 	Block,
 	DocumentModel,
 	FontWeightName,
+	HeadingSettings,
+	HorizontalAlignment,
+	ListSettings,
 	Margins,
 	PageSettings,
 	ParagraphSettings,
@@ -149,8 +152,56 @@ function serializePreamble(doc: DocumentModel): string {
 	return [serializePageSetFull(doc.pages[0]), textRule, parRule].join("\n\n");
 }
 
-/** Serialize a single block, wrapping it in scoped set rules if it has overrides. */
-function serializeBlock(block: Block, docTypo: TypographySettings): string {
+/** Wrap `content` in `#align(...)[…]` when alignment is set and non-default. */
+function wrapAligned(content: string, alignment: HorizontalAlignment | undefined): string {
+	if (!alignment || alignment === "left") return content;
+	return `#align(${alignment})[${content}]`;
+}
+
+/** Title (level 0) → styled #text; headings 1-4 → #heading(level: N, …). */
+function serializeHeading(block: Block, heading: HeadingSettings): string {
+	const text = escapeText(block.text);
+	if (heading.level === 0) {
+		// Title isn't a heading in Typst's model. Render as a bold, oversized line.
+		return `#text(size: 2em, weight: "bold")[${text}]`;
+	}
+	const args: string[] = [`level: ${heading.level}`];
+	if (heading.numbering) args.push(`numbering: "${heading.numbering}"`);
+	if (heading.outlined === false) args.push(`outlined: false`);
+	return `#heading(${args.join(", ")})[${text}]`;
+}
+
+/** Build the argument list shared by both `#list(…)` and `#enum(…)`. */
+function listSharedArgs(s: ListSettings): string[] {
+	const args: string[] = [];
+	if (s.tight === false) args.push(`tight: false`);
+	if (s.spacing != null) args.push(`spacing: ${typstNumber(s.spacing)}em`);
+	if (s.indent != null && s.indent !== 0) args.push(`indent: ${typstNumber(s.indent)}pt`);
+	if (s.bodyIndent != null) args.push(`body-indent: ${typstNumber(s.bodyIndent)}em`);
+	return args;
+}
+
+function serializeListGroup(items: Block[]): string {
+	const first = items[0].list!;
+	const args = listSharedArgs(first);
+
+	if (first.kind === "bullet") {
+		if (first.marker) args.push(`marker: "${first.marker}"`);
+	} else {
+		if (first.marker) args.push(`numbering: "${first.marker}"`);
+		if (first.start != null) args.push(`start: ${first.start}`);
+		if (first.full) args.push(`full: true`);
+		if (first.reversed) args.push(`reversed: true`);
+	}
+
+	const call = first.kind === "bullet" ? "list" : "enum";
+	const bodies = items.map((b) => `[${escapeText(b.text)}]`).join("");
+	if (args.length === 0) return `#${call}${bodies}`;
+	return `#${call}(${args.join(", ")})${bodies}`;
+}
+
+/** Serialize a plain (non-heading, non-list) text block. */
+function serializeTextBlock(block: Block, docTypo: TypographySettings): string {
 	const text = escapeText(block.text);
 	const typo = block.typography ?? {};
 	const para = block.paragraph ?? {};
@@ -188,7 +239,11 @@ function serializeBlock(block: Block, docTypo: TypographySettings): string {
  * Continuation blocks (marked `block.continuation`) are joined to the previous
  * block without any separator — they're inline on the same line.
  *
- * Two adjacent non-continuation, non-empty lines become `#linebreak()`.
+ * Headings and list items are emitted as standalone block-level elements.
+ * Contiguous list items of the same `kind` group into one `#list(…)`/`#enum(…)`
+ * call; settings come from the first item in the group.
+ *
+ * Two adjacent non-continuation, non-empty plain lines become `#linebreak()`.
  * One or more blank lines become `#parbreak()` + extra `#linebreak()`s.
  */
 export function serializeDocument(
@@ -200,8 +255,6 @@ export function serializeDocument(
 	const pageBreakSet = new Set(pageBreakBlockIds);
 	const defaultPage = doc.pages[0];
 
-	// Build a map: blockId → page index (1-based for pages after the first).
-	// We walk pageBreakBlockIds in order to assign increasing page indices.
 	const blockPageIndex = new Map<string, number>();
 	let pi = 1;
 	for (const id of pageBreakBlockIds) blockPageIndex.set(id, pi++);
@@ -212,31 +265,76 @@ export function serializeDocument(
 	let pendingBlanks = 0;
 	let hasContent = false;
 
-	for (const block of doc.blocks) {
-		// ── Page break ──────────────────────────────────────────────────────
-		if (pageBreakSet.has(block.id)) {
-			const nextPageIdx = blockPageIndex.get(block.id)!;
-			const prevPage = doc.pages[currentPageIdx] ?? defaultPage;
-			const nextPage = doc.pages[nextPageIdx] ?? defaultPage;
-			currentPageIdx = nextPageIdx;
-			hasContent = false;
+	function handlePageBreak(block: Block): void {
+		if (!pageBreakSet.has(block.id)) return;
+		const nextPageIdx = blockPageIndex.get(block.id)!;
+		const prevPage = doc.pages[currentPageIdx] ?? defaultPage;
+		const nextPage = doc.pages[nextPageIdx] ?? defaultPage;
+		currentPageIdx = nextPageIdx;
+		hasContent = false;
+		pendingBlanks = 0;
+		parts.push("#pagebreak()");
+		parts.push(...serializePageTransition(defaultPage, prevPage, nextPage));
+	}
+
+	function pushBlockSeparator(): void {
+		// Block-level elements (headings, lists) auto-parbreak in Typst, so a blank
+		// line between parts is enough; we only need explicit breaks between two
+		// plain text lines (handled in the text branch).
+	}
+
+	let i = 0;
+	while (i < doc.blocks.length) {
+		const block = doc.blocks[i];
+
+		handlePageBreak(block);
+
+		// ── List group ──────────────────────────────────────────────────────────
+		if (block.list) {
+			const kind = block.list.kind;
+			const items: Block[] = [block];
+			let j = i + 1;
+			while (
+				j < doc.blocks.length &&
+				doc.blocks[j].list?.kind === kind &&
+				!pageBreakSet.has(doc.blocks[j].id)
+			) {
+				items.push(doc.blocks[j]);
+				j++;
+			}
+			if (hasContent) parts.push("");
+			parts.push(wrapAligned(serializeListGroup(items), block.alignment));
+			pushBlockSeparator();
+			hasContent = true;
 			pendingBlanks = 0;
-
-			parts.push("#pagebreak()");
-			parts.push(...serializePageTransition(defaultPage, prevPage, nextPage));
-		}
-
-		// ── Blank block (empty line / parbreak placeholder) ──────────────────
-		if (block.text === "") {
-			if (hasContent && !block.continuation) pendingBlanks += 1;
+			i = j;
 			continue;
 		}
 
-		// ── Content block ────────────────────────────────────────────────────
-		const serialized = serializeBlock(block, doc.typography);
+		// ── Heading ─────────────────────────────────────────────────────────────
+		if (block.heading) {
+			if (hasContent) parts.push("");
+			parts.push(wrapAligned(serializeHeading(block, block.heading), block.alignment));
+			pushBlockSeparator();
+			hasContent = true;
+			pendingBlanks = 0;
+			i++;
+			continue;
+		}
+
+		// ── Blank block (paragraph-break placeholder) ───────────────────────────
+		if (block.text === "") {
+			if (hasContent && !block.continuation) pendingBlanks += 1;
+			i++;
+			continue;
+		}
+
+		// ── Plain content block ─────────────────────────────────────────────────
+		const serialized = wrapAligned(
+			serializeTextBlock(block, doc.typography),
+			block.alignment,
+		);
 		if (hasContent && block.continuation) {
-			// Concatenate directly onto the previous part — no newline so Typst
-			// keeps everything on the same line without inserting extra whitespace.
 			parts[parts.length - 1] += serialized;
 		} else {
 			if (hasContent) {
@@ -251,6 +349,7 @@ export function serializeDocument(
 		}
 		pendingBlanks = 0;
 		hasContent = true;
+		i++;
 	}
 
 	const body = parts.join("\n");

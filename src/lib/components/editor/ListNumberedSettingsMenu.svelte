@@ -3,26 +3,44 @@
 	import FieldLabel from "$lib/components/ui/FieldLabel.svelte";
 	import Input from "$lib/components/ui/Input.svelte";
 
-	let start = $state<number | null>(null);
-	let spacing = $state<number | null>(null);
-	let indent = $state(0);
-	let bodyIndent = $state(0.5);
-	let tight = $state(true);
-	let full = $state(false);
-	let reversed = $state(false);
+	interface Props {
+		marker?: string;
+		start?: number | null;
+		spacing?: number | null;
+		indent?: number;
+		bodyIndent?: number;
+		tight?: boolean;
+		full?: boolean;
+		reversed?: boolean;
+	}
+
+	let {
+		marker = $bindable("1."),
+		start = $bindable(null),
+		spacing = $bindable(null),
+		indent = $bindable(0),
+		bodyIndent = $bindable(0.5),
+		tight = $bindable(true),
+		full = $bindable(false),
+		reversed = $bindable(false),
+	}: Props = $props();
 </script>
 
 <div class="shell relative z-[60] w-[324px] rounded-lg px-3 pt-3 pb-4">
 	<h3 class="text-body-14 font-[430] text-text-100">Numbering</h3>
 
 	<div class="mt-[13px]">
-		<button
-			type="button"
-			class="field-shell flex w-full items-center justify-between bg-bg-950 pl-4 pr-4"
-		>
-			<span class="text-text-250">None</span>
-			<span class="text-text-250">ex. 1.a</span>
-		</button>
+		<label class="field-shell flex w-full items-center justify-between bg-bg-950 pl-4 pr-4">
+			<input
+				type="text"
+				class="h-full flex-1 border-none bg-transparent text-body-14-tight text-text-100 outline-none placeholder:text-text-250"
+				placeholder="None"
+				bind:value={marker}
+				spellcheck="false"
+				autocomplete="off"
+			/>
+			<span class="ml-3 shrink-0 text-text-250">ex. 1.a</span>
+		</label>
 	</div>
 
 	<div class="mt-[13px] grid grid-cols-2 gap-2">
