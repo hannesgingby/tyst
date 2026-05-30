@@ -6,27 +6,14 @@ import { invoke, isTauri } from "@tauri-apps/api/core";
 
 export { isTauri };
 
-/** Fonts to fall back to when system enumeration is unavailable (browser dev). */
-export const FALLBACK_FONTS = [
-	"Libertinus Serif",
-	"Hedvig Letters Serif",
-	"Hedvig Letters Sans",
-	"Geist",
-	"Arial",
-	"Georgia",
-	"Helvetica",
-	"Times New Roman",
-	"Courier New",
-];
-
-/** Enumerate the font families installed on the user's system. */
+/** Enumerate the font families installed on the user's system (Tauri only). */
 export async function listSystemFonts(): Promise<string[]> {
-	if (!isTauri()) return FALLBACK_FONTS;
+	if (!isTauri()) return [];
 	try {
 		return await invoke<string[]>("list_system_fonts");
 	} catch (error) {
 		console.error("Failed to list system fonts:", error);
-		return FALLBACK_FONTS;
+		return [];
 	}
 }
 

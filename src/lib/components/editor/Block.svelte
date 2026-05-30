@@ -206,56 +206,31 @@
   Continuation blocks and the segment before them share one visual line.
   Each block is a single contenteditable (span inline, div block-level).
 -->
-{#if isInline}
-	<span
-		bind:this={el}
-		class={["doc-block outline-none"]}
-		contenteditable="true"
-		spellcheck="false"
-		role="textbox"
-		tabindex="0"
-		aria-multiline="false"
-		data-block-id={block.id}
-		data-placeholder={placeholder}
-		style:display="inline"
-		style:font-family={`"${typography.fontFamily}", serif`}
-		style:font-size="{fontSizePx}px"
-		style:font-weight={fontWeight}
-		style:line-height={effectiveLineHeight}
-		style:letter-spacing="{letterSpacingPx}px"
-		style:color={typography.color}
-		style:text-align={paragraph.justify ? "justify" : "left"}
-		style:text-indent="{firstLineIndentEm}em"
-		onfocus={() => onfocusblock(block.id)}
-		oninput={onInput}
-		onkeydown={onKeydown}
-		onpaste={onPaste}
-	></span>
-{:else}
-	<div
-		bind:this={el}
-		class={["doc-block outline-none w-full"]}
-		contenteditable="true"
-		spellcheck="false"
-		role="textbox"
-		tabindex="0"
-		aria-multiline="false"
-		data-block-id={block.id}
-		data-placeholder={placeholder}
-		style:font-family={`"${typography.fontFamily}", serif`}
-		style:font-size="{fontSizePx}px"
-		style:font-weight={fontWeight}
-		style:line-height={effectiveLineHeight}
-		style:letter-spacing="{letterSpacingPx}px"
-		style:color={typography.color}
-		style:text-align={paragraph.justify ? "justify" : "left"}
-		style:text-indent="{firstLineIndentEm}em"
-		onfocus={() => onfocusblock(block.id)}
-		oninput={onInput}
-		onkeydown={onKeydown}
-		onpaste={onPaste}
-	></div>
-{/if}
+<svelte:element
+	this={isInline ? "span" : "div"}
+	bind:this={el}
+	class={isInline ? "doc-block outline-none" : "doc-block outline-none w-full"}
+	contenteditable="true"
+	spellcheck="false"
+	role="textbox"
+	tabindex="0"
+	aria-multiline="false"
+	data-block-id={block.id}
+	data-placeholder={placeholder}
+	style:display={isInline ? "inline" : undefined}
+	style:font-family={`"${typography.fontFamily}", serif`}
+	style:font-size="{fontSizePx}px"
+	style:font-weight={fontWeight}
+	style:line-height={effectiveLineHeight}
+	style:letter-spacing="{letterSpacingPx}px"
+	style:color={typography.color}
+	style:text-align={paragraph.justify ? "justify" : "left"}
+	style:text-indent="{firstLineIndentEm}em"
+	onfocus={() => onfocusblock(block.id)}
+	oninput={onInput}
+	onkeydown={onKeydown}
+	onpaste={onPaste}
+></svelte:element>
 
 <style>
 	.doc-block {

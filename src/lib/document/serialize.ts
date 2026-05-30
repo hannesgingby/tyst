@@ -49,11 +49,6 @@ function parArgs(leading: number | undefined, p: Partial<ParagraphSettings>): st
 	return lines;
 }
 
-function setCall(name: string, args: string[]): string {
-	if (args.length === 0) return "";
-	return `#set ${name}(${args.join(", ")})`;
-}
-
 /** Serialize margins to a Typst margin(...) expression. */
 function serializeMargins(m: Margins): string {
 	const parts: string[] = [];
@@ -92,10 +87,7 @@ function serializePageTransition(
 	defaultPage: PageSettings,
 	prev: PageSettings,
 	curr: PageSettings,
-	currIndex: number,
 ): string[] {
-	const out: string[] = [];
-
 	// Resolve each section through the link system.
 	const prevMargin = prev.linked.margin ? defaultPage : prev;
 	const currMargin = curr.linked.margin ? defaultPage : curr;
@@ -141,13 +133,8 @@ function serializePageTransition(
 		pageArgs.push(`fill: ${hexToRgb(currColor.fill)}`);
 	}
 
-	// Only emit #set page() if something changed, but always emit #pagebreak().
-	// For page 2+ we always emit the break; settings only when they differ.
-	if (pageArgs.length > 0) {
-		out.push(`#set page(${pageArgs.join(", ")})`);
-	}
-
-	return out;
+	// Only emit #set page() if something changed; the caller always emits the pagebreak.
+	return pageArgs.length > 0 ? [`#set page(${pageArgs.join(", ")})`] : [];
 }
 
 /** The document preamble: page, default text and default paragraph set rules. */
@@ -162,14 +149,9 @@ function serializePreamble(doc: DocumentModel): string {
 	return [serializePageSetFull(doc.pages[0]), textRule, parRule].join("\n\n");
 }
 
-/** Serialize a block's text. Each block is a single line (no internal breaks). */
-function blockText(block: Block): string {
-	return escapeText(block.text);
-}
-
 /** Serialize a single block, wrapping it in scoped set rules if it has overrides. */
 function serializeBlock(block: Block, docTypo: TypographySettings): string {
-	const text = blockText(block);
+	const text = escapeText(block.text);
 	const typo = block.typography ?? {};
 	const para = block.paragraph ?? {};
 
@@ -188,9 +170,9 @@ function serializeBlock(block: Block, docTypo: TypographySettings): string {
 
 	const overrides: string[] = [];
 	const tArgs = textArgs(typo);
-	if (tArgs.length > 0) overrides.push(setCall("text", tArgs));
+	if (tArgs.length > 0) overrides.push(`#set text(${tArgs.join(", ")})`);
 	const pArgs = parArgs(typo.leading, para);
-	if (pArgs.length > 0) overrides.push(setCall("par", pArgs));
+	if (pArgs.length > 0) overrides.push(`#set par(${pArgs.join(", ")})`);
 
 	if (overrides.length === 0) return text;
 	return ["#[", ...overrides.map((o) => `  ${o}`), `  ${text}`, "]"].join("\n");
@@ -241,13 +223,7 @@ export function serializeDocument(
 			pendingBlanks = 0;
 
 			parts.push("#pagebreak()");
-			const transition = serializePageTransition(
-				defaultPage,
-				prevPage,
-				nextPage,
-				nextPageIdx,
-			);
-			parts.push(...transition);
+			parts.push(...serializePageTransition(defaultPage, prevPage, nextPage));
 		}
 
 		// ── Blank block (empty line / parbreak placeholder) ──────────────────

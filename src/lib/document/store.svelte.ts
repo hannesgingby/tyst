@@ -110,11 +110,17 @@ class DocumentStore {
 			: [this.activeBlock.id];
 	}
 
+	findBlock(id: string): Block | undefined {
+		return this.model.blocks.find((b) => b.id === id);
+	}
+
+	private isOverrideEmpty(key: "typography" | "paragraph", id: string): boolean {
+		const b = this.findBlock(id);
+		return !b?.[key] || Object.keys(b[key]!).length === 0;
+	}
+
 	get typographyLinked(): boolean {
-		return this.targetBlockIds.every((id) => {
-			const b = this.model.blocks.find((b) => b.id === id);
-			return !b?.typography || Object.keys(b.typography).length === 0;
-		});
+		return this.targetBlockIds.every((id) => this.isOverrideEmpty("typography", id));
 	}
 
 	set typographyLinked(value: boolean) {
@@ -124,7 +130,7 @@ class DocumentStore {
 			const { blockId, start, end } = this.intraBlockSelection;
 			const midId = this.splitBlockAtSelection(blockId, start, end);
 			if (midId) {
-				const mid = this.model.blocks.find((b) => b.id === midId);
+				const mid = this.findBlock(midId);
 				if (mid) {
 					mid.typography = { ...this.resolveTypography(mid) };
 					this.pendingSelection = { blockId: midId, start: 0, end: mid.text.length };
@@ -133,38 +139,26 @@ class DocumentStore {
 			}
 		}
 		for (const id of this.targetBlockIds) {
-			const b = this.model.blocks.find((b) => b.id === id);
+			const b = this.findBlock(id);
 			if (!b) continue;
-			if (value) {
-				b.typography = undefined;
-			} else {
-				b.typography = { ...this.resolveTypography(b) };
-			}
+			b.typography = value ? undefined : { ...this.resolveTypography(b) };
 		}
 	}
 
 	get paragraphLinked(): boolean {
-		return this.targetBlockIds.every((id) => {
-			const b = this.model.blocks.find((b) => b.id === id);
-			return !b?.paragraph || Object.keys(b.paragraph).length === 0;
-		});
+		return this.targetBlockIds.every((id) => this.isOverrideEmpty("paragraph", id));
 	}
 
 	set paragraphLinked(value: boolean) {
 		for (const id of this.targetBlockIds) {
-			const b = this.model.blocks.find((b) => b.id === id);
+			const b = this.findBlock(id);
 			if (!b) continue;
-			if (value) {
-				b.paragraph = undefined;
-			} else {
-				b.paragraph = { ...this.resolveParagraph(b) };
-			}
+			b.paragraph = value ? undefined : { ...this.resolveParagraph(b) };
 		}
 	}
 
 	get activeBlock(): Block {
-		const found = this.model.blocks.find((b) => b.id === this.activeBlockId);
-		return found ?? this.model.blocks[0];
+		return this.findBlock(this.activeBlockId ?? "") ?? this.model.blocks[0];
 	}
 
 	// --- Blocks ---------------------------------------------------------------
@@ -174,7 +168,7 @@ class DocumentStore {
 	}
 
 	setBlockText(id: string, text: string): void {
-		const block = this.model.blocks.find((b) => b.id === id);
+		const block = this.findBlock(id);
 		if (block) block.text = text;
 	}
 
@@ -217,41 +211,37 @@ class DocumentStore {
 	 */
 	readonly popupTypography = $derived.by(() => {
 		if (this.typographyLinked) return this.model.typography;
-		const id = this.targetBlockIds[0];
-		const b = this.model.blocks.find((b) => b.id === id) ?? this.activeBlock;
+		const b = this.findBlock(this.targetBlockIds[0]) ?? this.activeBlock;
 		return this.resolveTypography(b);
 	});
 
 	readonly popupParagraph = $derived.by(() => {
 		if (this.paragraphLinked) return this.model.paragraph;
-		const id = this.targetBlockIds[0];
-		const b = this.model.blocks.find((b) => b.id === id) ?? this.activeBlock;
+		const b = this.findBlock(this.targetBlockIds[0]) ?? this.activeBlock;
 		return this.resolveParagraph(b);
 	});
 
 	setTypography<K extends keyof TypographySettings>(key: K, value: TypographySettings[K]): void {
 		if (this.typographyLinked) {
 			this.model.typography[key] = value;
-		} else {
-			for (const id of this.targetBlockIds) {
-				const b = this.model.blocks.find((b) => b.id === id);
-				if (!b) continue;
-				if (!b.typography) b.typography = {};
-				b.typography[key] = value;
-			}
+			return;
+		}
+		for (const id of this.targetBlockIds) {
+			const b = this.findBlock(id);
+			if (!b) continue;
+			(b.typography ??= {})[key] = value;
 		}
 	}
 
 	setParagraph<K extends keyof ParagraphSettings>(key: K, value: ParagraphSettings[K]): void {
 		if (this.paragraphLinked) {
 			this.model.paragraph[key] = value;
-		} else {
-			for (const id of this.targetBlockIds) {
-				const b = this.model.blocks.find((b) => b.id === id);
-				if (!b) continue;
-				if (!b.paragraph) b.paragraph = {};
-				b.paragraph[key] = value;
-			}
+			return;
+		}
+		for (const id of this.targetBlockIds) {
+			const b = this.findBlock(id);
+			if (!b) continue;
+			(b.paragraph ??= {})[key] = value;
 		}
 	}
 
@@ -319,11 +309,16 @@ class DocumentStore {
 		}
 	}
 
-	/** Resolve which `PageSettings` object governs `section` on the active page. */
+	/** Resolve which `PageSettings` object governs `section` on a given page. */
+	pageSectionSource(pageIndex: number, section: PageSection): PageSettings {
+		const def = this.model.pages[0];
+		const page = this.model.pages[pageIndex] ?? def;
+		return pageIndex > 0 && page.linked[section] ? def : page;
+	}
+
+	/** Same, defaulting to the active page. */
 	sectionSource(section: PageSection): PageSettings {
-		const index = this.model.activePageIndex;
-		if (index > 0 && this.model.pages[index]?.linked[section]) return this.model.pages[0];
-		return this.model.pages[index] ?? this.model.pages[0];
+		return this.pageSectionSource(this.model.activePageIndex, section);
 	}
 
 	readonly activePaperSource = $derived.by(() => this.sectionSource("paper"));
@@ -333,8 +328,7 @@ class DocumentStore {
 	/** Is the active page's section linked to the default? */
 	isSectionLinked(section: PageSection): boolean {
 		const index = this.model.activePageIndex;
-		if (index === 0) return true;
-		return this.model.pages[index]?.linked[section] ?? true;
+		return index === 0 || (this.model.pages[index]?.linked[section] ?? true);
 	}
 
 	toggleSectionLink(section: PageSection): void {

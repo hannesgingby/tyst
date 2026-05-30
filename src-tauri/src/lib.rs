@@ -10,14 +10,11 @@ use tauri::Emitter;
 fn list_system_fonts() -> Vec<String> {
     let mut db = fontdb::Database::new();
     db.load_system_fonts();
-
-    let mut families: BTreeSet<String> = BTreeSet::new();
-    for face in db.faces() {
-        if let Some((name, _)) = face.families.first() {
-            families.insert(name.clone());
-        }
-    }
-    families.into_iter().collect()
+    db.faces()
+        .filter_map(|face| face.families.first().map(|(name, _)| name.clone()))
+        .collect::<BTreeSet<_>>()
+        .into_iter()
+        .collect()
 }
 
 /// Write a UTF-8 text file (used to save `.typ` documents).
@@ -45,12 +42,12 @@ fn find_typst() -> Option<PathBuf> {
 /// Compile Typst source to a PDF at `out_path` using the Typst CLI.
 #[tauri::command]
 fn export_pdf(typ_source: String, out_path: String) -> Result<(), String> {
+    let typst_bin =
+        find_typst().ok_or("Typst CLI not found. Install it (e.g. `brew install typst`).")?;
+
     let mut tmp = std::env::temp_dir();
     tmp.push(format!("tyst-export-{}.typ", std::process::id()));
     std::fs::write(&tmp, typ_source).map_err(|e| e.to_string())?;
-
-    let typst_bin =
-        find_typst().ok_or("Typst CLI not found. Install it (e.g. `brew install typst`).")?;
 
     let output = Command::new(typst_bin)
         .arg("compile")

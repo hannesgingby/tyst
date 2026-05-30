@@ -23,26 +23,18 @@
     const pageWidthPx = $derived(ptToPx(sizePt.width) * RENDER_SCALE);
     const pageHeightPx = $derived(ptToPx(sizePt.height) * RENDER_SCALE);
 
-    /**
-     * Resolve the margin settings for a given page index, honouring the per-section
-     * link/unlink state. Reads model.$state so is reactive inside $derived.
-     */
     function resolveMarginsPx(pageIdx: number) {
-        const def = model.pages[0];
-        const pg = model.pages[pageIdx] ?? def;
-        const src = pg.linked.margin ? def : pg;
+        const { margins } = documentStore.pageSectionSource(pageIdx, "margin");
         return {
-            left: cmToPx(src.margins.left) * RENDER_SCALE,
-            right: cmToPx(src.margins.right) * RENDER_SCALE,
-            top: cmToPx(src.margins.top) * RENDER_SCALE,
-            bottom: cmToPx(src.margins.bottom) * RENDER_SCALE,
+            left: cmToPx(margins.left) * RENDER_SCALE,
+            right: cmToPx(margins.right) * RENDER_SCALE,
+            top: cmToPx(margins.top) * RENDER_SCALE,
+            bottom: cmToPx(margins.bottom) * RENDER_SCALE,
         };
     }
 
     function resolvePageFill(pageIdx: number): string {
-        const def = model.pages[0];
-        const pg = model.pages[pageIdx] ?? def;
-        return (pg.linked.color ? def : pg).fill;
+        return documentStore.pageSectionSource(pageIdx, "color").fill;
     }
 
     let viewportEl = $state<HTMLDivElement | null>(null);
@@ -357,7 +349,7 @@
     function onMergePrev(id: string): void {
         const result = documentStore.mergeWithPrevious(id);
         if (!result) return;
-        const merged = documentStore.model.blocks.find((b) => b.id === result.id);
+        const merged = documentStore.findBlock(result.id);
         const el = blockEls.get(result.id);
         if (!el || !merged) return;
         documentStore.activeBlockId = result.id;
