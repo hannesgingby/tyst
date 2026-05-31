@@ -5,6 +5,7 @@
     import { documentStore } from "$lib/document/store.svelte";
     import AlignmentPopup from "./AlignmentPopup.svelte";
     import HeadingsPopup from "./HeadingsPopup.svelte";
+    import LinePopup from "./LinePopup.svelte";
     import ListPopup from "./ListPopup.svelte";
     import TypographyPopup from "./TypographyPopup.svelte";
 
@@ -15,7 +16,7 @@
         activeBlock.alignment != null && activeBlock.alignment !== "left",
     );
 
-    type PopupKind = "typography" | "headings" | "list" | "alignment";
+    type PopupKind = "typography" | "headings" | "list" | "alignment" | "line";
 
     type IconTool = {
         kind: "icon";
@@ -102,6 +103,21 @@
                     name: "table",
                     label: "Table",
                     iconClass: "size-7.5",
+                },
+            ],
+        },
+        {
+            tools: [
+                {
+                    kind: "expandable",
+                    name: "line",
+                    label: "Line",
+                    popup: "line",
+                },
+                {
+                    kind: "icon",
+                    name: "image",
+                    label: "Image",
                 },
             ],
         },
@@ -253,6 +269,15 @@
                             active={alignmentActive}
                         >
                             {#snippet popup()}<AlignmentPopup />{/snippet}
+                        </HoverPopup>
+                    {:else if tool.kind === "expandable" && tool.popup === "line"}
+                        <HoverPopup
+                            label={tool.label}
+                            icon={tool.name}
+                            iconClass={tool.iconClass}
+                            shortcut={tool.shortcut}
+                        >
+                            {#snippet popup()}<LinePopup />{/snippet}
                         </HoverPopup>
                     {:else if tool.kind === "expandable"}
                         <HoverPopup
