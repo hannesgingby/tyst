@@ -252,8 +252,9 @@ function serializeFootnotePageRules(
 		blockIndexById,
 		pageBreakBlockIds,
 	);
+	// Inside #set function args, Typst is in code mode — use a bare call, not #line(...).
 	const separatorTypst = separator?.line
-		? serializeLine(separator.line)
+		? lineCallExpr(separator.line)
 		: FOOTNOTE_SEPARATOR_TYPST;
 	return [
 		`#set footnote(numbering: "${settings.numbering}")`,
@@ -309,7 +310,7 @@ function serializeImage(doc: DocumentModel, block: Block, image: ImageSettings):
 	return `#figure(image(${args.join(", ")}))`;
 }
 
-function serializeLine(line: LineSettings): string {
+function lineCallExpr(line: LineSettings): string {
 	const args: string[] = [
 		`start: (${typstNumber(line.startX)}pt, ${typstNumber(line.startY)}pt)`,
 		line.lengthUnit === "%"
@@ -318,7 +319,11 @@ function serializeLine(line: LineSettings): string {
 		`angle: ${typstNumber(line.angle)}deg`,
 		`stroke: ${strokeArg(line.stroke)}`,
 	];
-	return `#line(${args.join(", ")})`;
+	return `line(${args.join(", ")})`;
+}
+
+function serializeLine(line: LineSettings): string {
+	return `#${lineCallExpr(line)}`;
 }
 
 function serializeRect(rect: RectSettings): string {
@@ -602,7 +607,9 @@ export function serializeDocument(
 		}
 
 		// ── Blank block (paragraph-break placeholder) ───────────────────────────
-		if (block.text === "") {
+		// footnoteMarker blocks intentionally have text:"" but must not be skipped here —
+		// they serialize to #footnote[...] via serializeTextBlock.
+		if (block.text === "" && !block.footnoteMarker) {
 			if (hasContent && !block.continuation) pendingBlanks += 1;
 			i++;
 			continue;

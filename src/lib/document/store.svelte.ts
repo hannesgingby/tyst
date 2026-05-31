@@ -286,7 +286,7 @@ class DocumentStore {
 		if (!active) return null;
 
 		if (active.image || active.line || active.rect) return active.id;
-		if (active.footnote) return active.id;
+		if (active.footnote && active.text === "") return active.id;
 		if (active.footnoteSeparator && active.line) return active.id;
 		if (active.outline && active.text === "") return active.id;
 
@@ -328,25 +328,57 @@ class DocumentStore {
 
 		if (b.footnote) {
 			const footnoteId = b.footnote.footnoteId;
+			const pageIndex = this.blockPageIndex(id);
+			// Record caret target before splicing — multiple removals invalidate idx arithmetic.
+			const markerIdx = this.model.blocks.findIndex(
+				(bb) => bb.footnoteMarker?.footnoteId === footnoteId,
+			);
+			const caretBlock = markerIdx > 0 ? this.model.blocks[markerIdx - 1] : null;
 			this.model.blocks.splice(idx, 1);
 			for (let j = this.model.blocks.length - 1; j >= 0; j--) {
 				const bb = this.model.blocks[j];
 				if (bb.footnoteMarker?.footnoteId === footnoteId) {
 					this.model.blocks.splice(j, 1);
+					// Merge or remove the continuation block that was after the marker.
+					// insertFootnote always creates a trailing continuation (empty or split text).
+					const afterMarker = this.model.blocks[j];
+					if (
+						afterMarker?.continuation &&
+						!afterMarker.typography &&
+						!afterMarker.paragraph &&
+						!afterMarker.footnoteMarker &&
+						!afterMarker.footnote
+					) {
+						const beforeMarker = j > 0 ? this.model.blocks[j - 1] : null;
+						if (beforeMarker) beforeMarker.text += afterMarker.text;
+						this.model.blocks.splice(j, 1);
+					}
 					break;
 				}
 			}
+			// If no footnote bodies remain on this page, remove the separator too.
+			const hasMoreFootnotes = this.model.blocks.some(
+				(bb) => bb.footnote && this.blockPageIndex(bb.id) === pageIndex,
+			);
+			if (!hasMoreFootnotes) {
+				const sepIdx = this.model.blocks.findIndex(
+					(bb) =>
+						bb.footnoteSeparator && this.blockPageIndex(bb.id) === pageIndex,
+				);
+				if (sepIdx >= 0) this.model.blocks.splice(sepIdx, 1);
+			}
+			if (caretBlock) return { id: caretBlock.id, offset: caretBlock.text.length };
 		} else {
 			this.model.blocks.splice(idx, 1);
-		}
-		if (idx > 0) {
-			const before = this.model.blocks[idx - 1];
-			return { id: before.id, offset: before.text.length };
 		}
 		if (this.model.blocks.length === 0) {
 			const fresh: Block = { id: newId(), text: "" };
 			this.model.blocks.push(fresh);
 			return { id: fresh.id, offset: 0 };
+		}
+		if (idx > 0 && idx <= this.model.blocks.length) {
+			const before = this.model.blocks[idx - 1];
+			if (before) return { id: before.id, offset: before.text.length };
 		}
 		return { id: this.model.blocks[0].id, offset: 0 };
 	}

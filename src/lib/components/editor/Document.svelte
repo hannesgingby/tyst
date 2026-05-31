@@ -741,6 +741,25 @@
                 return;
             }
         }
+
+        // Backspacing into a footnote marker removes the whole footnote.
+        // The marker block is not a contenteditable, so normal merging would
+        // leave the caret stuck on a non-editable element.
+        if (idx > 0 && blocks[idx - 1]?.footnoteMarker) {
+            const markerBlock = blocks[idx - 1];
+            const bodyBlock = blocks.find(
+                (bb) => bb.footnote?.footnoteId === markerBlock.footnoteMarker!.footnoteId,
+            );
+            if (bodyBlock) {
+                const result = documentStore.deleteEmbed(bodyBlock.id);
+                if (result) {
+                    pendingCaret = result;
+                    focusPending();
+                }
+            }
+            return;
+        }
+
         const result = documentStore.mergeWithPrevious(id);
         if (!result) return;
         // Update active block right away so the toolbar reflects the new target,
@@ -778,6 +797,16 @@
                 !event.metaKey &&
                 !event.altKey
             ) {
+                const focused = document.activeElement;
+                const inInputField =
+                    focused instanceof HTMLInputElement ||
+                    focused instanceof HTMLTextAreaElement ||
+                    focused instanceof HTMLSelectElement ||
+                    (focused instanceof HTMLElement &&
+                        focused.isContentEditable &&
+                        !focused.matches(".doc-block[contenteditable]"));
+                if (inInputField) return;
+
                 const awaiting = documentStore.embedAwaitingDelete;
                 const activeBlock = documentStore.activeBlock;
                 if (
