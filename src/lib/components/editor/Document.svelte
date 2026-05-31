@@ -258,6 +258,22 @@
         documentStore.pageBreakBlockIds = ids;
     });
 
+    // First non-continuation block on each page. These suppress their `above`
+    // spacing — Typst collapses block(above: …) at the top of a page since
+    // there is nothing above it to push away from.
+    const pageTopIds = $derived.by(() => {
+        const set = new Set<string>();
+        const seen = new Set<number>();
+        for (const b of blocks) {
+            if (b.continuation) continue;
+            const pg = layout.items.get(b.id)?.page ?? 0;
+            if (seen.has(pg)) continue;
+            seen.add(pg);
+            set.add(b.id);
+        }
+        return set;
+    });
+
     // Group blocks by page for per-page rendering.
     const blocksByPage = $derived.by(() => {
         const groups = new Map<number, (typeof blocks)[number][]>();
@@ -720,6 +736,7 @@
                                         listTight={listItemLayout.get(block.id)?.tight}
                                         listHasNext={listItemLayout.get(block.id)?.hasNext}
                                         listGroupFirst={listItemLayout.get(block.id)?.isFirst}
+                                        suppressAbove={pageTopIds.has(block.id)}
                                         registerel={registerEl}
                                         onheight={onHeight}
                                         onfocusblock={onFocusBlock}
@@ -744,6 +761,7 @@
                             listTight={listItemLayout.get(block.id)?.tight}
                             listHasNext={listItemLayout.get(block.id)?.hasNext}
                             listGroupFirst={listItemLayout.get(block.id)?.isFirst}
+                            suppressAbove={pageTopIds.has(block.id)}
                             placeholder={pageIdx === 0 &&
                             item.index === 0 &&
                             blocks.length === 1

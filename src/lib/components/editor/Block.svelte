@@ -35,6 +35,8 @@
 		listHasNext?: boolean;
 		/** This block is the first item in its list group. */
 		listGroupFirst?: boolean;
+		/** This block is the first non-continuation block on its page. */
+		suppressAbove?: boolean;
 		registerel: (id: string, el: HTMLElement | null) => void;
 		onheight: (id: string, px: number) => void;
 		onfocusblock: (id: string) => void;
@@ -56,6 +58,7 @@
 		listTight = true,
 		listHasNext = false,
 		listGroupFirst = false,
+		suppressAbove = false,
 		registerel,
 		onheight,
 		onfocusblock,
@@ -375,7 +378,7 @@
 		bind:this={embedEl}
 		class={["doc-embed relative flex w-full cursor-pointer", alignClass]}
 		data-block-id={block.id}
-		style:margin-top="{spacing?.above ?? 1.2}em"
+		style:margin-top={suppressAbove ? "0" : `${spacing?.above ?? 1.2}em`}
 		style:margin-bottom="{spacing?.below ?? 0.35}em"
 		onclick={(e) => {
 			e.preventDefault();
@@ -476,7 +479,7 @@
 	<div
 		bind:this={outerEl}
 		class="relative w-full"
-		style:margin-top="{spacing?.above ?? 1.2}em"
+		style:margin-top={suppressAbove ? "0" : `${spacing?.above ?? 1.2}em`}
 		style:margin-bottom="{spacing?.below ?? 0.35}em"
 	>
 		{#if awaitingDelete}
@@ -565,7 +568,7 @@
 		bind:this={outerEl}
 		class="flex w-full"
 		style:padding-left="{listIndentPt}pt"
-		style:margin-top={listGroupFirst ? `${listAboveEm}em` : undefined}
+		style:margin-top={listGroupFirst && !suppressAbove ? `${listAboveEm}em` : undefined}
 		style:margin-bottom={listHasNext ? `${listItemGapEm}em` : `${listBelowEm}em`}
 		style:text-indent="0"
 	>
@@ -586,7 +589,7 @@
 	<div
 		bind:this={outerEl}
 		class="flex w-full"
-		style:margin-top="{headingTopMarginEm}em"
+		style:margin-top="{suppressAbove ? 0 : headingTopMarginEm}em"
 		style:margin-bottom="{headingBottomMarginEm}em"
 	>
 		{#if headingPrefix}
