@@ -3,6 +3,11 @@
 	import { resolveBlockHeadingSpacing, resolveBlockListSpacing } from "$lib/document/blockLevelStyle";
 	import { documentStore } from "$lib/document/store.svelte";
 	import { formatNumbering } from "$lib/document/numbering";
+	import {
+		bodyLineHeightEm,
+		parbreakGapEm,
+		parSpacingMatchesLeading,
+	} from "$lib/document/lineMetrics";
 	import { ptToPx } from "$lib/document/units";
 	import type { Block, StrokeDash } from "$lib/document/types";
 	import { imageCache } from "$lib/system/imageCache.svelte";
@@ -91,14 +96,12 @@
 	const typography = $derived(documentStore.resolveTypography(block));
 	const paragraph = $derived(documentStore.resolveParagraph(block));
 
-	const LINE_ADVANCE_BASE = 0.658;
-
 	const headingScale = $derived(
 		block.heading ? (HEADING_SCALE[block.heading.level] ?? 1) : 1,
 	);
 	const fontSizePx = $derived(ptToPx(typography.size) * scale * headingScale);
 	const lineHeight = $derived(
-		block.heading ? 1.2 : typography.leading + LINE_ADVANCE_BASE,
+		block.heading ? 1.2 : bodyLineHeightEm(typography.leading),
 	);
 	const letterSpacingPx = $derived((typography.tracking / 100) * fontSizePx);
 	const fontWeight = $derived(
@@ -110,8 +113,15 @@
 			: ptToPx(paragraph.firstLineIndent ?? 0) * scale,
 	);
 
+	const parbreakGap = $derived(
+		role === "parbreak" ? parbreakGapEm(paragraph, typography, spacingEm) : 0,
+	);
+	const collapsedParbreak = $derived(
+		role === "parbreak" && parSpacingMatchesLeading(paragraph, typography),
+	);
+
 	const effectiveLineHeight = $derived(
-		role === "parbreak" ? (spacingEm ?? paragraph.spacing) : lineHeight,
+		role === "parbreak" ? parbreakGap : lineHeight,
 	);
 
 	const textAlign = $derived(
@@ -238,7 +248,7 @@
 		if (!el) return;
 		const isEmpty = (el.textContent ?? "") === "";
 		const hasTrailingBr = el.lastChild?.nodeName === "BR";
-		if (isEmpty && !effectivePlaceholder && !hasTrailingBr) {
+		if (isEmpty && !effectivePlaceholder && !hasTrailingBr && !collapsedParbreak) {
 			el.append(document.createElement("br"));
 		} else if ((!isEmpty || effectivePlaceholder) && hasTrailingBr) {
 			el.lastChild?.remove();
@@ -286,6 +296,11 @@
 	// BR fills the line box when there's no placeholder, but stops :empty from matching.
 	$effect(() => {
 		void effectivePlaceholder;
+		ensureTrailingBr();
+	});
+
+	$effect(() => {
+		void collapsedParbreak;
 		ensureTrailingBr();
 	});
 
@@ -384,6 +399,11 @@
 		style:font-size="{fontSizePx}px"
 		style:font-weight={fontWeight}
 		style:line-height={effectiveLineHeight}
+		style:height={collapsedParbreak ? "0" : undefined}
+		style:min-height={collapsedParbreak ? "0" : undefined}
+		style:overflow={collapsedParbreak ? "hidden" : undefined}
+		style:padding={collapsedParbreak ? "0" : undefined}
+		style:margin={collapsedParbreak ? "0" : undefined}
 		style:letter-spacing="{letterSpacingPx}px"
 		style:color={typography.color}
 		style:text-align={textAlign}
@@ -562,7 +582,7 @@
 			tabindex="-1"
 			style:font-family={`"${docTypo.fontFamily}", serif`}
 			style:font-size="{baseFontPx}px"
-			style:line-height={docTypo.leading + 0.658}
+			style:line-height={bodyLineHeightEm(docTypo.leading)}
 			style:color={docTypo.color}
 			onclick={(e) => {
 				e.preventDefault();

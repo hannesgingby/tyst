@@ -7,6 +7,7 @@
     } from "$lib/document/blockLevelStyle";
     import { documentStore } from "$lib/document/store.svelte";
     import { formatItem, formatNumbering } from "$lib/document/numbering";
+    import { parbreakGapEm } from "$lib/document/lineMetrics";
     import { cmToPx, ptToPx } from "$lib/document/units";
     import {
         caretAtEnd,
@@ -179,6 +180,13 @@
         return 0;
     }
 
+    function paragraphGapEm(b: (typeof blocks)[number]): number {
+        return parbreakGapEm(
+            documentStore.resolveParagraph(b),
+            documentStore.resolveTypography(b),
+        );
+    }
+
     function belowContribution(b: (typeof blocks)[number]): number {
         if (b.heading) {
             return (
@@ -330,25 +338,20 @@
             const b = blocks[i];
             if (b.text !== "" || b.continuation) continue;
             if (blockRoles.get(b.id) !== "parbreak") continue;
-            let prev = model.paragraph.spacing;
-            let next = model.paragraph.spacing;
+            const defaultGap = parbreakGapEm(model.paragraph, model.typography);
+            let prev = defaultGap;
+            let next = defaultGap;
             for (let j = i - 1; j >= 0; j--) {
                 const pb = blocks[j];
                 if ((pb.text !== "" || isEmbedBlock(pb)) && !pb.continuation) {
-                    prev = Math.max(
-                        documentStore.resolveParagraph(pb).spacing,
-                        belowContribution(pb),
-                    );
+                    prev = Math.max(paragraphGapEm(pb), belowContribution(pb));
                     break;
                 }
             }
             for (let j = i + 1; j < blocks.length; j++) {
                 const nb = blocks[j];
                 if ((nb.text !== "" || isEmbedBlock(nb)) && !nb.continuation) {
-                    next = Math.max(
-                        documentStore.resolveParagraph(nb).spacing,
-                        aboveContribution(nb),
-                    );
+                    next = Math.max(paragraphGapEm(nb), aboveContribution(nb));
                     break;
                 }
             }
