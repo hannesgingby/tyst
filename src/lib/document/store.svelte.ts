@@ -179,6 +179,55 @@ class DocumentStore {
 		this.activeBlockId = id;
 	}
 
+	/**
+	 * The embed block that's currently "armed" for deletion via Backspace:
+	 * the user is in an empty, non-continuation text block that sits directly
+	 * after this embed. Used by the editor to surface a "Backspace to delete"
+	 * indicator and by the Backspace handler to delete the embed.
+	 */
+	readonly embedAwaitingDelete = $derived.by((): string | null => {
+		const active = this.activeBlock;
+		if (!active) return null;
+		if (
+			active.text !== "" ||
+			active.continuation ||
+			active.image ||
+			active.line ||
+			active.rect ||
+			active.heading ||
+			active.list
+		)
+			return null;
+		const idx = this.blockIndex(active.id);
+		if (idx <= 0) return null;
+		const prev = this.model.blocks[idx - 1];
+		if (prev.image || prev.line || prev.rect) return prev.id;
+		return null;
+	});
+
+	/**
+	 * Remove an embed block from the document. Returns the caret target the
+	 * editor should focus afterwards — preferring the block immediately above
+	 * the embed, otherwise the first remaining block.
+	 */
+	deleteEmbed(id: string): { id: string; offset: number } | null {
+		const idx = this.blockIndex(id);
+		if (idx < 0) return null;
+		const b = this.model.blocks[idx];
+		if (!(b.image || b.line || b.rect)) return null;
+		this.model.blocks.splice(idx, 1);
+		if (idx > 0) {
+			const before = this.model.blocks[idx - 1];
+			return { id: before.id, offset: before.text.length };
+		}
+		if (this.model.blocks.length === 0) {
+			const fresh: Block = { id: newId(), text: "" };
+			this.model.blocks.push(fresh);
+			return { id: fresh.id, offset: 0 };
+		}
+		return { id: this.model.blocks[0].id, offset: 0 };
+	}
+
 	readonly typ = $derived.by(() =>
 		serializeDocument(this.model, this.pageBreakBlockIds),
 	);

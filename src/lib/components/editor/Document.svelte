@@ -434,6 +434,21 @@
     }
 
     function onMergePrev(id: string): void {
+        // Special case: Backspace at the start of an empty text block whose
+        // previous block is an embed → delete the embed and place the caret
+        // at the end of the block above it (see store.embedAwaitingDelete).
+        const idx = blocks.findIndex((b) => b.id === id);
+        if (idx > 0 && blocks[idx]?.text === "") {
+            const prev = blocks[idx - 1];
+            if (prev && (prev.image || prev.line || prev.rect)) {
+                const result = documentStore.deleteEmbed(prev.id);
+                if (result) {
+                    pendingCaret = result;
+                    focusPending();
+                }
+                return;
+            }
+        }
         const result = documentStore.mergeWithPrevious(id);
         if (!result) return;
         pendingCaret = result;

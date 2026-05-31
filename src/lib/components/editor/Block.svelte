@@ -322,11 +322,12 @@
 				: "justify-start"}
 	{@const dashCss = (d: StrokeDash) =>
 		d === "dotted" ? "dotted" : d === "dashed" ? "dashed" : "solid"}
+	{@const awaitingDelete = documentStore.embedAwaitingDelete === block.id}
 	<!-- svelte-ignore a11y_click_events_have_key_events -->
 	<!-- svelte-ignore a11y_no_static_element_interactions -->
 	<div
 		bind:this={embedEl}
-		class={["doc-embed flex w-full cursor-pointer", alignClass]}
+		class={["doc-embed relative flex w-full cursor-pointer", alignClass]}
 		data-block-id={block.id}
 		style:margin-top="{spacing?.above ?? 1.2}em"
 		style:margin-bottom="{spacing?.below ?? 0.35}em"
@@ -393,6 +394,17 @@
 				style:border-radius="{rect.radius * scale}px"
 				style:padding="{rect.inset * scale}px"
 			></div>
+		{/if}
+		{#if awaitingDelete}
+			<span
+				class="pointer-events-none absolute top-0 right-0 rounded-md bg-bg-950 text-text-100 shadow-md select-none"
+				style:font-size="{ptToPx(9) * scale}px"
+				style:line-height="1"
+				style:padding="{ptToPx(4) * scale}px {ptToPx(6) * scale}px"
+				style:transform="translate({ptToPx(6) * scale}px, -{ptToPx(8) * scale}px)"
+			>
+				Backspace to delete
+			</span>
 		{/if}
 	</div>
 {/snippet}
