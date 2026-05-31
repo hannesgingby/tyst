@@ -339,37 +339,55 @@
 			onfocusblock(block.id);
 		}}
 	>
+		{#snippet deleteBadge()}
+			{#if awaitingDelete}
+				<!-- Anchored to the bottom-right of the per-embed sizing wrapper,
+				     translated above it so it sits over the embed's top-right.
+				     `bottom: 100%` + padding-bottom gives the spacing. -->
+				<span
+					class="text-text-150 pointer-events-none absolute right-0 bottom-full select-none"
+					style:font-size="{10 * scale}px"
+					style:line-height="1"
+					style:padding-bottom="{8 * scale}px"
+				>
+					Backspace to delete
+				</span>
+			{/if}
+		{/snippet}
 		{#if img}
 			{@const wPx = img.width != null ? ptToPx(img.width) * scale : undefined}
 			{@const hPx = img.height != null ? ptToPx(img.height) * scale : undefined}
-			{#if cached}
-				<img
-					src={cached.dataUrl}
-					alt={img.alt ?? img.fileName}
-					class="block max-w-full select-none"
-					style:width={wPx ? `${wPx}px` : "auto"}
-					style:height={hPx ? `${hPx}px` : "auto"}
-					style:object-fit={img.fit === "contain"
-						? "contain"
-						: img.fit === "stretch"
-							? "fill"
-							: "cover"}
-					style:image-rendering={img.scaling === "pixelated" ? "pixelated" : "auto"}
-					draggable="false"
-				/>
-			{:else}
-				<div
-					class="flex items-center justify-center rounded-md bg-bg-950 px-4 py-6 text-text-250"
-					style:width={wPx ? `${wPx}px` : "240px"}
-					style:height={hPx ? `${hPx}px` : "120px"}
-				>
-					{img.fileName}
-				</div>
-			{/if}
+			<div class="relative inline-block">
+				{#if cached}
+					<img
+						src={cached.dataUrl}
+						alt={img.alt ?? img.fileName}
+						class="block max-w-full select-none"
+						style:width={wPx ? `${wPx}px` : "auto"}
+						style:height={hPx ? `${hPx}px` : "auto"}
+						style:object-fit={img.fit === "contain"
+							? "contain"
+							: img.fit === "stretch"
+								? "fill"
+								: "cover"}
+						style:image-rendering={img.scaling === "pixelated" ? "pixelated" : "auto"}
+						draggable="false"
+					/>
+				{:else}
+					<div
+						class="flex items-center justify-center rounded-md bg-bg-950 px-4 py-6 text-text-250"
+						style:width={wPx ? `${wPx}px` : "240px"}
+						style:height={hPx ? `${hPx}px` : "120px"}
+					>
+						{img.fileName}
+					</div>
+				{/if}
+				{@render deleteBadge()}
+			</div>
 		{:else if line}
 			{@const lenPx = line.lengthUnit === "pt" ? line.length * scale : undefined}
 			<div
-				class="my-2 w-full"
+				class="relative my-2"
 				style:width={lenPx ? `${lenPx}px` : `${line.length}%`}
 				style:transform={line.angle ? `rotate(${line.angle}deg)` : undefined}
 				style:transform-origin="left center"
@@ -379,12 +397,13 @@
 					style:border-top-width="{line.stroke.thickness * scale}px"
 					style:border-top-color={line.stroke.color}
 				></div>
+				{@render deleteBadge()}
 			</div>
 		{:else if rect}
 			{@const wPx = rect.width != null ? ptToPx(rect.width) * scale : undefined}
 			{@const hPx = (rect.height != null ? ptToPx(rect.height) : 60) * scale}
 			<div
-				class="block"
+				class="relative"
 				style:width={wPx ? `${wPx}px` : "100%"}
 				style:height="{hPx}px"
 				style:background-color={rect.fillEnabled ? rect.fillColor : "transparent"}
@@ -393,18 +412,9 @@
 				style:border-color={rect.stroke.color}
 				style:border-radius="{rect.radius * scale}px"
 				style:padding="{rect.inset * scale}px"
-			></div>
-		{/if}
-		{#if awaitingDelete}
-			<span
-				class="pointer-events-none absolute top-0 right-0 rounded-md bg-bg-950 text-text-100 shadow-md select-none"
-				style:font-size="{ptToPx(9) * scale}px"
-				style:line-height="1"
-				style:padding="{ptToPx(4) * scale}px {ptToPx(6) * scale}px"
-				style:transform="translate({ptToPx(6) * scale}px, -{ptToPx(8) * scale}px)"
 			>
-				Backspace to delete
-			</span>
+				{@render deleteBadge()}
+			</div>
 		{/if}
 	</div>
 {/snippet}
