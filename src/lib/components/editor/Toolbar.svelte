@@ -9,6 +9,7 @@
     import ImagePopup from "./ImagePopup.svelte";
     import LinePopup from "./LinePopup.svelte";
     import ListPopup from "./ListPopup.svelte";
+    import FootnotePopup from "./FootnotePopup.svelte";
     import OutlinePopup from "./OutlinePopup.svelte";
     import TypographyPopup from "./TypographyPopup.svelte";
 
@@ -26,6 +27,7 @@
         documentStore.tiedPopup === "line" || documentStore.tiedPopup === "rect",
     );
     const outlineTied = $derived(documentStore.tiedPopup === "outline");
+    const footnoteTied = $derived(documentStore.tiedPopup === "footnote");
 
     // Hover-to-open for the Line tool (matches Headings/List behaviour). When
     // a shape is active the popup is "tied" open regardless of hover.
@@ -44,12 +46,13 @@
     let imageWrapEl = $state<HTMLDivElement | null>(null);
     let lineWrapEl = $state<HTMLDivElement | null>(null);
     let outlineWrapEl = $state<HTMLDivElement | null>(null);
+    let footnoteWrapEl = $state<HTMLDivElement | null>(null);
 
     function isInsideActiveEmbed(target: EventTarget | null): boolean {
         if (!(target instanceof HTMLElement)) return false;
         const id = activeBlock.id;
         // The embed wrapper carries `.doc-embed` and `data-block-id={id}`.
-        return target.closest(`.doc-embed[data-block-id="${id}"]`) != null;
+        return target.closest(`[data-block-id="${id}"]`) != null;
     }
 
     function onDocumentPointerDown(event: PointerEvent): void {
@@ -72,10 +75,17 @@
                 documentStore.popupDismissed = "outline";
             }
         }
+        if (footnoteTied && !documentStore.popupDismissed) {
+            const inPopup =
+                footnoteWrapEl != null && target instanceof Node && footnoteWrapEl.contains(target);
+            if (!inPopup && !isInsideActiveEmbed(target)) {
+                documentStore.popupDismissed = "footnote";
+            }
+        }
     }
 
     $effect(() => {
-        if (!imageTied && !lineTied && !outlineTied) return;
+        if (!imageTied && !lineTied && !outlineTied && !footnoteTied) return;
         document.addEventListener("pointerdown", onDocumentPointerDown, true);
         return () => document.removeEventListener("pointerdown", onDocumentPointerDown, true);
     });
@@ -85,6 +95,23 @@
         (lineTied && documentStore.popupDismissed !== "line") || lineHoverOpen,
     );
     const outlineOpen = $derived(outlineTied && documentStore.popupDismissed !== "outline");
+    const footnoteOpen = $derived(footnoteTied && documentStore.popupDismissed !== "footnote");
+
+    function handleFootnoteClick(): void {
+        if (
+            footnoteTied &&
+            documentStore.popupDismissed === "footnote" &&
+            (activeBlock.footnote || activeBlock.footnoteMarker)
+        ) {
+            documentStore.popupDismissed = null;
+            return;
+        }
+        if (activeBlock.footnote || activeBlock.footnoteMarker) {
+            documentStore.popupDismissed = null;
+            return;
+        }
+        documentStore.insertFootnote();
+    }
 
     function handleOutlineClick(): void {
         // If popup was dismissed for an active outline block, reopen it.
@@ -202,12 +229,6 @@
         {
             tools: [
                 // outline rendered inline below (bespoke wiring)
-                {
-                    kind: "icon",
-                    name: "footnote",
-                    label: "Footnote",
-                    iconClass: "size-10",
-                },
                 {
                     kind: "icon",
                     name: "at-sign",
@@ -439,6 +460,25 @@
                                 aria-label="Outline"
                             >
                                 <OutlinePopup />
+                            </div>
+                        {/if}
+                    </div>
+                    <div bind:this={footnoteWrapEl} class="relative flex items-center">
+                        {@render embedTrigger(
+                            "footnote",
+                            "Footnote",
+                            footnoteTied,
+                            footnoteOpen,
+                            handleFootnoteClick,
+                            "size-10",
+                        )}
+                        {#if footnoteOpen}
+                            <div
+                                class="absolute bottom-full -left-8 z-[60] pb-2.5"
+                                role="dialog"
+                                aria-label="Footnote"
+                            >
+                                <FootnotePopup />
                             </div>
                         {/if}
                     </div>

@@ -51,6 +51,9 @@ export interface PageSettings {
 	 * All sections are always linked for the default page itself.
 	 */
 	linked: PageLinks;
+	/** Per-page footnote overrides when `footnoteLinked` is false. */
+	footnote?: FootnotePageSettings;
+	footnoteLinked?: boolean;
 }
 
 export type FontWeightName = "Regular" | "Medium" | "Bold";
@@ -200,6 +203,24 @@ export interface LineSettings {
 	spacing?: BlockSpacing;
 }
 
+/** Per-page footnote listing settings (`#set footnote` / `footnote.entry`). */
+export interface FootnotePageSettings {
+	numbering: string;
+	clearance: number;
+	gap: number;
+	indent: number;
+}
+
+/** Inline footnote reference (superscript in body text). */
+export interface FootnoteMarker {
+	footnoteId: string;
+}
+
+/** Footnote body at the bottom of the page; `text` is the note content. */
+export interface FootnoteBody {
+	footnoteId: string;
+}
+
 /**
  * Embed: an outline block. The block's `text` is the (editable) outline title;
  * everything else (the rendered table-of-contents body) is auto-generated from
@@ -267,10 +288,16 @@ export interface Block {
 	rect?: RectSettings;
 	/** Embed: outline (table of contents). `text` holds the editable title. */
 	outline?: OutlineSettings;
+	/** Inline footnote marker (superscript). */
+	footnoteMarker?: FootnoteMarker;
+	/** Footnote body in the page footnote zone. */
+	footnote?: FootnoteBody;
+	/** Line block used as the footnote listing separator for this page. */
+	footnoteSeparator?: boolean;
 }
 
 /** Embed block kinds. */
-export type EmbedKind = "image" | "line" | "rect" | "outline";
+export type EmbedKind = "image" | "line" | "rect" | "outline" | "footnote";
 
 export interface DocumentModel {
 	name: string;

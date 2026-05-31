@@ -11,6 +11,7 @@ import type {
 	LineSettings,
 	ListKind,
 	ListSettings,
+	FootnotePageSettings,
 	OutlineSettings,
 	PageSection,
 	PageSettings,
@@ -38,6 +39,10 @@ function newId(): string {
 	return crypto.randomUUID();
 }
 
+export function defaultFootnotePageSettings(): FootnotePageSettings {
+	return { numbering: "1", clearance: 1, gap: 0.5, indent: 1 };
+}
+
 function defaultPage(): PageSettings {
 	return {
 		preset: "A4",
@@ -46,6 +51,7 @@ function defaultPage(): PageSettings {
 		margins: { x: null, y: null, left: 2.5, right: 2.5, top: 2.5, bottom: 2.5 },
 		fill: "#FFFFFF",
 		linked: { paper: true, margin: true, color: true },
+		footnote: defaultFootnotePageSettings(),
 	};
 }
 
@@ -137,6 +143,9 @@ class DocumentStore {
 	/** Block to focus after a DOM update (e.g. after inserting from a toolbar popup). */
 	pendingFocus = $state<string | null>(null);
 
+	/** Caret position to restore after the target block's contenteditable mounts. */
+	pendingCaret = $state<{ blockId: string; offset: number } | null>(null);
+
 	/** Heading level currently shown in the headings popup (1–4). */
 	headingMenuLevel = $state<HeadingLevel>(1);
 
@@ -158,9 +167,11 @@ class DocumentStore {
 	readonly tiedPopup = $derived.by((): EmbedKind | null => {
 		const b = this.activeBlock;
 		if (b.image) return "image";
+		if (b.footnoteSeparator) return "footnote";
 		if (b.line) return "line";
 		if (b.rect) return "rect";
 		if (b.outline) return "outline";
+		if (b.footnote || b.footnoteMarker) return "footnote";
 		return null;
 	});
 
@@ -177,6 +188,93 @@ class DocumentStore {
 		this.activeBlockId = id;
 	}
 
+	/** Select an inline footnote marker and open the footnote popup. */
+	activateFootnoteMarker(markerBlockId: string): void {
+		const m = this.findBlock(markerBlockId);
+		if (!m?.footnoteMarker) return;
+		this.popupDismissed = null;
+		this.activeBlockId = markerBlockId;
+	}
+
+	blockPageIndex(blockId: string): number {
+		const idx = this.blockIndex(blockId);
+		if (idx < 0) return 0;
+		let page = 0;
+		for (const breakId of this.pageBreakBlockIds) {
+			const breakIdx = this.blockIndex(breakId);
+			if (breakIdx >= 0 && breakIdx <= idx) page += 1;
+		}
+		return page;
+	}
+
+	readonly activeBlockPageIndex = $derived(this.blockPageIndex(this.activeBlock.id));
+
+	resolveFootnoteSettings(pageIndex: number): FootnotePageSettings {
+		const def = this.model.pages[0]?.footnote ?? defaultFootnotePageSettings();
+		const page = this.model.pages[pageIndex];
+		if (!page || pageIndex === 0) return page?.footnote ?? def;
+		if (page.footnoteLinked !== false) return def;
+		return page.footnote ?? def;
+	}
+
+	footnoteSettingsLinked(pageIndex: number): boolean {
+		if (pageIndex === 0) return true;
+		return this.model.pages[pageIndex]?.footnoteLinked !== false;
+	}
+
+	setFootnoteSettingsLinked(pageIndex: number, linked: boolean): void {
+		if (pageIndex === 0) return;
+		const page = this.ensurePageSettings(pageIndex);
+		page.footnoteLinked = linked;
+		if (linked) page.footnote = undefined;
+	}
+
+	updateFootnoteSettings(pageIndex: number, patch: Partial<FootnotePageSettings>): void {
+		if (pageIndex === 0) {
+			const page = this.model.pages[0];
+			page.footnote = { ...(page.footnote ?? defaultFootnotePageSettings()), ...patch };
+			return;
+		}
+		const page = this.ensurePageSettings(pageIndex);
+		if (page.footnoteLinked !== false) {
+			const def = this.model.pages[0].footnote ?? defaultFootnotePageSettings();
+			this.model.pages[0].footnote = { ...def, ...patch };
+		} else {
+			page.footnote = {
+				...(page.footnote ?? this.resolveFootnoteSettings(pageIndex)),
+				...patch,
+			};
+		}
+	}
+
+	private ensurePageSettings(index: number): PageSettings {
+		while (this.model.pages.length <= index) {
+			this.model.pages.push(clonePage(this.model.pages[0]));
+		}
+		return this.model.pages[index];
+	}
+
+	footnoteNumber(blockId: string): number {
+		const page = this.blockPageIndex(blockId);
+		let n = 0;
+		for (const b of this.model.blocks) {
+			if (this.blockPageIndex(b.id) !== page) continue;
+			if (b.footnoteMarker) {
+				n += 1;
+				if (b.id === blockId) return n;
+			}
+		}
+		return n;
+	}
+
+	footnoteNumberForBody(bodyBlockId: string): number {
+		const body = this.findBlock(bodyBlockId);
+		const fid = body?.footnote?.footnoteId;
+		if (!fid) return 1;
+		const marker = this.model.blocks.find((b) => b.footnoteMarker?.footnoteId === fid);
+		return marker ? this.footnoteNumber(marker.id) : 1;
+	}
+
 	/**
 	 * The embed block that's currently "armed" for deletion via Backspace:
 	 * either the user clicked the embed (image / line / rect, or an outline
@@ -188,6 +286,8 @@ class DocumentStore {
 		if (!active) return null;
 
 		if (active.image || active.line || active.rect) return active.id;
+		if (active.footnote) return active.id;
+		if (active.footnoteSeparator && active.line) return active.id;
 		if (active.outline && active.text === "") return active.id;
 
 		if (
@@ -200,7 +300,8 @@ class DocumentStore {
 		const idx = this.blockIndex(active.id);
 		if (idx <= 0) return null;
 		const prev = this.model.blocks[idx - 1];
-		if (prev.image || prev.line || prev.rect || prev.outline) return prev.id;
+		if (prev.image || prev.line || prev.rect || prev.outline || prev.footnote)
+			return prev.id;
 		return null;
 	});
 
@@ -213,8 +314,31 @@ class DocumentStore {
 		const idx = this.blockIndex(id);
 		if (idx < 0) return null;
 		const b = this.model.blocks[idx];
-		if (!(b.image || b.line || b.rect || b.outline)) return null;
-		this.model.blocks.splice(idx, 1);
+		if (
+			!(
+				b.image ||
+				b.line ||
+				b.rect ||
+				b.outline ||
+				b.footnote ||
+				b.footnoteSeparator
+			)
+		)
+			return null;
+
+		if (b.footnote) {
+			const footnoteId = b.footnote.footnoteId;
+			this.model.blocks.splice(idx, 1);
+			for (let j = this.model.blocks.length - 1; j >= 0; j--) {
+				const bb = this.model.blocks[j];
+				if (bb.footnoteMarker?.footnoteId === footnoteId) {
+					this.model.blocks.splice(j, 1);
+					break;
+				}
+			}
+		} else {
+			this.model.blocks.splice(idx, 1);
+		}
 		if (idx > 0) {
 			const before = this.model.blocks[idx - 1];
 			return { id: before.id, offset: before.text.length };
@@ -762,6 +886,136 @@ class DocumentStore {
 			inset: 5,
 			stroke: this.defaultStroke(),
 		};
+	}
+
+	private isFootnoteZoneBlock(b: Block): boolean {
+		return !!(b.footnote || b.footnoteSeparator);
+	}
+
+	/** Index after the last block on `pageIndex` (append to page). */
+	private footnoteBodyInsertIndex(pageIndex: number): number {
+		let lastOnPage = -1;
+		for (let i = 0; i < this.model.blocks.length; i++) {
+			if (this.blockPageIndex(this.model.blocks[i].id) === pageIndex) lastOnPage = i;
+		}
+		return lastOnPage + 1;
+	}
+
+	/** Insert separator before the first footnote-zone block on the page. */
+	private footnoteSeparatorInsertIndex(pageIndex: number): number {
+		for (let i = 0; i < this.model.blocks.length; i++) {
+			const b = this.model.blocks[i];
+			if (this.blockPageIndex(b.id) !== pageIndex) continue;
+			if (this.isFootnoteZoneBlock(b)) return i;
+		}
+		return this.footnoteBodyInsertIndex(pageIndex);
+	}
+
+	/** Same stroke weight as a newly inserted line embed; 30% length per Typst default. */
+	defaultFootnoteSeparatorLine(): LineSettings {
+		return {
+			startX: 0,
+			startY: 0,
+			length: 30,
+			lengthUnit: "%",
+			angle: 0,
+			stroke: this.defaultStroke(),
+		};
+	}
+
+	private findFootnoteSeparatorOnPage(pageIndex: number): Block | undefined {
+		return this.model.blocks.find(
+			(b) =>
+				b.footnoteSeparator &&
+				b.line &&
+				this.blockPageIndex(b.id) === pageIndex,
+		);
+	}
+
+	private ensureFootnoteSeparator(pageIndex: number): void {
+		if (this.findFootnoteSeparatorOnPage(pageIndex)) return;
+		this.insertBlockObjectAt(this.footnoteSeparatorInsertIndex(pageIndex), {
+			text: "",
+			line: this.defaultFootnoteSeparatorLine(),
+			footnoteSeparator: true,
+		});
+	}
+
+	private insertBlockObjectAt(index: number, block: Omit<Block, "id">): string {
+		const created: Block = { ...block, id: newId() };
+		this.model.blocks.splice(index, 0, created);
+		return created.id;
+	}
+
+	/** Insert inline marker + footnote body at the bottom of the active page. */
+	insertFootnote(): string {
+		const active = this.activeBlock;
+		const footnoteId = newId();
+		const pageIndex = this.blockPageIndex(active.id);
+
+		const canMark =
+			!active.image &&
+			!active.line &&
+			!active.rect &&
+			!active.outline &&
+			!active.footnote &&
+			!active.footnoteMarker;
+
+		const insertTrailingText = (markerBlockId: string): void => {
+			this.insertBlockObjectAfter(markerBlockId, {
+				text: "",
+				continuation: true,
+			});
+		};
+
+		if (canMark) {
+			const sel = this.intraBlockSelection;
+			const caret =
+				sel && sel.blockId === active.id ? sel.end : active.text.length;
+			const text = active.text;
+			if (caret > 0 && caret < text.length) {
+				const before = text.slice(0, caret);
+				const after = text.slice(caret);
+				active.text = before;
+				const markerId = newId();
+				const marker: Block = {
+					id: markerId,
+					text: "",
+					continuation: true,
+					footnoteMarker: { footnoteId },
+				};
+				this.model.blocks.splice(this.blockIndex(active.id) + 1, 0, marker);
+				if (after) {
+					this.model.blocks.splice(this.blockIndex(active.id) + 2, 0, {
+						id: newId(),
+						text: after,
+						continuation: true,
+					});
+				} else {
+					insertTrailingText(markerId);
+				}
+			} else {
+				const markerId = this.insertBlockObjectAfter(active.id, {
+					text: "",
+					continuation: true,
+					footnoteMarker: { footnoteId },
+				});
+				insertTrailingText(markerId);
+			}
+		}
+
+		this.ensureFootnoteSeparator(pageIndex);
+
+		const bodyId = this.insertBlockObjectAt(this.footnoteBodyInsertIndex(pageIndex), {
+			text: "",
+			footnote: { footnoteId },
+			placeholder: "Footnote",
+		});
+
+		this.popupDismissed = null;
+		this.activeBlockId = bodyId;
+		this.pendingCaret = { blockId: bodyId, offset: 0 };
+		return bodyId;
 	}
 
 	// --- Embed spacing (shared default + per-block override) ------------------

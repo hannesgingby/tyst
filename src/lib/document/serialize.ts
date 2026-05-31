@@ -10,6 +10,7 @@ import type {
 	LineSettings,
 	ListSettings,
 	Margins,
+	FootnotePageSettings,
 	OutlineSettings,
 	PageSettings,
 	ParagraphSettings,
@@ -175,8 +176,10 @@ function serializePreamble(doc: DocumentModel): string {
 			? `#set heading(\n${headingLines.map((l) => `  ${l},`).join("\n")}\n)`
 			: null;
 
+	const blockIndexById = new Map(doc.blocks.map((b, idx) => [b.id, idx]));
 	const parts = [serializePageSetFull(doc.pages[0]), textRule, parRule];
 	if (headingRule) parts.push(headingRule);
+	parts.push(...serializeFootnotePageRules(doc, 0, blockIndexById, []));
 	return parts.join("\n\n");
 }
 
@@ -187,6 +190,80 @@ function wrapBlock(content: string, spacing: BlockSpacing): string {
 
 /** Default above/below for embed blocks when the user hasn't unlinked spacing. */
 const EMBED_SPACING_DEFAULT: BlockSpacing = { above: 1.2, below: 0.35 };
+
+const FOOTNOTE_DEFAULT: FootnotePageSettings = {
+	numbering: "1",
+	clearance: 1,
+	gap: 0.5,
+	indent: 1,
+};
+
+/** Typst default `footnote.entry(separator: …)`. */
+const FOOTNOTE_SEPARATOR_TYPST = "line(length: 30% + 0pt, stroke: 0.5pt)";
+
+function resolveFootnotePageSettings(
+	doc: DocumentModel,
+	pageIndex: number,
+): FootnotePageSettings {
+	const def = doc.pages[0]?.footnote ?? FOOTNOTE_DEFAULT;
+	const page = doc.pages[pageIndex];
+	if (!page || pageIndex === 0) return page?.footnote ?? def;
+	if (page.footnoteLinked !== false) return def;
+	return page.footnote ?? def;
+}
+
+function blockPageIndexFromBreaks(
+	blockId: string,
+	blockIndexById: Map<string, number>,
+	pageBreakBlockIds: string[],
+): number {
+	const idx = blockIndexById.get(blockId) ?? 0;
+	let page = 0;
+	for (const breakId of pageBreakBlockIds) {
+		if ((blockIndexById.get(breakId) ?? 0) <= idx) page += 1;
+	}
+	return page;
+}
+
+function findFootnoteSeparatorOnPage(
+	doc: DocumentModel,
+	pageIndex: number,
+	blockIndexById: Map<string, number>,
+	pageBreakBlockIds: string[],
+): Block | undefined {
+	return doc.blocks.find(
+		(b) =>
+			b.footnoteSeparator &&
+			b.line &&
+			blockPageIndexFromBreaks(b.id, blockIndexById, pageBreakBlockIds) === pageIndex,
+	);
+}
+
+function serializeFootnotePageRules(
+	doc: DocumentModel,
+	pageIndex: number,
+	blockIndexById: Map<string, number>,
+	pageBreakBlockIds: string[],
+): string[] {
+	const settings = resolveFootnotePageSettings(doc, pageIndex);
+	const separator = findFootnoteSeparatorOnPage(
+		doc,
+		pageIndex,
+		blockIndexById,
+		pageBreakBlockIds,
+	);
+	const separatorTypst = separator?.line
+		? serializeLine(separator.line)
+		: FOOTNOTE_SEPARATOR_TYPST;
+	return [
+		`#set footnote(numbering: "${settings.numbering}")`,
+		`#set footnote.entry(separator: ${separatorTypst}, clearance: ${typstNumber(settings.clearance)}em, gap: ${typstNumber(settings.gap)}em, indent: ${typstNumber(settings.indent)}em)`,
+	];
+}
+
+function findFootnoteBody(doc: DocumentModel, footnoteId: string): Block | undefined {
+	return doc.blocks.find((b) => b.footnote?.footnoteId === footnoteId);
+}
 
 /** Filesystem-safe slug derived from the document name. Mirrors files.ts. */
 function imagesFolderFor(doc: DocumentModel): string {
@@ -333,7 +410,16 @@ function serializeListGroup(items: Block[]): string {
 }
 
 /** Serialize a plain (non-heading, non-list) text block. */
-function serializeTextBlock(block: Block, docTypo: TypographySettings): string {
+function serializeTextBlock(
+	block: Block,
+	docTypo: TypographySettings,
+	doc: DocumentModel,
+): string {
+	if (block.footnoteMarker) {
+		const body = findFootnoteBody(doc, block.footnoteMarker.footnoteId);
+		return `#footnote[${escapeText(body?.text ?? "")}]`;
+	}
+
 	const text = escapeText(block.text);
 	const typo = block.typography ?? {};
 	const para = block.paragraph ?? {};
@@ -400,6 +486,8 @@ export function serializeDocument(
 	let afterList = false;
 	let afterHeading = false;
 
+	const blockIndexById = new Map(doc.blocks.map((b, idx) => [b.id, idx]));
+
 	function handlePageBreak(block: Block): void {
 		if (!pageBreakSet.has(block.id)) return;
 		const nextPageIdx = blockPageIndex.get(block.id)!;
@@ -411,6 +499,14 @@ export function serializeDocument(
 		afterHeading = false;
 		parts.push("#pagebreak()");
 		parts.push(...serializePageTransition(defaultPage, prevPage, nextPage));
+		parts.push(
+			...serializeFootnotePageRules(
+				doc,
+				nextPageIdx,
+				blockIndexById,
+				pageBreakBlockIds,
+			),
+		);
 	}
 
 	function pushBlockSeparator(): void {
@@ -424,6 +520,11 @@ export function serializeDocument(
 		const block = doc.blocks[i];
 
 		handlePageBreak(block);
+
+		if (block.footnote || block.footnoteSeparator) {
+			i++;
+			continue;
+		}
 
 		// ── List group ──────────────────────────────────────────────────────────
 		if (block.list) {
@@ -509,7 +610,7 @@ export function serializeDocument(
 
 		// ── Plain content block ─────────────────────────────────────────────────
 		const serialized = wrapAligned(
-			serializeTextBlock(block, doc.typography),
+			serializeTextBlock(block, doc.typography, doc),
 			block.alignment,
 		);
 		if (hasContent && block.continuation) {

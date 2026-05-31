@@ -13,6 +13,16 @@
 	import { imageCache } from "$lib/system/imageCache.svelte";
 	import { getCaretOffset, setCaretOffset } from "./caret";
 
+	function applyPendingCaret(node: HTMLElement, blockId: string): void {
+		const pc = documentStore.pendingCaret;
+		if (!pc || pc.blockId !== blockId) return;
+		documentStore.pendingCaret = null;
+		queueMicrotask(() => {
+			node.focus();
+			setCaretOffset(node, pc.offset);
+		});
+	}
+
 	const WEIGHT_CSS: Record<string, number> = { Regular: 400, Medium: 500, Bold: 700 };
 
 	/**
@@ -100,6 +110,8 @@
 		block.heading ? (HEADING_SCALE[block.heading.level] ?? 1) : 1,
 	);
 	const fontSizePx = $derived(ptToPx(typography.size) * scale * headingScale);
+	/** Typst footnote listing body size (`footnote.entry`). */
+	const footnoteFontSizePx = $derived(fontSizePx * 0.85);
 	const lineHeight = $derived(
 		block.heading ? 1.2 : bodyLineHeightEm(typography.leading),
 	);
@@ -162,10 +174,28 @@
 		);
 	});
 
-	const isInline = $derived(block.continuation || renderInline);
+	const isInline = $derived(
+		block.continuation || renderInline || !!block.footnoteMarker,
+	);
 	const isList = $derived(!!block.list);
 	const isEmbed = $derived(!!(block.image || block.line || block.rect));
 	const isOutline = $derived(!!block.outline);
+	const isFootnoteMarker = $derived(!!block.footnoteMarker);
+	const isFootnoteBody = $derived(!!block.footnote);
+	const footnoteMarkerNumber = $derived(
+		isFootnoteMarker ? documentStore.footnoteNumber(block.id) : 0,
+	);
+	const footnoteBodyNumber = $derived(
+		isFootnoteBody ? documentStore.footnoteNumberForBody(block.id) : 0,
+	);
+
+	/** Empty tail segment after an inline footnote marker — needs a hit target. */
+	const trailAfterFootnoteMarker = $derived.by(() => {
+		if (!isInline || block.footnoteMarker || block.text !== "") return false;
+		const i = documentStore.blockIndex(block.id);
+		if (i <= 0) return false;
+		return !!documentStore.model.blocks[i - 1]?.footnoteMarker;
+	});
 
 	// Outline body entries: walk all blocks, count outlined headings, and pick
 	// the page each heading falls on so the rendered TOC matches Typst's PDF.
@@ -260,8 +290,12 @@
 		const node = el;
 		if (!node) return;
 		registerel(block.id, node);
-		node.textContent = untrack(() => block.text);
+		const text = untrack(() => block.text);
+		if (node.textContent !== text && document.activeElement !== node) {
+			node.textContent = text;
+		}
 		ensureTrailingBr();
+		applyPendingCaret(node, block.id);
 		const target = outerEl ?? node;
 		const observer = new ResizeObserver(() => reportHeight());
 		observer.observe(target);
@@ -386,7 +420,11 @@
 	<svelte:element
 		this={isInline ? "span" : "div"}
 		bind:this={el}
-		class={["doc-block outline-none", !isInline && "w-full"]}
+		class={[
+			"doc-block outline-none",
+			!isInline && "w-full",
+			trailAfterFootnoteMarker && "trail-after-footnote-marker",
+		]}
 		contenteditable="true"
 		spellcheck="false"
 		role="textbox"
@@ -394,9 +432,9 @@
 		aria-multiline="false"
 		data-block-id={block.id}
 		data-placeholder={effectivePlaceholder}
-		style:display={isInline ? "inline" : undefined}
+		style:display={isInline && !trailAfterFootnoteMarker ? "inline" : undefined}
 		style:font-family={`"${typography.fontFamily}", serif`}
-		style:font-size="{fontSizePx}px"
+		style:font-size="{isFootnoteBody ? footnoteFontSizePx : fontSizePx}px"
 		style:font-weight={fontWeight}
 		style:line-height={effectiveLineHeight}
 		style:height={collapsedParbreak ? "0" : undefined}
@@ -422,7 +460,9 @@
 	{@const line = block.line}
 	{@const rect = block.rect}
 	{@const cached = img ? imageCache.get(block.id) : undefined}
-	{@const spacing = documentStore.resolveEmbedSpacing(block)}
+	{@const spacing = block.footnoteSeparator
+		? { above: 0, below: 0 }
+		: documentStore.resolveEmbedSpacing(block)}
 	{@const alignClass =
 		block.alignment === "center"
 			? "justify-center"
@@ -623,6 +663,33 @@
 	{@render outlineView()}
 {:else if isEmbed}
 	{@render embedView()}
+{:else if isFootnoteBody}
+	{@const awaitingDelete = documentStore.embedAwaitingDelete === block.id}
+	<div bind:this={outerEl} class="doc-embed relative w-full" data-block-id={block.id}>
+		{#if awaitingDelete}
+			<span
+				class="text-text-150 pointer-events-none absolute right-0 bottom-full select-none"
+				style:font-size="{10 * scale}px"
+				style:line-height="1"
+				style:padding-bottom="{8 * scale}px"
+			>
+				Backspace to delete
+			</span>
+		{/if}
+		<div class="flex w-full items-baseline gap-1">
+			<sup
+				class="footnote-body-number pointer-events-none shrink-0 select-none tabular-nums"
+				style:font-family={`"${typography.fontFamily}", serif`}
+				style:font-size="{fontSizePx * 0.75}px"
+				style:line-height="1"
+				style:color={typography.color}
+				aria-hidden="true">{footnoteBodyNumber}</sup
+			>
+			<div class="min-w-0 flex-1">
+				{@render editable()}
+			</div>
+		</div>
+	</div>
 {:else if isList}
 	<!-- List items render as a single flex row (marker + body). Horizontal
 	     alignment of the whole group is applied by the wrapper around the
@@ -671,6 +738,33 @@
 			{@render editable()}
 		</div>
 	</div>
+{:else if block.footnoteMarker}
+	<!-- svelte-ignore a11y_no_static_element_interactions -->
+	<span
+		bind:this={outerEl}
+		data-block-id={block.id}
+		class="doc-block-footnote-marker inline cursor-pointer select-none tabular-nums"
+		style:font-family={`"${typography.fontFamily}", serif`}
+		style:font-size="{fontSizePx * 0.75}px"
+		style:vertical-align="super"
+		style:line-height="1"
+		style:color={typography.color}
+		role="button"
+		tabindex="0"
+		title="Footnote"
+		onclick={(e) => {
+			e.preventDefault();
+			e.stopPropagation();
+			documentStore.activateFootnoteMarker(block.id);
+			onfocusblock(block.id);
+		}}
+		onkeydown={(e) => {
+			if (e.key !== "Enter" && e.key !== " ") return;
+			e.preventDefault();
+			documentStore.activateFootnoteMarker(block.id);
+			onfocusblock(block.id);
+		}}>{footnoteMarkerNumber}</span
+	>
 {:else}
 	{@render editable()}
 {/if}
@@ -686,5 +780,12 @@
 		content: attr(data-placeholder);
 		opacity: 0.3;
 		pointer-events: none;
+	}
+
+	/* Zero-width inline tails after a footnote marker need a box for clicks/caret. */
+	.doc-block.trail-after-footnote-marker {
+		display: inline-block;
+		min-width: 0.25em;
+		vertical-align: baseline;
 	}
 </style>

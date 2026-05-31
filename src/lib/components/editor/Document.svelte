@@ -371,7 +371,7 @@
         let y = 0;
         for (let i = 0; i < blocks.length; i++) {
             const b = blocks[i];
-            if (b.continuation) {
+            if (b.continuation || b.footnote) {
                 items.set(b.id, { page: pageIndex });
                 continue;
             }
@@ -439,6 +439,11 @@
     type RenderItem =
         | { kind: "block"; block: (typeof blocks)[number]; index: number }
         | {
+              kind: "inlineLine";
+              items: (typeof blocks)[number][];
+              index: number;
+          }
+        | {
               kind: "listGroup";
               items: (typeof blocks)[number][];
               alignment: "left" | "center" | "right";
@@ -469,6 +474,22 @@
                         | "center"
                         | "right",
                 });
+            } else if (!b.continuation) {
+                const line: (typeof blocks)[number][] = [b];
+                let j = i + 1;
+                while (
+                    j < pageBlocks.length &&
+                    pageBlocks[j].continuation
+                ) {
+                    line.push(pageBlocks[j]);
+                    j++;
+                }
+                if (line.length > 1) {
+                    out.push({ kind: "inlineLine", items: line, index: i });
+                } else {
+                    out.push({ kind: "block", block: b, index: i });
+                }
+                i = j;
             } else {
                 out.push({ kind: "block", block: b, index: i });
                 i++;
@@ -568,6 +589,31 @@
 
     function onFocusBlock(id: string): void {
         documentStore.activeBlockId = id;
+    }
+
+    /** Clicks in the gap after an inline footnote marker focus the tail segment. */
+    function onInlineLineMouseDown(
+        event: MouseEvent,
+        items: (typeof blocks)[number][],
+    ): void {
+        const markerIdx = items.findIndex((b) => b.footnoteMarker);
+        if (markerIdx < 0) return;
+        const markerEl = blockEls.get(items[markerIdx].id);
+        if (!markerEl) return;
+        const target = event.target as Node;
+        if (markerEl.contains(target)) return;
+        const tail = items[markerIdx + 1];
+        if (!tail?.continuation || tail.footnoteMarker) return;
+        const tailEl = blockEls.get(tail.id);
+        if (!tailEl) return;
+        if (tailEl.contains(target)) return;
+        const { right } = markerEl.getBoundingClientRect();
+        if (event.clientX <= right) return;
+        event.preventDefault();
+        documentStore.activeBlockId = tail.id;
+        tailEl.focus();
+        const off = enterOffset(tail.text.length, true);
+        requestAnimationFrame(() => setCaretOffset(tailEl, off));
     }
 
     function onInputBlock(id: string, text: string): void {
@@ -680,7 +726,12 @@
             const prev = blocks[idx - 1];
             if (
                 prev &&
-                (prev.image || prev.line || prev.rect || prev.outline)
+                    (prev.image ||
+                    prev.line ||
+                    prev.rect ||
+                    prev.outline ||
+                    prev.footnote ||
+                    prev.footnoteSeparator)
             ) {
                 const result = documentStore.deleteEmbed(prev.id);
                 if (result) {
@@ -735,7 +786,9 @@
                     (activeBlock.image ||
                         activeBlock.line ||
                         activeBlock.rect ||
-                        activeBlock.outline)
+                        activeBlock.outline ||
+                        activeBlock.footnote ||
+                        activeBlock.footnoteSeparator)
                 ) {
                     event.preventDefault();
                     event.stopPropagation();
@@ -897,7 +950,8 @@
             window.removeEventListener("keydown", onKeydownCapture, true);
     });
 
-    // Focus a block requested by an external action (e.g. inserting from a popup).
+    // Focus at end of block after insert (outline title, etc.). Footnotes set
+    // `documentStore.pendingCaret` in Block.svelte for the footnote body.
     $effect(() => {
         const id = documentStore.pendingFocus;
         if (!id) return;
@@ -926,8 +980,12 @@
 
     function onHeight(id: string, px: number): void {
         const b = blocks.find((b) => b.id === id);
-        const h = b?.continuation ? 0 : px;
+        const h = b?.continuation || b?.footnote ? 0 : px;
         if (heights[id] !== h) heights[id] = h;
+    }
+
+    function isFootnoteZoneBlock(b: (typeof blocks)[number]): boolean {
+        return !!(b.footnote || b.footnoteSeparator);
     }
 </script>
 
@@ -956,14 +1014,26 @@
                 aria-hidden="true"
             ></div>
             {@const pageBlocks = blocksByPage.get(pageIdx) ?? []}
-            {@const renderItems = buildRenderItems(pageBlocks)}
+            {@const footnoteZoneBlocks = pageBlocks
+                .filter(isFootnoteZoneBlock)
+                .sort((a, b) => {
+                    if (a.footnoteSeparator === b.footnoteSeparator) return 0;
+                    return a.footnoteSeparator ? -1 : 1;
+                })}
+            {@const mainPageBlocks = pageBlocks.filter(
+                (b) => !isFootnoteZoneBlock(b),
+            )}
+            {@const renderItems = buildRenderItems(mainPageBlocks)}
+            {@const contentHeightPx = pageHeightPx - mp.top - mp.bottom}
             <!-- Content area for this page (margins are per-page) -->
             <div
-                class="absolute"
+                class="absolute flex flex-col"
                 style:top="{pageTop + mp.top}px"
                 style:left="{mp.left}px"
                 style:width="{pageWidthPx - mp.left - mp.right}px"
+                style:min-height="{contentHeightPx}px"
             >
+                <div class="flex min-h-0 flex-1 flex-col">
                 {#each renderItems as item, ri (ri)}
                     {#if item.kind === "listGroup"}
                         {@const justifyClass =
@@ -1017,6 +1087,50 @@
                                 {/each}
                             </div>
                         </div>
+                    {:else if item.kind === "inlineLine"}
+                        {@const lineAlign = item.items[0].alignment ?? "left"}
+                        <!-- svelte-ignore a11y_no_static_element_interactions -->
+                        <div
+                            class="inline-line w-full"
+                            style:text-align={lineAlign}
+                            onmousedown={(e) =>
+                                onInlineLineMouseDown(e, item.items)}
+                        >
+                            {#each item.items as block (block.id)}
+                                <Block
+                                    {block}
+                                    scale={RENDER_SCALE}
+                                    role={blockRoles.get(block.id)}
+                                    spacingEm={parbreakSpacings.get(
+                                        block.id,
+                                    )}
+                                    renderInline={true}
+                                    marker={listMarkers.get(block.id)}
+                                    headingPrefix={headingNumbers.get(
+                                        block.id,
+                                    )}
+                                    listTight={listItemLayout.get(block.id)
+                                        ?.tight}
+                                    listHasNext={listItemLayout.get(
+                                        block.id,
+                                    )?.hasNext}
+                                    listGroupFirst={listItemLayout.get(
+                                        block.id,
+                                    )?.isFirst}
+                                    suppressAbove={pageTopIds.has(block.id)}
+                                    skipsFirstLineIndent={skipsFirstLineIndent.get(
+                                        block.id,
+                                    ) ?? true}
+                                    registerel={registerEl}
+                                    onheight={onHeight}
+                                    onfocusblock={onFocusBlock}
+                                    oninputblock={onInputBlock}
+                                    onsplit={onSplit}
+                                    onmergeprev={onMergePrev}
+                                    onpastelines={onPasteLines}
+                                />
+                            {/each}
+                        </div>
                     {:else}
                         {@const block = item.block}
                         <Block
@@ -1050,6 +1164,102 @@
                         />
                     {/if}
                 {/each}
+                </div>
+                {#if footnoteZoneBlocks.length > 0}
+                    {@const fnSettings =
+                        documentStore.resolveFootnoteSettings(pageIdx)}
+                    <div
+                        class="footnote-zone mt-auto w-full shrink-0"
+                        style:padding-top="{fnSettings.clearance}em"
+                    >
+                        {#each footnoteZoneBlocks as block, fnIdx (block.id)}
+                            {#if block.footnoteSeparator}
+                                <Block
+                                    {block}
+                                    scale={RENDER_SCALE}
+                                    role={blockRoles.get(block.id)}
+                                    spacingEm={parbreakSpacings.get(
+                                        block.id,
+                                    )}
+                                    renderInline={false}
+                                    marker={listMarkers.get(block.id)}
+                                    headingPrefix={headingNumbers.get(
+                                        block.id,
+                                    )}
+                                    listTight={listItemLayout.get(block.id)
+                                        ?.tight}
+                                    listHasNext={listItemLayout.get(
+                                        block.id,
+                                    )?.hasNext}
+                                    listGroupFirst={listItemLayout.get(
+                                        block.id,
+                                    )?.isFirst}
+                                    suppressAbove={pageTopIds.has(block.id)}
+                                    skipsFirstLineIndent={skipsFirstLineIndent.get(
+                                        block.id,
+                                    ) ?? true}
+                                    registerel={registerEl}
+                                    onheight={onHeight}
+                                    onfocusblock={onFocusBlock}
+                                    oninputblock={onInputBlock}
+                                    onsplit={onSplit}
+                                    onmergeprev={onMergePrev}
+                                    onpastelines={onPasteLines}
+                                />
+                            {:else}
+                                {@const prevZone =
+                                    fnIdx > 0
+                                        ? footnoteZoneBlocks[fnIdx - 1]
+                                        : undefined}
+                                <div
+                                    style:padding-left="{fnSettings.indent}em"
+                                    style:margin-top={fnIdx > 0 ||
+                                    prevZone?.footnoteSeparator
+                                        ? `${fnSettings.gap}em`
+                                        : undefined}
+                                >
+                                    <Block
+                                        {block}
+                                        scale={RENDER_SCALE}
+                                        role={blockRoles.get(block.id)}
+                                        spacingEm={parbreakSpacings.get(
+                                            block.id,
+                                        )}
+                                        renderInline={renderInlineIds.has(
+                                            block.id,
+                                        )}
+                                        marker={listMarkers.get(block.id)}
+                                        headingPrefix={headingNumbers.get(
+                                            block.id,
+                                        )}
+                                        listTight={listItemLayout.get(
+                                            block.id,
+                                        )?.tight}
+                                        listHasNext={listItemLayout.get(
+                                            block.id,
+                                        )?.hasNext}
+                                        listGroupFirst={listItemLayout.get(
+                                            block.id,
+                                        )?.isFirst}
+                                        suppressAbove={pageTopIds.has(
+                                            block.id,
+                                        )}
+                                        skipsFirstLineIndent={skipsFirstLineIndent.get(
+                                            block.id,
+                                        ) ?? true}
+                                        registerel={registerEl}
+                                        onheight={onHeight}
+                                        onfocusblock={onFocusBlock}
+                                        oninputblock={onInputBlock}
+                                        onsplit={onSplit}
+                                        onmergeprev={onMergePrev}
+                                        onpastelines={onPasteLines}
+                                    />
+                                </div>
+                            {/if}
+                        {/each}
+                    </div>
+                {/if}
             </div>
         {/each}
     </div>
