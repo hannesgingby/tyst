@@ -943,6 +943,15 @@ class DocumentStore {
 	setAlignment(id: string, alignment: HorizontalAlignment | undefined): void {
 		const b = this.findBlock(id);
 		if (!b) return;
+		// Alignment on a list item applies to the whole list group (marker + body
+		// across all items) so the user can't end up with mixed-alignment lists.
+		if (b.list) {
+			for (const groupId of listGroupBlockIds(this.model, id, this.pageBreakBlockIds)) {
+				const gb = this.findBlock(groupId);
+				if (gb) gb.alignment = alignment;
+			}
+			return;
+		}
 		b.alignment = alignment;
 	}
 

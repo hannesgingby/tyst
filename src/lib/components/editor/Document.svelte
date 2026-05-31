@@ -269,6 +269,45 @@
         return groups;
     });
 
+    /**
+     * Group a page's blocks into a flat list of render items. Contiguous list
+     * blocks of the same kind become a single `listGroup` item so the renderer
+     * can wrap them in one alignment container — that's what keeps markers in
+     * the same vertical column when the group is centered/right-aligned.
+     */
+    type RenderItem =
+        | { kind: "block"; block: (typeof blocks)[number]; index: number }
+        | {
+              kind: "listGroup";
+              items: (typeof blocks)[number][];
+              alignment: "left" | "center" | "right";
+          };
+
+    function buildRenderItems(pageBlocks: (typeof blocks)[number][]): RenderItem[] {
+        const out: RenderItem[] = [];
+        let i = 0;
+        while (i < pageBlocks.length) {
+            const b = pageBlocks[i];
+            if (b.list) {
+                const kind = b.list.kind;
+                const group: (typeof blocks)[number][] = [];
+                while (i < pageBlocks.length && pageBlocks[i].list?.kind === kind) {
+                    group.push(pageBlocks[i]);
+                    i++;
+                }
+                out.push({
+                    kind: "listGroup",
+                    items: group,
+                    alignment: (group[0].alignment ?? "left") as "left" | "center" | "right",
+                });
+            } else {
+                out.push({ kind: "block", block: b, index: i });
+                i++;
+            }
+        }
+        return out;
+    }
+
     const totalHeightPx = $derived(
         layout.pageCount * pageHeightPx + (layout.pageCount - 1) * PAGE_GAP_PX,
     );
@@ -647,6 +686,8 @@
                 style:background-color={resolvePageFill(pageIdx)}
                 aria-hidden="true"
             ></div>
+            {@const pageBlocks = blocksByPage.get(pageIdx) ?? []}
+            {@const renderItems = buildRenderItems(pageBlocks)}
             <!-- Content area for this page (margins are per-page) -->
             <div
                 class="absolute"
@@ -654,31 +695,69 @@
                 style:left="{mp.left}px"
                 style:width="{pageWidthPx - mp.left - mp.right}px"
             >
-                {#each blocksByPage.get(pageIdx) ?? [] as block, i (block.id)}
-                    <Block
-                        {block}
-                        scale={RENDER_SCALE}
-                        role={blockRoles.get(block.id)}
-                        spacingEm={parbreakSpacings.get(block.id)}
-                        renderInline={renderInlineIds.has(block.id)}
-                        marker={listMarkers.get(block.id)}
-                        headingPrefix={headingNumbers.get(block.id)}
-                        listTight={listItemLayout.get(block.id)?.tight}
-                        listHasNext={listItemLayout.get(block.id)?.hasNext}
-                        listGroupFirst={listItemLayout.get(block.id)?.isFirst}
-                        placeholder={pageIdx === 0 &&
-                        i === 0 &&
-                        blocks.length === 1
-                            ? "Start writing…"
-                            : undefined}
-                        registerel={registerEl}
-                        onheight={onHeight}
-                        onfocusblock={onFocusBlock}
-                        oninputblock={onInputBlock}
-                        onsplit={onSplit}
-                        onmergeprev={onMergePrev}
-                        onpastelines={onPasteLines}
-                    />
+                {#each renderItems as item, ri (ri)}
+                    {#if item.kind === "listGroup"}
+                        {@const justifyClass =
+                            item.alignment === "center"
+                                ? "justify-center"
+                                : item.alignment === "right"
+                                    ? "justify-end"
+                                    : "justify-start"}
+                        <!-- The group is `inline-flex flex-col items-stretch` so it
+                             shrinks to the widest item but stretches each row to
+                             the group width, keeping markers in column 1. -->
+                        <div class={["flex w-full", justifyClass]}>
+                            <div class="inline-flex max-w-full flex-col items-stretch">
+                                {#each item.items as block (block.id)}
+                                    <Block
+                                        {block}
+                                        scale={RENDER_SCALE}
+                                        role={blockRoles.get(block.id)}
+                                        spacingEm={parbreakSpacings.get(block.id)}
+                                        renderInline={renderInlineIds.has(block.id)}
+                                        marker={listMarkers.get(block.id)}
+                                        headingPrefix={headingNumbers.get(block.id)}
+                                        listTight={listItemLayout.get(block.id)?.tight}
+                                        listHasNext={listItemLayout.get(block.id)?.hasNext}
+                                        listGroupFirst={listItemLayout.get(block.id)?.isFirst}
+                                        registerel={registerEl}
+                                        onheight={onHeight}
+                                        onfocusblock={onFocusBlock}
+                                        oninputblock={onInputBlock}
+                                        onsplit={onSplit}
+                                        onmergeprev={onMergePrev}
+                                        onpastelines={onPasteLines}
+                                    />
+                                {/each}
+                            </div>
+                        </div>
+                    {:else}
+                        {@const block = item.block}
+                        <Block
+                            {block}
+                            scale={RENDER_SCALE}
+                            role={blockRoles.get(block.id)}
+                            spacingEm={parbreakSpacings.get(block.id)}
+                            renderInline={renderInlineIds.has(block.id)}
+                            marker={listMarkers.get(block.id)}
+                            headingPrefix={headingNumbers.get(block.id)}
+                            listTight={listItemLayout.get(block.id)?.tight}
+                            listHasNext={listItemLayout.get(block.id)?.hasNext}
+                            listGroupFirst={listItemLayout.get(block.id)?.isFirst}
+                            placeholder={pageIdx === 0 &&
+                            item.index === 0 &&
+                            blocks.length === 1
+                                ? "Start writing…"
+                                : undefined}
+                            registerel={registerEl}
+                            onheight={onHeight}
+                            onfocusblock={onFocusBlock}
+                            oninputblock={onInputBlock}
+                            onsplit={onSplit}
+                            onmergeprev={onMergePrev}
+                            onpastelines={onPasteLines}
+                        />
+                    {/if}
                 {/each}
             </div>
         {/each}

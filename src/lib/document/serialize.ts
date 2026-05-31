@@ -424,6 +424,9 @@ export function serializeDocument(
 				j++;
 			}
 			if (hasContent) parts.push("");
+			// Lists auto-parbreak in Typst, so any blank blocks before us become
+			// explicit #linebreak()s for the extra vertical space.
+			for (let k = 0; k < pendingBlanks; k++) parts.push("#linebreak()");
 			const listSpacing = resolveBlockListSpacing(doc, block, pageBreakBlockIds);
 			const listContent = serializeListGroup(items);
 			parts.push(wrapAligned(listSpacing ? wrapBlock(listContent, listSpacing) : listContent, block.alignment));
@@ -439,6 +442,7 @@ export function serializeDocument(
 		// ── Heading ─────────────────────────────────────────────────────────────
 		if (block.heading) {
 			if (hasContent) parts.push("");
+			for (let k = 0; k < pendingBlanks; k++) parts.push("#linebreak()");
 			const headingContent = serializeHeading(block, block.heading, doc);
 			const hLevel = block.heading.level;
 			const headingSpacing = resolveBlockHeadingSpacing(doc, block);
@@ -456,6 +460,7 @@ export function serializeDocument(
 		const embed = serializeEmbed(doc, block);
 		if (embed) {
 			if (hasContent) parts.push("");
+			for (let k = 0; k < pendingBlanks; k++) parts.push("#linebreak()");
 			const sharedKey: "imageSpacingShared" | "lineSpacingShared" | "rectSpacingShared" =
 				block.image
 					? "imageSpacingShared"

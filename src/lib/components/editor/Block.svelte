@@ -422,6 +422,10 @@
 {#if isEmbed}
 	{@render embedView()}
 {:else if isList}
+	<!-- List items render as a single flex row (marker + body). Horizontal
+	     alignment of the whole group is applied by the wrapper around the
+	     list group in `Document.svelte`, so markers stay vertically aligned
+	     in column 1 while the group as a whole shifts left/center/right. -->
 	<div
 		bind:this={outerEl}
 		class="flex w-full"
