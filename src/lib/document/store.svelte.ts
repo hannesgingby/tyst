@@ -1192,6 +1192,7 @@ class DocumentStore {
 	setHeading(id: string, heading: HeadingSettings | undefined): void {
 		const b = this.findBlock(id);
 		if (!b) return;
+		if (heading && b.continuation) return;
 		b.heading = heading;
 		if (heading) b.list = undefined;
 	}
@@ -1199,6 +1200,7 @@ class DocumentStore {
 	setList(id: string, list: ListSettings | undefined): void {
 		const b = this.findBlock(id);
 		if (!b) return;
+		if (list && b.continuation) return;
 		b.list = list;
 		if (list) b.heading = undefined;
 	}
@@ -1248,6 +1250,9 @@ class DocumentStore {
 		const index = this.blockIndex(id);
 		if (index < 0) return null;
 		const block = this.model.blocks[index];
+		// Footnote zone blocks (body, separator, marker) are managed as a unit —
+		// never merge them into or from regular content.
+		if (block.footnote || block.footnoteSeparator || block.footnoteMarker) return null;
 		// First block: nothing to merge backwards into. If it's an empty plain
 		// block and another block follows, drop it so the next block becomes the
 		// new top of the document (mirrors Backspace behaviour in other editors).
@@ -1269,6 +1274,8 @@ class DocumentStore {
 			return null;
 		}
 		const prev = this.model.blocks[index - 1];
+		if (prev.footnote || prev.footnoteSeparator || prev.footnoteMarker) return null;
+		if (prev.image || prev.line || prev.rect || prev.outline) return null;
 		const offset = prev.text.length;
 		prev.text += block.text;
 		this.model.blocks.splice(index, 1);
@@ -1393,6 +1400,7 @@ class DocumentStore {
 		const index = this.blockIndex(id);
 		if (index < 0) return null;
 		const block = this.model.blocks[index];
+		if (block.heading || block.list || block.image || block.line || block.rect || block.outline) return null;
 		const text = block.text;
 		if (startOffset >= endOffset || startOffset < 0 || endOffset > text.length) return null;
 

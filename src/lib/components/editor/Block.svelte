@@ -369,7 +369,7 @@
 		const idx = documentStore.blockIndex(block.id);
 		for (let j = idx - 1; j >= 0; j--) {
 			const prev = documentStore.model.blocks[j];
-			if (prev.continuation) continue;
+			if (prev.continuation || prev.footnote || prev.footnoteSeparator) continue;
 			const isBlankText =
 				prev.text === "" &&
 				!prev.heading &&

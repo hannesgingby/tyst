@@ -245,12 +245,8 @@
                 let hasContentAbove = false;
                 for (let j = i - 1; j >= 0; j--) {
                     const bb = blocks[j];
-                    if (
-                        bb.text !== "" ||
-                        isEmbedBlock(bb) ||
-                        bb.heading ||
-                        bb.list
-                    ) {
+                    if (isFootnoteZoneBlock(bb)) continue;
+                    if (bb.text !== "" || isEmbedBlock(bb) || bb.heading || bb.list) {
                         hasContentAbove = true;
                         break;
                     }
@@ -258,12 +254,8 @@
                 let hasContentBelow = false;
                 for (let j = i + 1; j < blocks.length; j++) {
                     const bb = blocks[j];
-                    if (
-                        bb.text !== "" ||
-                        isEmbedBlock(bb) ||
-                        bb.heading ||
-                        bb.list
-                    ) {
+                    if (isFootnoteZoneBlock(bb)) continue;
+                    if (bb.text !== "" || isEmbedBlock(bb) || bb.heading || bb.list) {
                         hasContentBelow = true;
                         break;
                     }
@@ -315,7 +307,7 @@
             let skip = true;
             for (let j = i - 1; j >= 0; j--) {
                 const prev = blocks[j];
-                if (prev.continuation) continue;
+                if (prev.continuation || isFootnoteZoneBlock(prev)) continue;
                 if (prev.heading || prev.list || isEmbedBlock(prev)) break;
                 if (prev.text !== "") {
                     skip = !sawParbreak;
@@ -343,14 +335,16 @@
             let next = defaultGap;
             for (let j = i - 1; j >= 0; j--) {
                 const pb = blocks[j];
-                if ((pb.text !== "" || isEmbedBlock(pb)) && !pb.continuation) {
+                if (isFootnoteZoneBlock(pb) || pb.continuation) continue;
+                if (pb.text !== "" || isEmbedBlock(pb)) {
                     prev = Math.max(paragraphGapEm(pb), belowContribution(pb));
                     break;
                 }
             }
             for (let j = i + 1; j < blocks.length; j++) {
                 const nb = blocks[j];
-                if ((nb.text !== "" || isEmbedBlock(nb)) && !nb.continuation) {
+                if (isFootnoteZoneBlock(nb) || nb.continuation) continue;
+                if (nb.text !== "" || isEmbedBlock(nb)) {
                     next = Math.max(paragraphGapEm(nb), aboveContribution(nb));
                     break;
                 }
@@ -371,7 +365,7 @@
         let y = 0;
         for (let i = 0; i < blocks.length; i++) {
             const b = blocks[i];
-            if (b.continuation || b.footnote) {
+            if (b.continuation || b.footnote || b.footnoteSeparator) {
                 items.set(b.id, { page: pageIndex });
                 continue;
             }
@@ -623,6 +617,8 @@
     function onSplit(id: string, caretOffset: number): void {
         const block = blocks.find((b) => b.id === id);
         if (!block) return;
+        // Footnote zone blocks are not splittable — Enter is a no-op.
+        if (block.footnote || block.footnoteSeparator) return;
         const text = block.text;
 
         // Pressing Enter on an empty list item exits the list; on an empty
@@ -641,6 +637,8 @@
             block.placeholder = undefined;
             const el = blockEls.get(id);
             if (el) syncBlockDom(el, "");
+            pendingCaret = { id, offset: 0 };
+            focusPending();
             return;
         }
 
@@ -719,10 +717,10 @@
             return;
         }
 
-        // Special case: Backspace at the start of an empty text block whose
-        // previous block is an embed → delete the embed and place the caret
-        // at the end of the block above it (see store.embedAwaitingDelete).
-        if (idx > 0 && blocks[idx]?.text === "") {
+        // Backspace at the start of a block whose predecessor is an embed → delete
+        // the embed. This applies regardless of whether the current block has text:
+        // merging text into an embed block would corrupt it.
+        if (idx > 0) {
             const prev = blocks[idx - 1];
             if (
                 prev &&
@@ -949,7 +947,11 @@
                 if (!caretAtEnd(active, blocks[idx].text.length)) return;
                 event.preventDefault();
                 event.stopPropagation();
-                const next = blocks[idx + 1];
+                // Skip non-editable inline segments (footnote markers have no contenteditable).
+                let nextIdx = idx + 1;
+                while (nextIdx < blocks.length && blocks[nextIdx].footnoteMarker) nextIdx++;
+                if (nextIdx >= blocks.length || !blocks[nextIdx].continuation) return;
+                const next = blocks[nextIdx];
                 const nextEl = blockEls.get(next.id);
                 if (nextEl) {
                     documentStore.activeBlockId = next.id;
@@ -961,15 +963,16 @@
                 if (!caretAtStart(active)) return;
                 event.preventDefault();
                 event.stopPropagation();
-                const prev = blocks[idx - 1];
+                // Skip non-editable inline segments (footnote markers).
+                let prevIdx = idx - 1;
+                while (prevIdx >= 0 && blocks[prevIdx].footnoteMarker) prevIdx--;
+                if (prevIdx < 0) return;
+                const prev = blocks[prevIdx];
                 const prevEl = blockEls.get(prev.id);
                 if (prevEl) {
                     documentStore.activeBlockId = prev.id;
                     prevEl.focus();
-                    setCaretOffset(
-                        prevEl,
-                        enterOffset(prev.text.length, false),
-                    );
+                    setCaretOffset(prevEl, enterOffset(prev.text.length, false));
                 }
             }
         }
@@ -1009,12 +1012,12 @@
 
     function onHeight(id: string, px: number): void {
         const b = blocks.find((b) => b.id === id);
-        const h = b?.continuation || b?.footnote ? 0 : px;
+        const h = b?.continuation || b?.footnote || b?.footnoteSeparator ? 0 : px;
         if (heights[id] !== h) heights[id] = h;
     }
 
-    function isFootnoteZoneBlock(b: (typeof blocks)[number]): boolean {
-        return !!(b.footnote || b.footnoteSeparator);
+    function isFootnoteZoneBlock(b: (typeof blocks)[number] | undefined): boolean {
+        return !!(b && (b.footnote || b.footnoteSeparator));
     }
 </script>
 
