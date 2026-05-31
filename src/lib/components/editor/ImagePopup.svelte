@@ -4,6 +4,7 @@
 	import FieldLabel from "$lib/components/ui/FieldLabel.svelte";
 	import Input from "$lib/components/ui/Input.svelte";
 	import Popup from "$lib/components/ui/Popup.svelte";
+	import ShapeSpacingSection from "./ShapeSpacingSection.svelte";
 
 	const fitOptions = ["Cover", "Contain", "Stretch"] as const;
 	const scalingOptions = ["Auto", "Smooth", "Pixelated"] as const;
@@ -13,6 +14,9 @@
 	let height = $state<number | null>(null);
 	let fit = $state<(typeof fitOptions)[number]>("Cover");
 	let scaling = $state<(typeof scalingOptions)[number]>("Auto");
+	let spacingAbove = $state(1.2);
+	let spacingBelow = $state(0.35);
+	let spacingLinked = $state(true);
 </script>
 
 <Popup padding={12} class="w-[330px]">
@@ -59,4 +63,11 @@
 			</FieldLabel>
 		</div>
 	</div>
+
+	<ShapeSpacingSection
+		tagLabel="image"
+		bind:spacingAbove
+		bind:spacingBelow
+		bind:linked={spacingLinked}
+	/>
 </Popup>

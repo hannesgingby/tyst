@@ -1,7 +1,5 @@
 <script lang="ts">
-	import Popup from "$lib/components/ui/Popup.svelte";
+	import LineContextGroup from "./LineContextGroup.svelte";
 </script>
 
-<Popup padding={12} class="w-[240px]">
-	<span class="sr-only">Line settings</span>
-</Popup>
+<LineContextGroup />

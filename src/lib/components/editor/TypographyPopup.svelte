@@ -75,6 +75,7 @@
 			<div class="flex items-center justify-between px-1">
 				<Checkbox
 					label="Justified text"
+					class="pl-1.5"
 					checked={paragraph.justify}
 					onchange={(v) => documentStore.setParagraph("justify", v)}
 				/>

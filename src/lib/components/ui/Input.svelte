@@ -44,9 +44,11 @@
 		onunitchange,
 	}: Props = $props();
 
-	const hasUnitSuffix = $derived(unit != null && unit !== "%");
 	const canCycleUnit = $derived(
 		!disabled && unit != null && units != null && units.length > 1,
+	);
+	const hasUnitSuffix = $derived(
+		unit != null && (unit !== "%" || canCycleUnit),
 	);
 
 	function cycleUnit(): void {

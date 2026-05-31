@@ -180,6 +180,10 @@
     @apply flex h-9 items-center rounded-md text-body-14-tight text-text-100;
 }
 
+@utility field-shell-padded {
+    @apply flex h-9 items-center gap-2 rounded-md p-1.5 text-body-14-tight text-text-100;
+}
+
 /* Toolbar block-tied highlight: grows past the hit target without shifting siblings. */
 .toolbar-tool-active {
     position: relative;

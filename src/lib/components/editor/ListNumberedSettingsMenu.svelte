@@ -62,22 +62,18 @@
 	</div>
 
 	<div class="mt-[13px] flex min-h-5 flex-wrap items-center gap-x-4 gap-y-2">
-		<Checkbox label="Tight" bind:checked={tight} />
+		<Checkbox label="Tight" class="pl-1.5" bind:checked={tight} />
 		<Checkbox label="Full" bind:checked={full} />
 		<Checkbox label="Reversed" bind:checked={reversed} />
 	</div>
 
 	<div class="mt-[41px]">
-		<PopupSectionHeader title="Spacing">
+		<PopupSectionHeader title="Above/below">
 			<Tag label="numbered-list" variant="blue" bind:linked={documentStore.numberedListSpacingLinked} />
 		</PopupSectionHeader>
 		<div class="mt-[13px] grid grid-cols-2 gap-2">
-			<FieldLabel label="Above">
-				<Input bind:value={documentStore.popupNumberedListSpacingAbove} unit="em" min={0} max={20} step={0.05} decimals={2} />
-			</FieldLabel>
-			<FieldLabel label="Below">
-				<Input bind:value={documentStore.popupNumberedListSpacingBelow} unit="em" min={0} max={20} step={0.05} decimals={2} />
-			</FieldLabel>
+			<Input bind:value={documentStore.popupNumberedListSpacingAbove} unit="em" min={0} max={20} step={0.05} decimals={2} />
+			<Input bind:value={documentStore.popupNumberedListSpacingBelow} unit="em" min={0} max={20} step={0.05} decimals={2} />
 		</div>
 	</div>
 </div>

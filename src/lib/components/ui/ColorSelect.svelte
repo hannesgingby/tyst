@@ -1,13 +1,32 @@
+<script lang="ts" module>
+	export type ColorSelectVariant = "settings" | "field";
+</script>
+
 <script lang="ts">
 	import type { ClassValue } from "svelte/elements";
 
 	interface Props {
 		value?: string;
+		/** `field` matches popup inputs (`field-shell-padded` + `bg-bg-950`). */
+		variant?: import("./ColorSelect.svelte").ColorSelectVariant;
+		/** Background utility class for the field surface. */
+		bg?: string;
 		class?: ClassValue;
 		onchange?: (value: string) => void;
 	}
 
-	let { value = $bindable("#FFFFFF"), class: className, onchange }: Props = $props();
+	let {
+		value = $bindable("#FFFFFF"),
+		variant = "settings",
+		bg: bgProp,
+		class: className,
+		onchange,
+	}: Props = $props();
+
+	const isField = $derived(variant === "field");
+	const bg = $derived(
+		bgProp ?? (variant === "field" ? "bg-bg-950" : "bg-bg-input-on-pure-white"),
+	);
 
 	let hexInput = $state<HTMLInputElement | null>(null);
 
@@ -51,7 +70,8 @@
 
 <div
 	class={[
-		"flex h-8 w-28 items-center gap-2 rounded-md bg-bg-input-on-pure-white p-1 pr-2.5",
+		isField ? "field-shell-padded flex w-full" : "flex h-8 w-28 items-center gap-2 rounded-md p-1 pr-2.5",
+		bg,
 		className,
 	]}
 >

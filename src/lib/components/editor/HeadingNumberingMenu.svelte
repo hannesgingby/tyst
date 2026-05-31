@@ -1,6 +1,5 @@
 <script lang="ts">
 	import Checkbox from "$lib/components/ui/Checkbox.svelte";
-	import FieldLabel from "$lib/components/ui/FieldLabel.svelte";
 	import Icon from "$lib/components/Icon.svelte";
 	import Input from "$lib/components/ui/Input.svelte";
 	import PopupSectionHeader from "$lib/components/ui/PopupSectionHeader.svelte";
@@ -33,13 +32,13 @@
 			</div>
 
 			<div class="mt-[13px]">
-				<Checkbox label="Outlined" bind:checked={documentStore.popupHeadingOutlined} />
+				<Checkbox label="Outlined" class="pl-1.5" bind:checked={documentStore.popupHeadingOutlined} />
 			</div>
 		</div>
 	</div>
 
 	<div class="mt-[13px]">
-		<PopupSectionHeader title="Spacing">
+		<PopupSectionHeader title="Above/below">
 			<Tag
 				label={documentStore.headingSpacingLevel === 0
 					? "title"
@@ -49,12 +48,8 @@
 			/>
 		</PopupSectionHeader>
 		<div class="mt-[13px] grid grid-cols-2 gap-2">
-			<FieldLabel label="Above">
-				<Input bind:value={documentStore.popupHeadingSpacingAbove} unit="em" min={0} max={20} step={0.05} decimals={2} />
-			</FieldLabel>
-			<FieldLabel label="Below">
-				<Input bind:value={documentStore.popupHeadingSpacingBelow} unit="em" min={0} max={20} step={0.05} decimals={2} />
-			</FieldLabel>
+			<Input bind:value={documentStore.popupHeadingSpacingAbove} unit="em" min={0} max={20} step={0.05} decimals={2} />
+			<Input bind:value={documentStore.popupHeadingSpacingBelow} unit="em" min={0} max={20} step={0.05} decimals={2} />
 		</div>
 	</div>
 

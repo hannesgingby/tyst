@@ -49,20 +49,16 @@
 	</div>
 
 	<div class="mt-[13px] flex min-h-5 items-center">
-		<Checkbox label="Tight" bind:checked={tight} />
+		<Checkbox label="Tight" class="pl-1.5" bind:checked={tight} />
 	</div>
 
 	<div class="mt-[41px]">
-		<PopupSectionHeader title="Spacing">
+		<PopupSectionHeader title="Above/below">
 			<Tag label="bullet-list" variant="blue" bind:linked={documentStore.bulletListSpacingLinked} />
 		</PopupSectionHeader>
 		<div class="mt-[13px] grid grid-cols-2 gap-2">
-			<FieldLabel label="Above">
-				<Input bind:value={documentStore.popupBulletListSpacingAbove} unit="em" min={0} max={20} step={0.05} decimals={2} />
-			</FieldLabel>
-			<FieldLabel label="Below">
-				<Input bind:value={documentStore.popupBulletListSpacingBelow} unit="em" min={0} max={20} step={0.05} decimals={2} />
-			</FieldLabel>
+			<Input bind:value={documentStore.popupBulletListSpacingAbove} unit="em" min={0} max={20} step={0.05} decimals={2} />
+			<Input bind:value={documentStore.popupBulletListSpacingBelow} unit="em" min={0} max={20} step={0.05} decimals={2} />
 		</div>
 	</div>
 </div>
