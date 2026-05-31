@@ -304,27 +304,28 @@
 {#snippet embedTrigger(
     name: string,
     label: string,
-    active: boolean,
+    tied: boolean,
+    open: boolean,
     onclick: () => void,
     iconClass = "size-6",
     chevron = false,
 )}
-    <Tooltip {label} position="bottom" disabled={active}>
+    <Tooltip {label} position="bottom" disabled={open}>
         <button
             type="button"
             class={[
                 "tool-btn relative flex h-6 items-center justify-center gap-0.5 rounded-md transition-opacity duration-150 [transition-timing-function:cubic-bezier(0.33,1,0.68,1)]",
-                active ? "toolbar-tool-active" : "hover:opacity-50",
+                tied ? "toolbar-tool-active" : "hover:opacity-50",
             ]}
-            aria-expanded={active}
+            aria-expanded={open}
             {onclick}
         >
-            <Icon {name} class="{iconClass} {active ? 'text-current' : 'text-icon'}" />
+            <Icon {name} class="{iconClass} {tied ? 'text-current' : 'text-icon'}" />
             {#if chevron}
-                <span class="chevron" class:active class:open={active}>
+                <span class="chevron" class:open>
                     <Icon
                         name="nav-arrow-down"
-                        class="size-3.5 {active ? 'text-current' : 'text-icon'}"
+                        class="size-3.5 {tied ? 'text-current' : 'text-icon'}"
                     />
                 </span>
             {/if}
@@ -356,12 +357,20 @@
                         onmouseenter={() => (lineHoverOpen = true)}
                         onmouseleave={() => (lineHoverOpen = false)}
                     >
-                        {@render embedTrigger("line", "Line", lineOpen, () => {
-                            // Reopen if the popup was previously dismissed for a still-active shape.
-                            if (lineTied && documentStore.popupDismissed === "line") {
-                                documentStore.popupDismissed = null;
-                            }
-                        }, "size-6", true)}
+                        {@render embedTrigger(
+                            "line",
+                            "Line",
+                            lineTied,
+                            lineOpen,
+                            () => {
+                                // Reopen if the popup was previously dismissed for a still-active shape.
+                                if (lineTied && documentStore.popupDismissed === "line") {
+                                    documentStore.popupDismissed = null;
+                                }
+                            },
+                            "size-6",
+                            true,
+                        )}
                         {#if lineOpen}
                             <div
                                 class="absolute bottom-full -left-8 z-[60] pb-2.5"
@@ -373,7 +382,13 @@
                         {/if}
                     </div>
                     <div bind:this={imageWrapEl} class="relative flex items-center">
-                        {@render embedTrigger("image", "Image", imageOpen, handleImageClick)}
+                        {@render embedTrigger(
+                            "image",
+                            "Image",
+                            imageTied,
+                            imageOpen,
+                            handleImageClick,
+                        )}
                         {#if imageOpen}
                             <div
                                 class="absolute bottom-full -left-8 z-[60] pb-2.5"
