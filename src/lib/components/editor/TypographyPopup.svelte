@@ -1,7 +1,12 @@
 <script lang="ts">
+	import { getContext } from "svelte";
 	import Checkbox from "$lib/components/ui/Checkbox.svelte";
 	import DropdownMenu from "$lib/components/ui/DropdownMenu.svelte";
 	import FieldLabel from "$lib/components/ui/FieldLabel.svelte";
+	import {
+		HOVER_POPUP_PIN_KEY,
+		type HoverPopupPin,
+	} from "$lib/components/ui/hoverPopupContext";
 	import Icon from "$lib/components/Icon.svelte";
 	import Input from "$lib/components/ui/Input.svelte";
 	import Popup from "$lib/components/ui/Popup.svelte";
@@ -27,6 +32,14 @@
 	let sizeUnit = $state("pt");
 	const sizeCfg = $derived(fontSizeUnit(sizeUnit));
 	const sizeValue = $derived(Number(ptToUnit(typography.size, sizeUnit).toFixed(sizeCfg.decimals)));
+
+	const hoverPin = getContext<HoverPopupPin | undefined>(HOVER_POPUP_PIN_KEY);
+	let fontMenuOpen = $state(false);
+
+	$effect(() => {
+		hoverPin?.setPinned(fontMenuOpen);
+		return () => hoverPin?.setPinned(false);
+	});
 </script>
 
 <Popup padding={16} class="w-[344px] pb-5">
@@ -103,11 +116,15 @@
 
 		<div class="mt-[13px] flex flex-col gap-2">
 			<DropdownMenu
+				bind:open={fontMenuOpen}
 				value={typography.fontFamily}
 				options={fontOptions}
 				placement="right"
+				verticalAlign="center"
 				searchable
 				searchPlaceholder="Search fonts…"
+				popupClass="flex h-[300px] w-[340px] min-w-[340px] shrink-0 flex-col"
+				maxHeightClass="min-h-0 flex-1 overflow-y-auto"
 				onchange={(v) => documentStore.setTypography("fontFamily", v)}
 			/>
 

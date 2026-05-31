@@ -1,7 +1,12 @@
 <script lang="ts">
 	import type { Snippet } from "svelte";
+	import { setContext } from "svelte";
 	import Icon from "$lib/components/Icon.svelte";
 	import Tooltip from "$lib/components/Tooltip.svelte";
+	import {
+		HOVER_POPUP_PIN_KEY,
+		type HoverPopupPin,
+	} from "$lib/components/ui/hoverPopupContext";
 
 	interface Props {
 		label: string;
@@ -28,6 +33,30 @@
 	}: Props = $props();
 
 	let open = $state(false);
+	let pinned = $state(false);
+
+	setContext<HoverPopupPin>(HOVER_POPUP_PIN_KEY, {
+		setPinned: (value) => {
+			pinned = value;
+		},
+	});
+
+	function onMouseLeave(event: MouseEvent): void {
+		if (pinned) return;
+		const related = event.relatedTarget;
+		if (
+			related instanceof Node &&
+			event.currentTarget instanceof Node &&
+			event.currentTarget.contains(related)
+		) {
+			return;
+		}
+		open = false;
+	}
+
+	$effect(() => {
+		if (!open) pinned = false;
+	});
 </script>
 
 <!--
@@ -39,7 +68,7 @@
 <div
 	class="relative flex items-center"
 	onmouseenter={() => (open = true)}
-	onmouseleave={() => (open = false)}
+	onmouseleave={onMouseLeave}
 >
 	<Tooltip {label} {shortcut} position="bottom" disabled={open}>
 		<button

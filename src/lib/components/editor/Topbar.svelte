@@ -93,7 +93,7 @@
 			options={PAPER_PRESETS}
 			placement="below"
 			align="end"
-			popupClass="z-50 min-w-[140px]"
+			popupClass="z-50 w-[211px]"
 			onchange={(value: PaperPreset) => documentStore.setDefaultPreset(value)}
 		>
 			{#snippet trigger({ open, toggle })}
