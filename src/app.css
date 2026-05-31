@@ -16,6 +16,7 @@
     font-style: normal;
     font-display: swap;
 }
+
 @font-face {
     font-family: "Libertinus Serif";
     src: url("/fonts/LibertinusSerif-Semibold.otf") format("opentype");
@@ -23,6 +24,7 @@
     font-style: normal;
     font-display: swap;
 }
+
 @font-face {
     font-family: "Libertinus Serif";
     src: url("/fonts/LibertinusSerif-Bold.otf") format("opentype");
@@ -30,6 +32,7 @@
     font-style: normal;
     font-display: swap;
 }
+
 @font-face {
     font-family: "Libertinus Serif";
     src: url("/fonts/LibertinusSerif-Italic.otf") format("opentype");
@@ -37,6 +40,7 @@
     font-style: italic;
     font-display: swap;
 }
+
 @font-face {
     font-family: "Libertinus Serif";
     src: url("/fonts/LibertinusSerif-SemiboldItalic.otf") format("opentype");
@@ -44,6 +48,7 @@
     font-style: italic;
     font-display: swap;
 }
+
 @font-face {
     font-family: "Libertinus Serif";
     src: url("/fonts/LibertinusSerif-BoldItalic.otf") format("opentype");
@@ -185,9 +190,9 @@
 .toolbar-tool-active::before {
     content: "";
     position: absolute;
-    inset: -2px -3px;
+    inset: -2px -4px;
     z-index: 0;
-    border-radius: 6px;
+    border-radius: 4px;
     background-color: #e3f0fb;
 }
 

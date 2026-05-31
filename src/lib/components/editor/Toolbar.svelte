@@ -1,10 +1,12 @@
 <script lang="ts">
     import Icon from "$lib/components/Icon.svelte";
     import Tooltip from "$lib/components/Tooltip.svelte";
+    import ClickPopup from "$lib/components/ui/ClickPopup.svelte";
     import HoverPopup from "$lib/components/ui/HoverPopup.svelte";
     import { documentStore } from "$lib/document/store.svelte";
     import AlignmentPopup from "./AlignmentPopup.svelte";
     import HeadingsPopup from "./HeadingsPopup.svelte";
+    import ImagePopup from "./ImagePopup.svelte";
     import LinePopup from "./LinePopup.svelte";
     import ListPopup from "./ListPopup.svelte";
     import TypographyPopup from "./TypographyPopup.svelte";
@@ -224,7 +226,11 @@
                 ]}
             >
                 {#each group.tools as tool, toolIndex (toolIndex)}
-                    {#if tool.kind === "icon"}
+                    {#if tool.kind === "icon" && tool.name === "image"}
+                        <ClickPopup label={tool.label} icon={tool.name} iconClass={tool.iconClass}>
+                            {#snippet popup()}<ImagePopup />{/snippet}
+                        </ClickPopup>
+                    {:else if tool.kind === "icon"}
                         {@render toolIcon(
                             tool.name,
                             tool.label,
