@@ -52,14 +52,13 @@
 		patch({ fileName: picked.fileName, ext: picked.ext });
 	}
 
-	const DEFAULT_SPACING = { above: 1.2, below: 0.35 } as const;
-	const spacingAbove = $derived(image?.spacing?.above ?? DEFAULT_SPACING.above);
-	const spacingBelow = $derived(image?.spacing?.below ?? DEFAULT_SPACING.below);
-	const spacingLinked = $derived(image?.spacing == null);
-
-	function setSpacing(above: number, below: number, linked: boolean): void {
-		patch({ spacing: linked ? undefined : { above, below } });
-	}
+	// Spacing reads the *resolved* value (block override → shared default).
+	// Writes route through the store so that editing while "linked" updates
+	// the shared default instead of forcing an unlink.
+	const resolvedSpacing = $derived(documentStore.resolveEmbedSpacing(block));
+	const spacingAbove = $derived(resolvedSpacing?.above ?? 1.2);
+	const spacingBelow = $derived(resolvedSpacing?.below ?? 0.35);
+	const spacingLinked = $derived(documentStore.embedSpacingLinked(block));
 </script>
 
 <Popup padding={12} class="w-[330px]">
@@ -141,8 +140,8 @@
 		spacingAbove={() => spacingAbove}
 		spacingBelow={() => spacingBelow}
 		linked={() => spacingLinked}
-		onspacingabove={(v) => setSpacing(v, spacingBelow, false)}
-		onspacingbelow={(v) => setSpacing(spacingAbove, v, false)}
-		onlinkedchange={(v) => setSpacing(spacingAbove, spacingBelow, v)}
+		onspacingabove={(v) => documentStore.setEmbedSpacing(block, { above: v })}
+		onspacingbelow={(v) => documentStore.setEmbedSpacing(block, { below: v })}
+		onlinkedchange={(v) => documentStore.setEmbedSpacingLinked(block, v)}
 	/>
 </Popup>

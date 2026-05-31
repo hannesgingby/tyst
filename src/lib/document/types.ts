@@ -194,10 +194,14 @@ export interface LineSettings {
 	spacing?: BlockSpacing;
 }
 
+export type LengthUnit = "px" | "pt";
+
 /** Embed: a rectangle block (non-editable). Maps to Typst `#rect(...)`. */
 export interface RectSettings {
 	width: number | null;
+	widthUnit: LengthUnit;
 	height: number | null;
+	heightUnit: LengthUnit;
 	fillEnabled: boolean;
 	fillColor: string;
 	radius: number;
@@ -275,6 +279,15 @@ export interface DocumentModel {
 	listSpacingLinks?: Partial<Record<ListKind, boolean>>;
 	/** Per-kind list spacing overrides when unlinked. */
 	listSpacing?: { bullet?: BlockSpacing; numbered?: BlockSpacing };
+	/**
+	 * Document-wide default spacing for each embed kind. When a block's own
+	 * `image.spacing` / `line.spacing` / `rect.spacing` is undefined, the
+	 * matching shared entry applies. Editing the popup while the spacing is
+	 * "linked" writes to these shared values.
+	 */
+	imageSpacingShared?: BlockSpacing;
+	lineSpacingShared?: BlockSpacing;
+	rectSpacingShared?: BlockSpacing;
 	/** Document body as an ordered list of paragraph blocks. */
 	blocks: Block[];
 }

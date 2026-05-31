@@ -80,12 +80,42 @@
 				<LineSettingsMenu
 					line={() => activeLine ?? previewLine}
 					onchange={patchLine}
+					resolvedSpacing={activeLine
+						? () => documentStore.resolveEmbedSpacing(activeBlock)
+						: undefined}
+					spacingLinked={activeLine
+						? () => documentStore.embedSpacingLinked(activeBlock)
+						: undefined}
+					onspacingabove={activeLine
+						? (v) => documentStore.setEmbedSpacing(activeBlock, { above: v })
+						: undefined}
+					onspacingbelow={activeLine
+						? (v) => documentStore.setEmbedSpacing(activeBlock, { below: v })
+						: undefined}
+					onspacinglinkedchange={activeLine
+						? (v) => documentStore.setEmbedSpacingLinked(activeBlock, v)
+						: undefined}
 				/>
 			{/snippet}
 			{#snippet panelB()}
 				<RectangleSettingsMenu
 					rect={() => activeRect ?? previewRect}
 					onchange={patchRect}
+					resolvedSpacing={activeRect
+						? () => documentStore.resolveEmbedSpacing(activeBlock)
+						: undefined}
+					spacingLinked={activeRect
+						? () => documentStore.embedSpacingLinked(activeBlock)
+						: undefined}
+					onspacingabove={activeRect
+						? (v) => documentStore.setEmbedSpacing(activeBlock, { above: v })
+						: undefined}
+					onspacingbelow={activeRect
+						? (v) => documentStore.setEmbedSpacing(activeBlock, { below: v })
+						: undefined}
+					onspacinglinkedchange={activeRect
+						? (v) => documentStore.setEmbedSpacingLinked(activeBlock, v)
+						: undefined}
 				/>
 			{/snippet}
 		</TwoPanelMenu>

@@ -313,17 +313,17 @@
 	{@const line = block.line}
 	{@const rect = block.rect}
 	{@const cached = img ? imageCache.get(block.id) : undefined}
-	{@const embedAbove = ptToPx(11) * scale}
+	{@const spacing = documentStore.resolveEmbedSpacing(block)}
 	{@const dashCss = (d: StrokeDash) =>
 		d === "dotted" ? "dotted" : d === "dashed" ? "dashed" : "solid"}
 	<!-- svelte-ignore a11y_click_events_have_key_events -->
 	<!-- svelte-ignore a11y_no_static_element_interactions -->
 	<div
 		bind:this={embedEl}
-		class="doc-embed flex w-full justify-center"
+		class="doc-embed flex w-full cursor-pointer justify-center"
 		data-block-id={block.id}
-		style:padding-top="{embedAbove}px"
-		style:padding-bottom="{embedAbove * 0.5}px"
+		style:margin-top="{spacing?.above ?? 1.2}em"
+		style:margin-bottom="{spacing?.below ?? 0.35}em"
 		onclick={(e) => {
 			e.preventDefault();
 			onfocusblock(block.id);
@@ -371,8 +371,18 @@
 				></div>
 			</div>
 		{:else if rect}
-			{@const wPx = rect.width ? rect.width * scale : undefined}
-			{@const hPx = rect.height ? rect.height * scale : 60 * scale}
+			{@const wRaw = rect.width
+				? rect.widthUnit === "pt"
+					? ptToPx(rect.width)
+					: rect.width
+				: undefined}
+			{@const hRaw = rect.height
+				? rect.heightUnit === "pt"
+					? ptToPx(rect.height)
+					: rect.height
+				: 60}
+			{@const wPx = wRaw != null ? wRaw * scale : undefined}
+			{@const hPx = hRaw * scale}
 			<div
 				class="block"
 				style:width={wPx ? `${wPx}px` : "100%"}

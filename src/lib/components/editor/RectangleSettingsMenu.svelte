@@ -3,31 +3,48 @@
 	import ColorSelect from "$lib/components/ui/ColorSelect.svelte";
 	import FieldLabel from "$lib/components/ui/FieldLabel.svelte";
 	import Input from "$lib/components/ui/Input.svelte";
-	import type { RectSettings, StrokeSettings } from "$lib/document/types";
+	import type {
+		BlockSpacing,
+		LengthUnit,
+		RectSettings,
+		StrokeSettings,
+	} from "$lib/document/types";
 	import ShapeSpacingSection from "./ShapeSpacingSection.svelte";
 	import ShapeStrokeSection from "./ShapeStrokeSection.svelte";
 
 	interface Props {
 		rect: RectSettings | (() => RectSettings);
 		onchange: (patch: Partial<RectSettings>) => void;
+		resolvedSpacing?: () => BlockSpacing | null;
+		spacingLinked?: () => boolean;
+		onspacingabove?: (value: number) => void;
+		onspacingbelow?: (value: number) => void;
+		onspacinglinkedchange?: (linked: boolean) => void;
 	}
 
-	let { rect, onchange }: Props = $props();
+	let {
+		rect,
+		onchange,
+		resolvedSpacing,
+		spacingLinked,
+		onspacingabove,
+		onspacingbelow,
+		onspacinglinkedchange,
+	}: Props = $props();
 
 	const value = $derived(typeof rect === "function" ? rect() : rect);
+
+	const dimensionUnits = ["px", "pt"] as const;
 
 	function patchStroke(p: Partial<StrokeSettings>): void {
 		onchange({ stroke: { ...value.stroke, ...p } });
 	}
 
 	const DEFAULT_SPACING = { above: 1.2, below: 0.35 } as const;
-	const spacingAbove = $derived(value.spacing?.above ?? DEFAULT_SPACING.above);
-	const spacingBelow = $derived(value.spacing?.below ?? DEFAULT_SPACING.below);
-	const spacingLinked = $derived(value.spacing == null);
-
-	function setSpacing(above: number, below: number, linked: boolean): void {
-		onchange({ spacing: linked ? undefined : { above, below } });
-	}
+	const spacingValue = $derived(resolvedSpacing?.() ?? value.spacing ?? DEFAULT_SPACING);
+	const spacingAbove = $derived(spacingValue.above);
+	const spacingBelow = $derived(spacingValue.below);
+	const linked = $derived(spacingLinked ? spacingLinked() : value.spacing == null);
 </script>
 
 <div class="shell relative z-[60] w-[324px] rounded-lg px-3 pt-3 pb-4">
@@ -37,7 +54,9 @@
 				value={value.width}
 				onchange={(v) => onchange({ width: v })}
 				emptyLabel="Auto"
-				unit="pt"
+				unit={value.widthUnit}
+				units={dimensionUnits}
+				onunitchange={(u) => onchange({ widthUnit: u as LengthUnit })}
 				min={0}
 				max={10000}
 				step={1}
@@ -49,7 +68,9 @@
 				value={value.height}
 				onchange={(v) => onchange({ height: v })}
 				emptyLabel="Auto"
-				unit="pt"
+				unit={value.heightUnit}
+				units={dimensionUnits}
+				onunitchange={(u) => onchange({ heightUnit: u as LengthUnit })}
 				min={0}
 				max={10000}
 				step={1}
@@ -123,9 +144,18 @@
 		tagLabel="rectangle"
 		spacingAbove={() => spacingAbove}
 		spacingBelow={() => spacingBelow}
-		linked={() => spacingLinked}
-		onspacingabove={(v) => setSpacing(v, spacingBelow, false)}
-		onspacingbelow={(v) => setSpacing(spacingAbove, v, false)}
-		onlinkedchange={(v) => setSpacing(spacingAbove, spacingBelow, v)}
+		linked={() => linked}
+		onspacingabove={(v) =>
+			onspacingabove
+				? onspacingabove(v)
+				: onchange({ spacing: { above: v, below: spacingBelow } })}
+		onspacingbelow={(v) =>
+			onspacingbelow
+				? onspacingbelow(v)
+				: onchange({ spacing: { above: spacingAbove, below: v } })}
+		onlinkedchange={(v) =>
+			onspacinglinkedchange
+				? onspacinglinkedchange(v)
+				: onchange({ spacing: v ? undefined : { above: spacingAbove, below: spacingBelow } })}
 	/>
 </div>

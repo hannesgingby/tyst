@@ -1,16 +1,30 @@
 <script lang="ts">
 	import FieldLabel from "$lib/components/ui/FieldLabel.svelte";
 	import Input from "$lib/components/ui/Input.svelte";
-	import type { LineSettings, StrokeSettings } from "$lib/document/types";
+	import type { BlockSpacing, LineSettings, StrokeSettings } from "$lib/document/types";
 	import ShapeSpacingSection from "./ShapeSpacingSection.svelte";
 	import ShapeStrokeSection from "./ShapeStrokeSection.svelte";
 
 	interface Props {
 		line: LineSettings | (() => LineSettings);
 		onchange: (patch: Partial<LineSettings>) => void;
+		/** Resolved spacing (own override, falling back to shared default). */
+		resolvedSpacing?: () => BlockSpacing | null;
+		spacingLinked?: () => boolean;
+		onspacingabove?: (value: number) => void;
+		onspacingbelow?: (value: number) => void;
+		onspacinglinkedchange?: (linked: boolean) => void;
 	}
 
-	let { line, onchange }: Props = $props();
+	let {
+		line,
+		onchange,
+		resolvedSpacing,
+		spacingLinked,
+		onspacingabove,
+		onspacingbelow,
+		onspacinglinkedchange,
+	}: Props = $props();
 
 	const value = $derived(typeof line === "function" ? line() : line);
 
@@ -22,13 +36,10 @@
 	}
 
 	const DEFAULT_SPACING = { above: 1.2, below: 0.35 } as const;
-	const spacingAbove = $derived(value.spacing?.above ?? DEFAULT_SPACING.above);
-	const spacingBelow = $derived(value.spacing?.below ?? DEFAULT_SPACING.below);
-	const spacingLinked = $derived(value.spacing == null);
-
-	function setSpacing(above: number, below: number, linked: boolean): void {
-		onchange({ spacing: linked ? undefined : { above, below } });
-	}
+	const spacingValue = $derived(resolvedSpacing?.() ?? value.spacing ?? DEFAULT_SPACING);
+	const spacingAbove = $derived(spacingValue.above);
+	const spacingBelow = $derived(spacingValue.below);
+	const linked = $derived(spacingLinked ? spacingLinked() : value.spacing == null);
 </script>
 
 <div class="shell relative z-[60] w-[324px] rounded-lg px-3 pt-3 pb-4">
@@ -99,9 +110,18 @@
 		tagLabel="line"
 		spacingAbove={() => spacingAbove}
 		spacingBelow={() => spacingBelow}
-		linked={() => spacingLinked}
-		onspacingabove={(v) => setSpacing(v, spacingBelow, false)}
-		onspacingbelow={(v) => setSpacing(spacingAbove, v, false)}
-		onlinkedchange={(v) => setSpacing(spacingAbove, spacingBelow, v)}
+		linked={() => linked}
+		onspacingabove={(v) =>
+			onspacingabove
+				? onspacingabove(v)
+				: onchange({ spacing: { above: v, below: spacingBelow } })}
+		onspacingbelow={(v) =>
+			onspacingbelow
+				? onspacingbelow(v)
+				: onchange({ spacing: { above: spacingAbove, below: v } })}
+		onlinkedchange={(v) =>
+			onspacinglinkedchange
+				? onspacinglinkedchange(v)
+				: onchange({ spacing: v ? undefined : { above: spacingAbove, below: spacingBelow } })}
 	/>
 </div>

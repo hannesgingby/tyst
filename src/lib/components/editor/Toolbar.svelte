@@ -25,25 +25,57 @@
         documentStore.tiedPopup === "line" || documentStore.tiedPopup === "rect",
     );
 
-    // The Line toolbar button can also be opened manually with no embed in
-    // the document yet (so the user can pick Line vs. Rectangle). Cleared
-    // automatically as soon as the user focuses something that isn't a shape.
-    let lineManualOpen = $state(false);
+    // Hover-to-open for the Line tool (matches Headings/List behaviour). When
+    // a shape is active the popup is "tied" open regardless of hover.
+    let lineHoverOpen = $state(false);
+
+    // Click-outside-to-close. When the user clicks somewhere that's neither
+    // the open popup nor the matching embed block in the document, dismiss
+    // the tied popup. Reset whenever the active block changes (re-clicking the
+    // embed always re-opens the popup).
+    let dismissedKind = $state<"image" | "line" | null>(null);
     $effect(() => {
-        if (activeBlock.line || activeBlock.rect) {
-            lineManualOpen = false; // tied takes over
-        }
-    });
-    $effect(() => {
-        // Active block changed to a non-shape: close any manual opening.
-        if (!activeBlock.line && !activeBlock.rect && !lineTied) {
-            // Keep manual open until user explicitly clicks away — but if focus
-            // moved to a non-shape block, drop the manual flag too.
-        }
+        // Reset dismissal whenever the active block id changes.
+        documentStore.activeBlockId;
+        dismissedKind = null;
     });
 
-    const imageOpen = $derived(imageTied);
-    const lineOpen = $derived(lineTied || lineManualOpen);
+    let imageWrapEl = $state<HTMLDivElement | null>(null);
+    let lineWrapEl = $state<HTMLDivElement | null>(null);
+
+    function isInsideActiveEmbed(target: EventTarget | null): boolean {
+        if (!(target instanceof HTMLElement)) return false;
+        const id = activeBlock.id;
+        // The embed wrapper carries `.doc-embed` and `data-block-id={id}`.
+        return target.closest(`.doc-embed[data-block-id="${id}"]`) != null;
+    }
+
+    function onDocumentPointerDown(event: PointerEvent): void {
+        const target = event.target;
+        if (imageTied && !dismissedKind) {
+            const inPopup = imageWrapEl != null && target instanceof Node && imageWrapEl.contains(target);
+            if (!inPopup && !isInsideActiveEmbed(target)) {
+                dismissedKind = "image";
+            }
+        }
+        if (lineTied && !dismissedKind) {
+            const inPopup = lineWrapEl != null && target instanceof Node && lineWrapEl.contains(target);
+            if (!inPopup && !isInsideActiveEmbed(target)) {
+                dismissedKind = "line";
+            }
+        }
+    }
+
+    $effect(() => {
+        if (!imageTied && !lineTied) return;
+        document.addEventListener("pointerdown", onDocumentPointerDown, true);
+        return () => document.removeEventListener("pointerdown", onDocumentPointerDown, true);
+    });
+
+    const imageOpen = $derived(imageTied && dismissedKind !== "image");
+    const lineOpen = $derived(
+        (lineTied && dismissedKind !== "line") || lineHoverOpen,
+    );
 
     type PopupKind = "typography" | "headings" | "list" | "alignment";
 
@@ -209,6 +241,12 @@
     ];
 
     async function handleImageClick(): Promise<void> {
+        // If the image popup was dismissed for a still-active image block,
+        // clicking the trigger should just re-open it without a file picker.
+        if (activeBlock.image && imageTied && dismissedKind === "image") {
+            dismissedKind = null;
+            return;
+        }
         // If an image is already active, picking a file replaces its bytes /
         // metadata in place. Otherwise, prompt first and only insert after the
         // user actually chooses a file (so we don't leave an empty placeholder
@@ -238,14 +276,6 @@
         }
     }
 
-    function handleLineClick(): void {
-        // If a shape is already active the popup is already tied open; the
-        // button click simply re-asserts that. Otherwise open the picker so
-        // the user can choose Line vs. Rectangle.
-        if (!activeBlock.line && !activeBlock.rect) {
-            lineManualOpen = !lineManualOpen;
-        }
-    }
 </script>
 
 {#snippet toolIcon(
@@ -307,9 +337,20 @@
                 ]}
             >
                 {#if groupIndex === 3}
-                    <!-- Embeds group: line + image triggers, popups anchored above. -->
-                    <div class="relative flex items-center">
-                        {@render embedTrigger("line", "Line", lineOpen, handleLineClick)}
+                    <!-- Embeds group: line (hover-to-expand) + image (click-to-pick).
+                         Both keep their popups tied open when their block kind is
+                         active in the document; clicking outside dismisses. -->
+                    <!-- svelte-ignore a11y_no_static_element_interactions -->
+                    <div
+                        bind:this={lineWrapEl}
+                        class="relative flex items-center"
+                        onmouseenter={() => (lineHoverOpen = true)}
+                        onmouseleave={() => (lineHoverOpen = false)}
+                    >
+                        {@render embedTrigger("line", "Line", lineOpen, () => {
+                            // Reopen if the popup was previously dismissed for a still-active shape.
+                            if (lineTied && dismissedKind === "line") dismissedKind = null;
+                        })}
                         {#if lineOpen}
                             <div
                                 class="absolute bottom-full -left-8 z-[60] pb-2.5"
@@ -320,7 +361,7 @@
                             </div>
                         {/if}
                     </div>
-                    <div class="relative flex items-center">
+                    <div bind:this={imageWrapEl} class="relative flex items-center">
                         {@render embedTrigger("image", "Image", imageOpen, handleImageClick)}
                         {#if imageOpen}
                             <div

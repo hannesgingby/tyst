@@ -23,7 +23,7 @@ import {
 } from "./blockLevelStyle";
 import { isHeadingLevelLinked, resolveHeadingLevelStyle } from "./headingStyle";
 import { TYPST_PAPER_NAME } from "./paperSizes";
-import { typstNumber } from "./units";
+import { pxToPt, typstNumber } from "./units";
 
 const WEIGHT_KEYWORD: Record<FontWeightName, string> = {
 	Regular: "regular",
@@ -223,8 +223,10 @@ function strokeArg(s: StrokeSettings): string {
 function serializeImage(doc: DocumentModel, block: Block, image: ImageSettings): string {
 	const path = escapeStringLiteral(imageRelativePath(doc, block.id, image));
 	const args: string[] = [`"${path}"`];
-	if (image.width != null) args.push(`width: ${typstNumber(image.width)}pt`);
-	if (image.height != null) args.push(`height: ${typstNumber(image.height)}pt`);
+	// Image width/height in the model are in CSS px (what the popup edits).
+	// Typst doesn't accept `px` lengths in `image(...)`, so convert to pt.
+	if (image.width != null) args.push(`width: ${typstNumber(pxToPt(image.width))}pt`);
+	if (image.height != null) args.push(`height: ${typstNumber(pxToPt(image.height))}pt`);
 	if (image.alt) args.push(`alt: "${escapeStringLiteral(image.alt)}"`);
 	if (image.fit) args.push(`fit: "${image.fit}"`);
 	return `#figure(image(${args.join(", ")}))`;
@@ -244,8 +246,14 @@ function serializeLine(line: LineSettings): string {
 
 function serializeRect(rect: RectSettings): string {
 	const args: string[] = [];
-	if (rect.width != null) args.push(`width: ${typstNumber(rect.width)}pt`);
-	if (rect.height != null) args.push(`height: ${typstNumber(rect.height)}pt`);
+	if (rect.width != null) {
+		const w = rect.widthUnit === "px" ? pxToPt(rect.width) : rect.width;
+		args.push(`width: ${typstNumber(w)}pt`);
+	}
+	if (rect.height != null) {
+		const h = rect.heightUnit === "px" ? pxToPt(rect.height) : rect.height;
+		args.push(`height: ${typstNumber(h)}pt`);
+	}
 	if (rect.fillEnabled) args.push(`fill: ${hexToRgb(rect.fillColor)}`);
 	if (rect.radius > 0) args.push(`radius: ${typstNumber(rect.radius)}pt`);
 	if (rect.inset !== 5) args.push(`inset: ${typstNumber(rect.inset)}pt`);
@@ -456,11 +464,15 @@ export function serializeDocument(
 		const embed = serializeEmbed(doc, block);
 		if (embed) {
 			if (hasContent) parts.push("");
-			const spacing =
-				block.image?.spacing ??
-				block.line?.spacing ??
-				block.rect?.spacing ??
-				EMBED_SPACING_DEFAULT;
+			const sharedKey: "imageSpacingShared" | "lineSpacingShared" | "rectSpacingShared" =
+				block.image
+					? "imageSpacingShared"
+					: block.line
+						? "lineSpacingShared"
+						: "rectSpacingShared";
+			const ownSpacing =
+				block.image?.spacing ?? block.line?.spacing ?? block.rect?.spacing;
+			const spacing = ownSpacing ?? doc[sharedKey] ?? EMBED_SPACING_DEFAULT;
 			parts.push(wrapAligned(wrapBlock(embed, spacing), block.alignment));
 			pushBlockSeparator();
 			hasContent = true;

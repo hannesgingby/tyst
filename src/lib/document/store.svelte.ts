@@ -90,6 +90,9 @@ function defaultModel(): DocumentModel {
 			bullet: { above: 0.8, below: 0.8 },
 			numbered: { above: 0.8, below: 0.8 },
 		},
+		imageSpacingShared: { above: 1.2, below: 0.35 },
+		lineSpacingShared: { above: 1.2, below: 0.35 },
+		rectSpacingShared: { above: 1.2, below: 0.35 },
 		blocks: [{ id: newId(), text: "" }],
 	};
 }
@@ -710,14 +713,90 @@ class DocumentStore {
 	/** Default settings for a freshly-inserted rectangle embed. */
 	defaultRectSettings(): RectSettings {
 		return {
-			width: null,
-			height: null,
+			width: 60,
+			widthUnit: "px",
+			height: 30,
+			heightUnit: "px",
 			fillEnabled: false,
 			fillColor: "#000000",
 			radius: 0,
 			inset: 5,
 			stroke: this.defaultStroke(),
 		};
+	}
+
+	// --- Embed spacing (shared default + per-block override) ------------------
+	//
+	// Pattern mirrors the headings/lists model: a single document-level shared
+	// value drives all blocks of that kind whose own `spacing` is undefined.
+	// Editing the popup while "linked" writes to the shared value; clicking
+	// unlink copies the resolved value to the block.
+
+	private embedSharedKey(kind: "image" | "line" | "rect"):
+		| "imageSpacingShared"
+		| "lineSpacingShared"
+		| "rectSpacingShared" {
+		return kind === "image"
+			? "imageSpacingShared"
+			: kind === "line"
+				? "lineSpacingShared"
+				: "rectSpacingShared";
+	}
+
+	embedSharedSpacing(kind: "image" | "line" | "rect"): BlockSpacing {
+		const key = this.embedSharedKey(kind);
+		return (this.model[key] ??= { above: 1.2, below: 0.35 });
+	}
+
+	/** Spacing in effect for a block (its own override, falling back to shared). */
+	resolveEmbedSpacing(block: Block): BlockSpacing | null {
+		if (block.image) return block.image.spacing ?? this.embedSharedSpacing("image");
+		if (block.line) return block.line.spacing ?? this.embedSharedSpacing("line");
+		if (block.rect) return block.rect.spacing ?? this.embedSharedSpacing("rect");
+		return null;
+	}
+
+	embedSpacingLinked(block: Block): boolean {
+		if (block.image) return block.image.spacing == null;
+		if (block.line) return block.line.spacing == null;
+		if (block.rect) return block.rect.spacing == null;
+		return true;
+	}
+
+	/** Set above/below spacing for an embed block, honouring its linked state. */
+	setEmbedSpacing(
+		block: Block,
+		patch: { above?: number; below?: number },
+	): void {
+		const linked = this.embedSpacingLinked(block);
+		if (linked) {
+			const kind = block.image ? "image" : block.line ? "line" : block.rect ? "rect" : null;
+			if (!kind) return;
+			const shared = this.embedSharedSpacing(kind);
+			if (patch.above !== undefined) shared.above = patch.above;
+			if (patch.below !== undefined) shared.below = patch.below;
+			return;
+		}
+		const target = block.image ?? block.line ?? block.rect;
+		if (!target?.spacing) return;
+		if (patch.above !== undefined) target.spacing.above = patch.above;
+		if (patch.below !== undefined) target.spacing.below = patch.below;
+	}
+
+	/** Toggle the linked state of an embed block's spacing. */
+	setEmbedSpacingLinked(block: Block, linked: boolean): void {
+		if (linked) {
+			if (block.image) block.image.spacing = undefined;
+			else if (block.line) block.line.spacing = undefined;
+			else if (block.rect) block.rect.spacing = undefined;
+			return;
+		}
+		// Unlinking: copy the resolved value onto the block.
+		const resolved = this.resolveEmbedSpacing(block);
+		const copy: BlockSpacing = { above: resolved?.above ?? 1.2, below: resolved?.below ?? 0.35 };
+		if (block.image) block.image.spacing = copy;
+		else if (block.line) block.line.spacing = copy;
+		else if (block.rect) block.rect.spacing = copy;
 	}
 
 	/** Update settings of an embed block in place; no-op if kind mismatches. */
