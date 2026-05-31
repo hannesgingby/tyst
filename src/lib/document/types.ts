@@ -150,11 +150,70 @@ export interface BlockSpacing {
 	below: number;
 }
 
+export type ImageFit = "cover" | "contain" | "stretch";
+export type ImageScaling = "auto" | "smooth" | "pixelated";
+
+/** Embed: an image block (non-editable). */
+export interface ImageSettings {
+	/** Display name shown in the popup (typically the original filename). */
+	fileName: string;
+	/** Lowercase file extension without the dot (e.g. "png"). */
+	ext: string;
+	alt?: string;
+	/** Width in px. null/undefined = auto. */
+	width?: number | null;
+	/** Height in px. null/undefined = auto. */
+	height?: number | null;
+	fit?: ImageFit;
+	scaling?: ImageScaling;
+	spacing?: BlockSpacing;
+}
+
+export type StrokeCap = "butt" | "round" | "bevel";
+export type StrokeJoin = "miter" | "round" | "bevel";
+export type StrokeDash = "solid" | "dotted" | "dashed";
+
+export interface StrokeSettings {
+	color: string;
+	thickness: number;
+	cap: StrokeCap;
+	join: StrokeJoin;
+	dash: StrokeDash;
+}
+
+export type LineLengthUnit = "%" | "pt";
+
+/** Embed: a line block (non-editable). Maps to Typst `#line(...)`. */
+export interface LineSettings {
+	startX: number;
+	startY: number;
+	length: number;
+	lengthUnit: LineLengthUnit;
+	angle: number;
+	stroke: StrokeSettings;
+	spacing?: BlockSpacing;
+}
+
+/** Embed: a rectangle block (non-editable). Maps to Typst `#rect(...)`. */
+export interface RectSettings {
+	width: number | null;
+	height: number | null;
+	fillEnabled: boolean;
+	fillColor: string;
+	radius: number;
+	inset: number;
+	stroke: StrokeSettings;
+	spacing?: BlockSpacing;
+}
+
 /**
  * A content block. In the default model each block is one "line" (no internal
  * line breaks). Blocks marked `continuation: true` are logically part of the
  * same visual line as their predecessor — no line break is inserted between
  * them in the serialized output, enabling inline-range formatting.
+ *
+ * A block is either a text block (default) or an embed block (one of
+ * `image` / `line` / `rect`). Embed blocks have no editable text content.
  */
 export interface Block {
 	id: string;
@@ -177,7 +236,16 @@ export interface Block {
 	alignment?: HorizontalAlignment;
 	/** Placeholder shown when the block has no text (e.g. "Heading 1", "Item"). */
 	placeholder?: string;
+	/** Embed: image. Mutually exclusive with line / rect / text content. */
+	image?: ImageSettings;
+	/** Embed: line. Mutually exclusive with image / rect / text content. */
+	line?: LineSettings;
+	/** Embed: rectangle. Mutually exclusive with image / line / text content. */
+	rect?: RectSettings;
 }
+
+/** Embed block kinds. */
+export type EmbedKind = "image" | "line" | "rect";
 
 export interface DocumentModel {
 	name: string;

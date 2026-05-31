@@ -143,6 +143,10 @@
         return !!b?.list;
     }
 
+    function isEmbedBlock(b: (typeof blocks)[number] | undefined): boolean {
+        return !!(b && (b.image || b.line || b.rect));
+    }
+
     // Non-continuation blocks that directly precede a continuation block must
     // also render inline so all segments flow on one visual line.
     const renderInlineIds = $derived.by(() => {
@@ -162,7 +166,7 @@
         const roles = new Map<string, "text" | "parbreak" | "linebreak">();
         for (let i = 0; i < blocks.length; i++) {
             const b = blocks[i];
-            if (b.continuation || b.text !== "") {
+            if (b.continuation || b.text !== "" || isEmbedBlock(b)) {
                 roles.set(b.id, "text");
             } else {
                 const prev = i > 0 ? blocks[i - 1] : undefined;
@@ -195,13 +199,13 @@
             let prev = model.paragraph.spacing;
             let next = model.paragraph.spacing;
             for (let j = i - 1; j >= 0; j--) {
-                if (blocks[j].text !== "" && !blocks[j].continuation) {
+                if ((blocks[j].text !== "" || isEmbedBlock(blocks[j])) && !blocks[j].continuation) {
                     prev = documentStore.resolveParagraph(blocks[j]).spacing;
                     break;
                 }
             }
             for (let j = i + 1; j < blocks.length; j++) {
-                if (blocks[j].text !== "" && !blocks[j].continuation) {
+                if ((blocks[j].text !== "" || isEmbedBlock(blocks[j])) && !blocks[j].continuation) {
                     next = documentStore.resolveParagraph(blocks[j]).spacing;
                     break;
                 }

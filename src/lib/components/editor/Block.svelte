@@ -3,7 +3,8 @@
 	import { resolveBlockHeadingSpacing, resolveBlockListSpacing } from "$lib/document/blockLevelStyle";
 	import { documentStore } from "$lib/document/store.svelte";
 	import { ptToPx } from "$lib/document/units";
-	import type { Block } from "$lib/document/types";
+	import type { Block, StrokeDash } from "$lib/document/types";
+	import { imageCache } from "$lib/system/imageCache.svelte";
 	import { getCaretOffset } from "./caret";
 
 	const WEIGHT_CSS: Record<string, number> = { Regular: 400, Medium: 500, Bold: 700 };
@@ -144,6 +145,7 @@
 
 	const isInline = $derived(block.continuation || renderInline);
 	const isList = $derived(!!block.list);
+	const isEmbed = $derived(!!(block.image || block.line || block.rect));
 
 	// Marker glyph and the space it reserves on the left.
 	const markerText = $derived(marker ?? "");
@@ -158,11 +160,25 @@
 
 	let el = $state<HTMLElement | null>(null);
 	let outerEl = $state<HTMLElement | null>(null);
+	let embedEl = $state<HTMLElement | null>(null);
 
 	function reportHeight(): void {
-		const target = outerEl ?? el;
+		const target = embedEl ?? outerEl ?? el;
 		if (target) onheight(block.id, target.offsetHeight);
 	}
+
+	// Embed blocks: register the wrapper for layout/height, but skip all
+	// contenteditable wiring. Click activates the block so the toolbar can tie
+	// the matching popup.
+	$effect(() => {
+		if (!isEmbed) return;
+		const node = embedEl;
+		if (!node) return;
+		const observer = new ResizeObserver(() => reportHeight());
+		observer.observe(node);
+		reportHeight();
+		return () => observer.disconnect();
+	});
 
 	function ensureTrailingBr(): void {
 		if (!el) return;
@@ -176,6 +192,7 @@
 	}
 
 	$effect(() => {
+		if (isEmbed) return;
 		const node = el;
 		if (!node) return;
 		registerel(block.id, node);
@@ -291,7 +308,89 @@
 	></svelte:element>
 {/snippet}
 
-{#if isList}
+{#snippet embedView()}
+	{@const img = block.image}
+	{@const line = block.line}
+	{@const rect = block.rect}
+	{@const cached = img ? imageCache.get(block.id) : undefined}
+	{@const embedAbove = ptToPx(11) * scale}
+	{@const dashCss = (d: StrokeDash) =>
+		d === "dotted" ? "dotted" : d === "dashed" ? "dashed" : "solid"}
+	<!-- svelte-ignore a11y_click_events_have_key_events -->
+	<!-- svelte-ignore a11y_no_static_element_interactions -->
+	<div
+		bind:this={embedEl}
+		class="doc-embed flex w-full justify-center"
+		data-block-id={block.id}
+		style:padding-top="{embedAbove}px"
+		style:padding-bottom="{embedAbove * 0.5}px"
+		onclick={(e) => {
+			e.preventDefault();
+			onfocusblock(block.id);
+		}}
+	>
+		{#if img}
+			{@const wPx = img.width ? img.width * scale : undefined}
+			{@const hPx = img.height ? img.height * scale : undefined}
+			{#if cached}
+				<img
+					src={cached.dataUrl}
+					alt={img.alt ?? img.fileName}
+					class="block max-w-full select-none"
+					style:width={wPx ? `${wPx}px` : "auto"}
+					style:height={hPx ? `${hPx}px` : "auto"}
+					style:object-fit={img.fit === "contain"
+						? "contain"
+						: img.fit === "stretch"
+							? "fill"
+							: "cover"}
+					style:image-rendering={img.scaling === "pixelated" ? "pixelated" : "auto"}
+					draggable="false"
+				/>
+			{:else}
+				<div
+					class="flex items-center justify-center rounded-md bg-bg-950 px-4 py-6 text-text-250"
+					style:width={wPx ? `${wPx}px` : "240px"}
+					style:height={hPx ? `${hPx}px` : "120px"}
+				>
+					{img.fileName}
+				</div>
+			{/if}
+		{:else if line}
+			{@const lenPx = line.lengthUnit === "pt" ? line.length * scale : undefined}
+			<div
+				class="my-2 w-full"
+				style:width={lenPx ? `${lenPx}px` : `${line.length}%`}
+				style:transform={line.angle ? `rotate(${line.angle}deg)` : undefined}
+				style:transform-origin="left center"
+			>
+				<div
+					style:border-top-style={dashCss(line.stroke.dash)}
+					style:border-top-width="{line.stroke.thickness * scale}px"
+					style:border-top-color={line.stroke.color}
+				></div>
+			</div>
+		{:else if rect}
+			{@const wPx = rect.width ? rect.width * scale : undefined}
+			{@const hPx = rect.height ? rect.height * scale : 60 * scale}
+			<div
+				class="block"
+				style:width={wPx ? `${wPx}px` : "100%"}
+				style:height="{hPx}px"
+				style:background-color={rect.fillEnabled ? rect.fillColor : "transparent"}
+				style:border-style={dashCss(rect.stroke.dash)}
+				style:border-width="{rect.stroke.thickness * scale}px"
+				style:border-color={rect.stroke.color}
+				style:border-radius="{rect.radius * scale}px"
+				style:padding="{rect.inset * scale}px"
+			></div>
+		{/if}
+	</div>
+{/snippet}
+
+{#if isEmbed}
+	{@render embedView()}
+{:else if isList}
 	<div
 		bind:this={outerEl}
 		class="flex w-full"

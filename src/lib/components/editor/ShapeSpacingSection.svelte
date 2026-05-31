@@ -5,25 +5,58 @@
 
 	interface Props {
 		tagLabel: string;
-		spacingAbove?: number;
-		spacingBelow?: number;
-		linked?: boolean;
+		/** Current values — accept plain numbers or getter functions for reactivity. */
+		spacingAbove?: number | (() => number);
+		spacingBelow?: number | (() => number);
+		linked?: boolean | (() => boolean);
+		onspacingabove?: (value: number) => void;
+		onspacingbelow?: (value: number) => void;
+		onlinkedchange?: (linked: boolean) => void;
 	}
 
 	let {
 		tagLabel,
-		spacingAbove = $bindable(1.2),
-		spacingBelow = $bindable(0.35),
-		linked = $bindable(true),
+		spacingAbove = 1.2,
+		spacingBelow = 0.35,
+		linked = true,
+		onspacingabove,
+		onspacingbelow,
+		onlinkedchange,
 	}: Props = $props();
+
+	const above = $derived(typeof spacingAbove === "function" ? spacingAbove() : spacingAbove);
+	const below = $derived(typeof spacingBelow === "function" ? spacingBelow() : spacingBelow);
+	const linkedVal = $derived(typeof linked === "function" ? linked() : linked);
 </script>
 
 <div class="mt-[41px]">
 	<PopupSectionHeader title="Above/below">
-		<Tag label={tagLabel} variant="blue" bind:linked />
+		<Tag
+			label={tagLabel}
+			variant="blue"
+			linked={linkedVal}
+			onUnlink={() => onlinkedchange?.(false)}
+			onLink={() => onlinkedchange?.(true)}
+		/>
 	</PopupSectionHeader>
 	<div class="mt-[13px] grid grid-cols-2 gap-2">
-		<Input bind:value={spacingAbove} unit="em" min={0} max={20} step={0.05} decimals={2} />
-		<Input bind:value={spacingBelow} unit="em" min={0} max={20} step={0.05} decimals={2} />
+		<Input
+			value={above}
+			onchange={(v) => onspacingabove?.(v)}
+			unit="em"
+			min={0}
+			max={20}
+			step={0.05}
+			decimals={2}
+		/>
+		<Input
+			value={below}
+			onchange={(v) => onspacingbelow?.(v)}
+			unit="em"
+			min={0}
+			max={20}
+			step={0.05}
+			decimals={2}
+		/>
 	</div>
 </div>

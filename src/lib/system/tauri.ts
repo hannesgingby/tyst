@@ -22,6 +22,21 @@ export async function writeTextFile(path: string, contents: string): Promise<voi
 	await invoke("write_text_file", { path, contents });
 }
 
+/** Read a file from disk and return its bytes as a base64 string. */
+export async function readFileBase64(path: string): Promise<string> {
+	return await invoke<string>("read_file_base64", { path });
+}
+
+/** Decode `dataBase64` and write it to `path` (creating parent dirs as needed). */
+export async function writeBytesFile(path: string, dataBase64: string): Promise<void> {
+	await invoke("write_bytes_file", { path, dataBase64 });
+}
+
+/** Create a directory (and any missing parents). No-op if it already exists. */
+export async function ensureDir(path: string): Promise<void> {
+	await invoke("ensure_dir", { path });
+}
+
 /**
  * Compile Typst source to a PDF at `outPath`. Returns nothing on success and
  * throws with a human-readable message on failure.

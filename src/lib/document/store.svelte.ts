@@ -2,16 +2,21 @@ import type {
 	Block,
 	BlockSpacing,
 	DocumentModel,
+	EmbedKind,
 	HeadingLevel,
 	HeadingNumberingSettings,
 	HeadingSettings,
 	HorizontalAlignment,
+	ImageSettings,
+	LineSettings,
 	ListKind,
 	ListSettings,
 	PageSection,
 	PageSettings,
 	ParagraphSettings,
 	PaperPreset,
+	RectSettings,
+	StrokeSettings,
 	TypographySettings,
 } from "./types";
 import {
@@ -143,6 +148,20 @@ class DocumentStore {
 
 	/** Number of laid-out pages, reported by the paginating editor. */
 	pageCount = $state(1);
+
+	/**
+	 * Which embed-block popup the toolbar should keep "tied" open. Derived from
+	 * the active block's embed kind — when the user focuses an image / line /
+	 * rect block, the corresponding toolbar popup appears anchored to the
+	 * matching toolbar tool. Cleared when focus moves to a plain text block.
+	 */
+	readonly tiedPopup = $derived.by((): EmbedKind | null => {
+		const b = this.activeBlock;
+		if (b.image) return "image";
+		if (b.line) return "line";
+		if (b.rect) return "rect";
+		return null;
+	});
 
 	readonly typ = $derived.by(() =>
 		serializeDocument(this.model, this.pageBreakBlockIds),
@@ -619,6 +638,105 @@ class DocumentStore {
 		const created: Block = { ...block, id: newId() };
 		this.model.blocks.splice(index + 1, 0, created);
 		return created.id;
+	}
+
+	/**
+	 * Insert an embed block (image / line / rect) at the active block, plus an
+	 * empty text block immediately after it so the user can continue writing
+	 * by clicking below the embed. Returns the new embed block's id.
+	 */
+	insertEmbed(block: Omit<Block, "id">): string {
+		const active = this.activeBlock;
+		const isEmptyDefault =
+			active.text === "" &&
+			!active.continuation &&
+			!active.heading &&
+			!active.list &&
+			!active.image &&
+			!active.line &&
+			!active.rect &&
+			!active.alignment;
+
+		let id: string;
+		if (isEmptyDefault) {
+			// Replace the empty placeholder block with the embed in-place.
+			Object.assign(active, block);
+			id = active.id;
+		} else {
+			id = this.insertBlockObjectAfter(active.id, block);
+		}
+		// Always ensure there's a writable text block after the embed.
+		const nextIndex = this.blockIndex(id) + 1;
+		const next = this.model.blocks[nextIndex];
+		if (!next || next.continuation || next.image || next.line || next.rect) {
+			this.insertBlockObjectAfter(id, { text: "" });
+		}
+		this.activeBlockId = id;
+		return id;
+	}
+
+	/** Default settings for a freshly-inserted image embed. */
+	defaultImageSettings(fileName: string, ext: string): ImageSettings {
+		return {
+			fileName,
+			ext,
+			fit: "cover",
+			scaling: "auto",
+		};
+	}
+
+	private defaultStroke(): StrokeSettings {
+		return {
+			color: "#000000",
+			thickness: 1,
+			cap: "butt",
+			join: "miter",
+			dash: "solid",
+		};
+	}
+
+	/** Default settings for a freshly-inserted line embed. */
+	defaultLineSettings(): LineSettings {
+		return {
+			startX: 0,
+			startY: 0,
+			length: 100,
+			lengthUnit: "%",
+			angle: 0,
+			stroke: this.defaultStroke(),
+		};
+	}
+
+	/** Default settings for a freshly-inserted rectangle embed. */
+	defaultRectSettings(): RectSettings {
+		return {
+			width: null,
+			height: null,
+			fillEnabled: false,
+			fillColor: "#000000",
+			radius: 0,
+			inset: 5,
+			stroke: this.defaultStroke(),
+		};
+	}
+
+	/** Update settings of an embed block in place; no-op if kind mismatches. */
+	updateImage(id: string, patch: Partial<ImageSettings>): void {
+		const b = this.findBlock(id);
+		if (!b?.image) return;
+		b.image = { ...b.image, ...patch };
+	}
+
+	updateLine(id: string, patch: Partial<LineSettings>): void {
+		const b = this.findBlock(id);
+		if (!b?.line) return;
+		b.line = { ...b.line, ...patch };
+	}
+
+	updateRect(id: string, patch: Partial<RectSettings>): void {
+		const b = this.findBlock(id);
+		if (!b?.rect) return;
+		b.rect = { ...b.rect, ...patch };
 	}
 
 	/**

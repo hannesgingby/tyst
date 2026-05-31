@@ -8,63 +8,61 @@
 </script>
 
 <script lang="ts">
-	import type { StrokeCapOption, StrokeDashOption, StrokeJoinOption } from "./ShapeStrokeSection.svelte";
+	import { documentStore } from "$lib/document/store.svelte";
+	import type { LineSettings, RectSettings } from "$lib/document/types";
 	import ContextGroup from "./ContextGroup.svelte";
 	import LineSettingsMenu from "./LineSettingsMenu.svelte";
 	import RectangleSettingsMenu from "./RectangleSettingsMenu.svelte";
 	import SelectableList from "./SelectableList.svelte";
 	import TwoPanelMenu from "./TwoPanelMenu.svelte";
 
-	interface Props {
-		onselect?: (shapeIndex: number) => void;
-	}
+	// Stable defaults for the preview panels when no shape is active yet
+	// (i.e. when the user opens the Line popup from the toolbar but hasn't
+	// inserted anything yet). These are not written back anywhere.
+	const previewLine = $derived<LineSettings>(documentStore.defaultLineSettings());
+	const previewRect = $derived<RectSettings>(documentStore.defaultRectSettings());
 
-	let { onselect }: Props = $props();
+	const activeBlock = $derived(documentStore.activeBlock);
+	const activeLine = $derived<LineSettings | null>(activeBlock.line ?? null);
+	const activeRect = $derived<RectSettings | null>(activeBlock.rect ?? null);
 
+	// SelectableList drives `activeIndex` via hover. We sync from the active
+	// block whenever its shape kind changes — so opening the popup on an
+	// existing line jumps the picker to row 0 even before the user hovers.
 	let activeIndex = $state(0);
+	$effect(() => {
+		if (activeLine) activeIndex = 0;
+		else if (activeRect) activeIndex = 1;
+	});
+
 	let rowEls = $state<HTMLElement[]>([]);
 	let menuEl = $state<HTMLElement | null>(null);
 	let twoPanelMenu = $state<{ releaseHold: () => void } | null>(null);
 
-	// Line settings (Typst defaults: start 0pt/0pt, length 100%, angle 0deg, stroke 1pt + black)
-	let lineStartX = $state(0);
-	let lineStartY = $state(0);
-	let lineLength = $state(100);
-	let lineLengthUnit = $state("%");
-	let lineAngle = $state(0);
-	let lineStrokeColor = $state("#000000");
-	let lineStrokeThickness = $state(1);
-	let lineStrokeCap = $state<StrokeCapOption>("Butt");
-	let lineStrokeJoin = $state<StrokeJoinOption>("Miter");
-	let lineStrokeDash = $state<StrokeDashOption>("Solid");
-	let lineSpacingAbove = $state(1.2);
-	let lineSpacingBelow = $state(0.35);
-	let lineSpacingLinked = $state(true);
-
-	// Rectangle settings (Typst defaults: width/height auto, fill none, inset 5pt, stroke auto)
-	let rectWidth = $state<number | null>(null);
-	let rectHeight = $state<number | null>(null);
-	let rectFillEnabled = $state(false);
-	let rectFillColor = $state("#000000");
-	let rectRadius = $state(0);
-	let rectInset = $state(5);
-	let rectStrokeColor = $state("#000000");
-	let rectStrokeThickness = $state(1);
-	let rectStrokeCap = $state<StrokeCapOption>("Butt");
-	let rectStrokeJoin = $state<StrokeJoinOption>("Miter");
-	let rectStrokeDash = $state<StrokeDashOption>("Solid");
-	let rectSpacingAbove = $state(1.2);
-	let rectSpacingBelow = $state(0.35);
-	let rectSpacingLinked = $state(true);
-
 	const activeRowEl = $derived(rowEls[activeIndex] ?? null);
 
 	function handleSelect(index: number): void {
-		onselect?.(index);
+		activeIndex = index;
+		if (index === 0 && !activeLine) {
+			documentStore.insertEmbed({ text: "", line: documentStore.defaultLineSettings() });
+		} else if (index === 1 && !activeRect) {
+			documentStore.insertEmbed({ text: "", rect: documentStore.defaultRectSettings() });
+		}
+	}
+
+	function patchLine(p: Partial<LineSettings>): void {
+		if (activeLine) documentStore.updateLine(activeBlock.id, p);
+	}
+	function patchRect(p: Partial<RectSettings>): void {
+		if (activeRect) documentStore.updateRect(activeBlock.id, p);
 	}
 </script>
 
-<ContextGroup {activeRowEl} {menuEl} onClipHeightTransitionEnd={() => twoPanelMenu?.releaseHold()}>
+<ContextGroup
+	{activeRowEl}
+	{menuEl}
+	onClipHeightTransitionEnd={() => twoPanelMenu?.releaseHold()}
+>
 	{#snippet list()}
 		<SelectableList
 			items={SHAPE_TYPES}
@@ -80,37 +78,14 @@
 		<TwoPanelMenu bind:this={twoPanelMenu} {activeIndex} bind:menuEl>
 			{#snippet panelA()}
 				<LineSettingsMenu
-					bind:startX={lineStartX}
-					bind:startY={lineStartY}
-					bind:length={lineLength}
-					bind:lengthUnit={lineLengthUnit}
-					bind:angle={lineAngle}
-					bind:strokeColor={lineStrokeColor}
-					bind:strokeThickness={lineStrokeThickness}
-					bind:strokeCap={lineStrokeCap}
-					bind:strokeJoin={lineStrokeJoin}
-					bind:strokeDash={lineStrokeDash}
-					bind:spacingAbove={lineSpacingAbove}
-					bind:spacingBelow={lineSpacingBelow}
-					bind:spacingLinked={lineSpacingLinked}
+					line={() => activeLine ?? previewLine}
+					onchange={patchLine}
 				/>
 			{/snippet}
 			{#snippet panelB()}
 				<RectangleSettingsMenu
-					bind:width={rectWidth}
-					bind:height={rectHeight}
-					bind:fillEnabled={rectFillEnabled}
-					bind:fillColor={rectFillColor}
-					bind:radius={rectRadius}
-					bind:inset={rectInset}
-					bind:strokeColor={rectStrokeColor}
-					bind:strokeThickness={rectStrokeThickness}
-					bind:strokeCap={rectStrokeCap}
-					bind:strokeJoin={rectStrokeJoin}
-					bind:strokeDash={rectStrokeDash}
-					bind:spacingAbove={rectSpacingAbove}
-					bind:spacingBelow={rectSpacingBelow}
-					bind:spacingLinked={rectSpacingLinked}
+					rect={() => activeRect ?? previewRect}
+					onchange={patchRect}
 				/>
 			{/snippet}
 		</TwoPanelMenu>

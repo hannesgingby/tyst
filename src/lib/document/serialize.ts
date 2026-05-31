@@ -6,10 +6,14 @@ import type {
 	HeadingLevel,
 	HeadingSettings,
 	HorizontalAlignment,
+	ImageSettings,
+	LineSettings,
 	ListSettings,
 	Margins,
 	PageSettings,
 	ParagraphSettings,
+	RectSettings,
+	StrokeSettings,
 	TypographySettings,
 } from "./types";
 import {
@@ -177,6 +181,83 @@ function serializePreamble(doc: DocumentModel): string {
 /** Wrap `content` in `#block(above:, below:)[…]` for explicit element spacing. */
 function wrapBlock(content: string, spacing: BlockSpacing): string {
 	return `#block(above: ${typstNumber(spacing.above)}em, below: ${typstNumber(spacing.below)}em)[${content}]`;
+}
+
+/** Default above/below for embed blocks when the user hasn't unlinked spacing. */
+const EMBED_SPACING_DEFAULT: BlockSpacing = { above: 1.2, below: 0.35 };
+
+/** Filesystem-safe slug derived from the document name. Mirrors files.ts. */
+function imagesFolderFor(doc: DocumentModel): string {
+	const base =
+		doc.name.trim().replace(/[\\/:*?"<>|]/g, "-").replace(/\s+/g, "_") ||
+		"document";
+	return `${base}_files`;
+}
+
+/** Relative path emitted for an image block in the serialized .typ. */
+export function imageRelativePath(
+	doc: DocumentModel,
+	blockId: string,
+	image: ImageSettings,
+): string {
+	const folder = imagesFolderFor(doc);
+	return `${folder}/${blockId}.${image.ext}`;
+}
+
+function escapeStringLiteral(s: string): string {
+	return s.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+}
+
+function strokeArg(s: StrokeSettings): string {
+	const parts: string[] = [
+		`paint: ${hexToRgb(s.color)}`,
+		`thickness: ${typstNumber(s.thickness)}pt`,
+		`cap: "${s.cap}"`,
+		`join: "${s.join}"`,
+	];
+	if (s.dash === "dotted") parts.push(`dash: "dotted"`);
+	else if (s.dash === "dashed") parts.push(`dash: "dashed"`);
+	return `stroke(${parts.join(", ")})`;
+}
+
+function serializeImage(doc: DocumentModel, block: Block, image: ImageSettings): string {
+	const path = escapeStringLiteral(imageRelativePath(doc, block.id, image));
+	const args: string[] = [`"${path}"`];
+	if (image.width != null) args.push(`width: ${typstNumber(image.width)}pt`);
+	if (image.height != null) args.push(`height: ${typstNumber(image.height)}pt`);
+	if (image.alt) args.push(`alt: "${escapeStringLiteral(image.alt)}"`);
+	if (image.fit) args.push(`fit: "${image.fit}"`);
+	return `#figure(image(${args.join(", ")}))`;
+}
+
+function serializeLine(line: LineSettings): string {
+	const args: string[] = [
+		`start: (${typstNumber(line.startX)}pt, ${typstNumber(line.startY)}pt)`,
+		line.lengthUnit === "%"
+			? `length: ${typstNumber(line.length)}%`
+			: `length: ${typstNumber(line.length)}pt`,
+		`angle: ${typstNumber(line.angle)}deg`,
+		`stroke: ${strokeArg(line.stroke)}`,
+	];
+	return `#line(${args.join(", ")})`;
+}
+
+function serializeRect(rect: RectSettings): string {
+	const args: string[] = [];
+	if (rect.width != null) args.push(`width: ${typstNumber(rect.width)}pt`);
+	if (rect.height != null) args.push(`height: ${typstNumber(rect.height)}pt`);
+	if (rect.fillEnabled) args.push(`fill: ${hexToRgb(rect.fillColor)}`);
+	if (rect.radius > 0) args.push(`radius: ${typstNumber(rect.radius)}pt`);
+	if (rect.inset !== 5) args.push(`inset: ${typstNumber(rect.inset)}pt`);
+	args.push(`stroke: ${strokeArg(rect.stroke)}`);
+	return `#rect(${args.join(", ")})`;
+}
+
+function serializeEmbed(doc: DocumentModel, block: Block): string | null {
+	if (block.image) return serializeImage(doc, block, block.image);
+	if (block.line) return serializeLine(block.line);
+	if (block.rect) return serializeRect(block.rect);
+	return null;
 }
 
 /** Wrap `content` in `#align(...)[…]` when alignment is set and non-default. */
@@ -366,6 +447,25 @@ export function serializeDocument(
 			hasContent = true;
 			afterList = false;
 			afterHeading = true;
+			pendingBlanks = 0;
+			i++;
+			continue;
+		}
+
+		// ── Embed (image / line / rect) ─────────────────────────────────────────
+		const embed = serializeEmbed(doc, block);
+		if (embed) {
+			if (hasContent) parts.push("");
+			const spacing =
+				block.image?.spacing ??
+				block.line?.spacing ??
+				block.rect?.spacing ??
+				EMBED_SPACING_DEFAULT;
+			parts.push(wrapAligned(wrapBlock(embed, spacing), block.alignment));
+			pushBlockSeparator();
+			hasContent = true;
+			afterList = false;
+			afterHeading = true; // treat like a block-level element: no implicit linebreak before next text
 			pendingBlanks = 0;
 			i++;
 			continue;

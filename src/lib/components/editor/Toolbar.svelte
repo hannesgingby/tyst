@@ -1,9 +1,9 @@
 <script lang="ts">
     import Icon from "$lib/components/Icon.svelte";
     import Tooltip from "$lib/components/Tooltip.svelte";
-    import ClickPopup from "$lib/components/ui/ClickPopup.svelte";
     import HoverPopup from "$lib/components/ui/HoverPopup.svelte";
     import { documentStore } from "$lib/document/store.svelte";
+    import { imageCache, pickAndLoadImage } from "$lib/system/imageCache.svelte";
     import AlignmentPopup from "./AlignmentPopup.svelte";
     import HeadingsPopup from "./HeadingsPopup.svelte";
     import ImagePopup from "./ImagePopup.svelte";
@@ -18,7 +18,34 @@
         activeBlock.alignment != null && activeBlock.alignment !== "left",
     );
 
-    type PopupKind = "typography" | "headings" | "list" | "alignment" | "line";
+    // Embed popups: the image popup and the line popup (which also handles
+    // rectangles) stay "tied" open while their matching block is active.
+    const imageTied = $derived(documentStore.tiedPopup === "image");
+    const lineTied = $derived(
+        documentStore.tiedPopup === "line" || documentStore.tiedPopup === "rect",
+    );
+
+    // The Line toolbar button can also be opened manually with no embed in
+    // the document yet (so the user can pick Line vs. Rectangle). Cleared
+    // automatically as soon as the user focuses something that isn't a shape.
+    let lineManualOpen = $state(false);
+    $effect(() => {
+        if (activeBlock.line || activeBlock.rect) {
+            lineManualOpen = false; // tied takes over
+        }
+    });
+    $effect(() => {
+        // Active block changed to a non-shape: close any manual opening.
+        if (!activeBlock.line && !activeBlock.rect && !lineTied) {
+            // Keep manual open until user explicitly clicks away — but if focus
+            // moved to a non-shape block, drop the manual flag too.
+        }
+    });
+
+    const imageOpen = $derived(imageTied);
+    const lineOpen = $derived(lineTied || lineManualOpen);
+
+    type PopupKind = "typography" | "headings" | "list" | "alignment";
 
     type IconTool = {
         kind: "icon";
@@ -110,17 +137,7 @@
         },
         {
             tools: [
-                {
-                    kind: "expandable",
-                    name: "line",
-                    label: "Line",
-                    popup: "line",
-                },
-                {
-                    kind: "icon",
-                    name: "image",
-                    label: "Image",
-                },
+                // line + image rendered inline below (need bespoke wiring)
             ],
         },
         {
@@ -190,6 +207,45 @@
             ],
         },
     ];
+
+    async function handleImageClick(): Promise<void> {
+        // If an image is already active, picking a file replaces its bytes /
+        // metadata in place. Otherwise, prompt first and only insert after the
+        // user actually chooses a file (so we don't leave an empty placeholder
+        // behind if they cancel).
+        if (activeBlock.image) {
+            const picked = await pickAndLoadImage(activeBlock.id);
+            if (!picked) return;
+            documentStore.updateImage(activeBlock.id, {
+                fileName: picked.fileName,
+                ext: picked.ext,
+            });
+            return;
+        }
+        // Reserve an id we can use as the cache key before the block exists.
+        const reservedId = crypto.randomUUID();
+        const picked = await pickAndLoadImage(reservedId);
+        if (!picked) return;
+        const blockId = documentStore.insertEmbed({
+            text: "",
+            image: documentStore.defaultImageSettings(picked.fileName, picked.ext),
+        });
+        // Move the cached bytes from the reserved id onto the real block id.
+        const cached = imageCache.get(reservedId);
+        if (cached) {
+            imageCache.set(blockId, cached);
+            imageCache.delete(reservedId);
+        }
+    }
+
+    function handleLineClick(): void {
+        // If a shape is already active the popup is already tied open; the
+        // button click simply re-asserts that. Otherwise open the picker so
+        // the user can choose Line vs. Rectangle.
+        if (!activeBlock.line && !activeBlock.rect) {
+            lineManualOpen = !lineManualOpen;
+        }
+    }
 </script>
 
 {#snippet toolIcon(
@@ -212,6 +268,31 @@
     </Tooltip>
 {/snippet}
 
+<!-- Embed-toolbar trigger: a plain button (no internal popup state) whose
+     blue "tied" state is driven from documentStore. The popup itself is
+     positioned above it and rendered conditionally based on the same state. -->
+{#snippet embedTrigger(
+    name: string,
+    label: string,
+    active: boolean,
+    onclick: () => void,
+    iconClass = "size-6",
+)}
+    <Tooltip {label} position="bottom" disabled={active}>
+        <button
+            type="button"
+            class={[
+                "relative flex h-6 items-center justify-center rounded-md transition-opacity duration-150 [transition-timing-function:cubic-bezier(0.33,1,0.68,1)]",
+                active ? "toolbar-tool-active" : "hover:opacity-50",
+            ]}
+            aria-expanded={active}
+            {onclick}
+        >
+            <Icon {name} class="{iconClass} {active ? 'text-current' : 'text-icon'}" />
+        </button>
+    </Tooltip>
+{/snippet}
+
 <div
     class="pointer-events-none fixed inset-x-0 bottom-0 z-50 flex justify-center pb-6"
 >
@@ -225,80 +306,95 @@
                     group.class,
                 ]}
             >
-                {#each group.tools as tool, toolIndex (toolIndex)}
-                    {#if tool.kind === "icon" && tool.name === "image"}
-                        <ClickPopup label={tool.label} icon={tool.name} iconClass={tool.iconClass}>
-                            {#snippet popup()}<ImagePopup />{/snippet}
-                        </ClickPopup>
-                    {:else if tool.kind === "icon"}
-                        {@render toolIcon(
-                            tool.name,
-                            tool.label,
-                            tool.iconClass,
-                            tool.shortcut,
-                        )}
-                    {:else if tool.kind === "expandable" && tool.popup === "typography"}
-                        <HoverPopup
-                            label={tool.label}
-                            icon={tool.name}
-                            iconClass={tool.iconClass}
-                            shortcut={tool.shortcut}
-                        >
-                            {#snippet popup()}<TypographyPopup />{/snippet}
-                        </HoverPopup>
-                    {:else if tool.kind === "expandable" && tool.popup === "headings"}
-                        <HoverPopup
-                            label={tool.label}
-                            icon={tool.name}
-                            iconClass={tool.iconClass}
-                            shortcut={tool.shortcut}
-                            active={headingsActive}
-                        >
-                            {#snippet popup()}<HeadingsPopup />{/snippet}
-                        </HoverPopup>
-                    {:else if tool.kind === "expandable" && tool.popup === "list"}
-                        <HoverPopup
-                            label={tool.label}
-                            icon={tool.name}
-                            iconClass={tool.iconClass}
-                            shortcut={tool.shortcut}
-                            active={listActive}
-                        >
-                            {#snippet popup()}<ListPopup />{/snippet}
-                        </HoverPopup>
-                    {:else if tool.kind === "expandable" && tool.popup === "alignment"}
-                        <HoverPopup
-                            label={tool.label}
-                            icon={tool.name}
-                            iconClass={tool.iconClass}
-                            shortcut={tool.shortcut}
-                            active={alignmentActive}
-                        >
-                            {#snippet popup()}<AlignmentPopup />{/snippet}
-                        </HoverPopup>
-                    {:else if tool.kind === "expandable" && tool.popup === "line"}
-                        <HoverPopup
-                            label={tool.label}
-                            icon={tool.name}
-                            iconClass={tool.iconClass}
-                            shortcut={tool.shortcut}
-                        >
-                            {#snippet popup()}<LinePopup />{/snippet}
-                        </HoverPopup>
-                    {:else if tool.kind === "expandable"}
-                        <HoverPopup
-                            label={tool.label}
-                            icon={tool.name}
-                            iconClass={tool.iconClass}
-                            shortcut={tool.shortcut}
-                        />
-                    {:else}
-                        <span
-                            class="size-1 shrink-0 rounded-full bg-bg-600"
-                            aria-hidden="true"
-                        ></span>
-                    {/if}
-                {/each}
+                {#if groupIndex === 3}
+                    <!-- Embeds group: line + image triggers, popups anchored above. -->
+                    <div class="relative flex items-center">
+                        {@render embedTrigger("line", "Line", lineOpen, handleLineClick)}
+                        {#if lineOpen}
+                            <div
+                                class="absolute bottom-full -left-8 z-[60] pb-2.5"
+                                role="dialog"
+                                aria-label="Line"
+                            >
+                                <LinePopup />
+                            </div>
+                        {/if}
+                    </div>
+                    <div class="relative flex items-center">
+                        {@render embedTrigger("image", "Image", imageOpen, handleImageClick)}
+                        {#if imageOpen}
+                            <div
+                                class="absolute bottom-full -left-8 z-[60] pb-2.5"
+                                role="dialog"
+                                aria-label="Image"
+                            >
+                                <ImagePopup />
+                            </div>
+                        {/if}
+                    </div>
+                {:else}
+                    {#each group.tools as tool, toolIndex (toolIndex)}
+                        {#if tool.kind === "icon"}
+                            {@render toolIcon(
+                                tool.name,
+                                tool.label,
+                                tool.iconClass,
+                                tool.shortcut,
+                            )}
+                        {:else if tool.kind === "expandable" && tool.popup === "typography"}
+                            <HoverPopup
+                                label={tool.label}
+                                icon={tool.name}
+                                iconClass={tool.iconClass}
+                                shortcut={tool.shortcut}
+                            >
+                                {#snippet popup()}<TypographyPopup />{/snippet}
+                            </HoverPopup>
+                        {:else if tool.kind === "expandable" && tool.popup === "headings"}
+                            <HoverPopup
+                                label={tool.label}
+                                icon={tool.name}
+                                iconClass={tool.iconClass}
+                                shortcut={tool.shortcut}
+                                active={headingsActive}
+                            >
+                                {#snippet popup()}<HeadingsPopup />{/snippet}
+                            </HoverPopup>
+                        {:else if tool.kind === "expandable" && tool.popup === "list"}
+                            <HoverPopup
+                                label={tool.label}
+                                icon={tool.name}
+                                iconClass={tool.iconClass}
+                                shortcut={tool.shortcut}
+                                active={listActive}
+                            >
+                                {#snippet popup()}<ListPopup />{/snippet}
+                            </HoverPopup>
+                        {:else if tool.kind === "expandable" && tool.popup === "alignment"}
+                            <HoverPopup
+                                label={tool.label}
+                                icon={tool.name}
+                                iconClass={tool.iconClass}
+                                shortcut={tool.shortcut}
+                                active={alignmentActive}
+                            >
+                                {#snippet popup()}<AlignmentPopup />{/snippet}
+                            </HoverPopup>
+                        {:else if tool.kind === "expandable"}
+                            <HoverPopup
+                                label={tool.label}
+                                icon={tool.name}
+                                iconClass={tool.iconClass}
+                                shortcut={tool.shortcut}
+                            />
+                        {:else}
+                            <span
+                                class="size-1 shrink-0 rounded-full bg-bg-600"
+                                aria-hidden="true"
+                            ></span>
+                        {/if}
+                    {/each}
+                {/if}
             </div>
         {/each}
     </div>
