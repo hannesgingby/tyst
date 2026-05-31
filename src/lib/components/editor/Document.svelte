@@ -354,32 +354,108 @@
         return spacings;
     });
 
-    // Measured block heights (id -> internal px). Continuation blocks report 0.
+    // Measured block heights (id -> internal px). Continuation/zone blocks report 0
+    // so they don't participate in page-break detection.
     let heights = $state<Record<string, number>>({});
 
+    // Actual measured heights of footnote zone blocks (separator + bodies).
+    // Kept separate from `heights` so the layout algorithm can use them for
+    // computing reserved space without affecting non-zone block measurements.
+    let zoneHeights = $state<Record<string, number>>({});
+
     // Walk blocks, assigning each to a page using per-page content heights.
-    // Continuation blocks don't contribute to height and inherit the current page.
+    // Continuation and footnote zone blocks don't contribute to height and
+    // inherit the current page index.
+    //
+    // Two-pass approach: pass 1 assigns pages naively; pass 2 reserves space
+    // at the bottom of each page for its footnote zone (clearance + separator
+    // + gap-per-body + body heights) and re-runs the assignment.
     const layout = $derived.by(() => {
-        const items = new Map<string, { page: number }>();
-        let pageIndex = 0;
-        let y = 0;
-        for (let i = 0; i < blocks.length; i++) {
-            const b = blocks[i];
-            if (b.continuation || b.footnote || b.footnoteSeparator) {
+        const emPx = ptToPx(model.typography.size) * RENDER_SCALE;
+
+        function pass(reserved: Map<number, number>): Map<string, { page: number }> {
+            const items = new Map<string, { page: number }>();
+            let pageIndex = 0;
+            let y = 0;
+
+            // First pass: assign all non-zone blocks (content + continuation/markers).
+            for (let i = 0; i < blocks.length; i++) {
+                const b = blocks[i];
+                if (b.footnote || b.footnoteSeparator) continue;
+                if (b.continuation) {
+                    items.set(b.id, { page: pageIndex });
+                    continue;
+                }
+                const h = heights[b.id] ?? 0;
+                const mp = resolveMarginsPx(pageIndex);
+                const chPx =
+                    pageHeightPx - mp.top - mp.bottom - (reserved.get(pageIndex) ?? 0);
+                if (i > 0 && y > 0 && y + h > chPx) {
+                    pageIndex += 1;
+                    y = 0;
+                }
                 items.set(b.id, { page: pageIndex });
-                continue;
+                y += h;
             }
-            const h = heights[b.id] ?? 0;
-            const mp = resolveMarginsPx(pageIndex);
-            const chPx = pageHeightPx - mp.top - mp.bottom;
-            if (i > 0 && y > 0 && y + h > chPx) {
-                pageIndex += 1;
-                y = 0;
+
+            // Second pass: pin footnote zone blocks to the page of their marker.
+            // Footnote bodies go to the page where their footnoteMarker lives.
+            // The separator goes to the same page as the footnote bodies that follow
+            // it in the blocks array.
+            for (const b of blocks) {
+                if (!b.footnote) continue;
+                const marker = blocks.find(
+                    (m) => m.footnoteMarker?.footnoteId === b.footnote!.footnoteId,
+                );
+                const pg = marker ? (items.get(marker.id)?.page ?? 0) : pageIndex;
+                items.set(b.id, { page: pg });
             }
-            items.set(b.id, { page: pageIndex });
-            y += h;
+            for (let i = 0; i < blocks.length; i++) {
+                if (!blocks[i].footnoteSeparator) continue;
+                // Find the first footnote body after this separator.
+                let pg = pageIndex;
+                for (let j = i + 1; j < blocks.length; j++) {
+                    if (blocks[j].footnote) {
+                        pg = items.get(blocks[j].id)?.page ?? pageIndex;
+                        break;
+                    }
+                }
+                items.set(blocks[i].id, { page: pg });
+            }
+
+            return items;
         }
-        return { items, pageCount: pageIndex + 1 };
+
+        // Pass 1: no footnote reservation.
+        const pass1 = pass(new Map());
+
+        // Compute footnote zone reserved height for each page based on pass 1.
+        const reserved = new Map<number, number>();
+        for (const b of blocks) {
+            if (!b.footnote && !b.footnoteSeparator) continue;
+            const pg = pass1.get(b.id)?.page ?? 0;
+            if (!reserved.has(pg)) reserved.set(pg, 0);
+        }
+        for (const [pg] of reserved) {
+            const settings = documentStore.resolveFootnoteSettings(pg);
+            const clearancePx = settings.clearance * emPx;
+            const gapPx = settings.gap * emPx;
+            const sep = blocks.find(
+                (b) => b.footnoteSeparator && (pass1.get(b.id)?.page ?? 0) === pg,
+            );
+            const bodies = blocks.filter(
+                (b) => b.footnote && (pass1.get(b.id)?.page ?? 0) === pg,
+            );
+            const sepH = sep ? (zoneHeights[sep.id] ?? 0) : 0;
+            const bodiesH = bodies.reduce((s, b) => s + (zoneHeights[b.id] ?? 0), 0);
+            reserved.set(pg, clearancePx + sepH + gapPx * bodies.length + bodiesH);
+        }
+
+        // Pass 2: re-run with reserved space per page.
+        const items = pass(reserved);
+        let pageCount = 1;
+        for (const { page } of items.values()) pageCount = Math.max(pageCount, page + 1);
+        return { items, pageCount };
     });
 
     $effect(() => {
@@ -1012,7 +1088,12 @@
 
     function onHeight(id: string, px: number): void {
         const b = blocks.find((b) => b.id === id);
-        const h = b?.continuation || b?.footnote || b?.footnoteSeparator ? 0 : px;
+        if (b?.footnote || b?.footnoteSeparator) {
+            if (zoneHeights[id] !== px) zoneHeights[id] = px;
+            if (heights[id] !== 0) heights[id] = 0;
+            return;
+        }
+        const h = b?.continuation ? 0 : px;
         if (heights[id] !== h) heights[id] = h;
     }
 
@@ -1200,9 +1281,10 @@
                 {#if footnoteZoneBlocks.length > 0}
                     {@const fnSettings =
                         documentStore.resolveFootnoteSettings(pageIdx)}
+                    {@const fnEmPx = ptToPx(model.typography.size) * RENDER_SCALE}
                     <div
                         class="footnote-zone mt-auto w-full shrink-0"
-                        style:padding-top="{fnSettings.clearance}em"
+                        style:padding-top="{fnSettings.clearance * fnEmPx}px"
                     >
                         {#each footnoteZoneBlocks as block, fnIdx (block.id)}
                             {#if block.footnoteSeparator}
@@ -1244,10 +1326,10 @@
                                         ? footnoteZoneBlocks[fnIdx - 1]
                                         : undefined}
                                 <div
-                                    style:padding-left="{fnSettings.indent}em"
+                                    style:padding-left="{fnSettings.indent * fnEmPx}px"
                                     style:margin-top={fnIdx > 0 ||
                                     prevZone?.footnoteSeparator
-                                        ? `${fnSettings.gap}em`
+                                        ? `${fnSettings.gap * fnEmPx}px`
                                         : undefined}
                                 >
                                     <Block
