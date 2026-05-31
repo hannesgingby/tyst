@@ -438,8 +438,8 @@ export function serializeDocument(
 				j++;
 			}
 			if (hasContent) parts.push("");
-			// Lists auto-parbreak in Typst, so any blank blocks before us become
-			// explicit #linebreak()s for the extra vertical space.
+			// One `#linebreak()` per Enter the user pressed before this block,
+			// so each editor blank shows up distinctly in the source.
 			for (let k = 0; k < pendingBlanks; k++) parts.push("#linebreak()");
 			const listSpacing = resolveBlockListSpacing(doc, block, pageBreakBlockIds);
 			const listContent = serializeListGroup(items);

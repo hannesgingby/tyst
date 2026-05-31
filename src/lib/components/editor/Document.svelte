@@ -1,6 +1,10 @@
 <script lang="ts">
     import { tick } from "svelte";
     import Block from "./Block.svelte";
+    import {
+        resolveBlockHeadingSpacing,
+        resolveBlockListSpacing,
+    } from "$lib/document/blockLevelStyle";
     import { documentStore } from "$lib/document/store.svelte";
     import { formatItem, formatNumbering } from "$lib/document/numbering";
     import { cmToPx, ptToPx } from "$lib/document/units";
@@ -115,7 +119,10 @@
 
     // Per list item: tight spacing flag and whether another item follows in the group.
     const listItemLayout = $derived.by(() => {
-        const map = new Map<string, { tight: boolean; hasNext: boolean; isFirst: boolean }>();
+        const map = new Map<
+            string,
+            { tight: boolean; hasNext: boolean; isFirst: boolean }
+        >();
         let i = 0;
         while (i < blocks.length) {
             const b = blocks[i];
@@ -132,7 +139,11 @@
             }
             const tight = blocks[i].list?.tight !== false;
             for (let k = 0; k < ids.length; k++) {
-                map.set(ids[k], { tight, hasNext: k < ids.length - 1, isFirst: k === 0 });
+                map.set(ids[k], {
+                    tight,
+                    hasNext: k < ids.length - 1,
+                    isFirst: k === 0,
+                });
             }
             i = j;
         }
@@ -145,6 +156,48 @@
 
     function isEmbedBlock(b: (typeof blocks)[number] | undefined): boolean {
         return !!(b && (b.image || b.line || b.rect || b.outline));
+    }
+
+    function aboveContribution(b: (typeof blocks)[number]): number {
+        if (b.heading) {
+            return (
+                resolveBlockHeadingSpacing(documentStore.model, b)?.above ?? 0
+            );
+        }
+        if (b.list) {
+            return (
+                resolveBlockListSpacing(
+                    documentStore.model,
+                    b,
+                    documentStore.pageBreakBlockIds,
+                )?.above ?? 0
+            );
+        }
+        if (isEmbedBlock(b)) {
+            return documentStore.resolveEmbedSpacing(b)?.above ?? 0;
+        }
+        return 0;
+    }
+
+    function belowContribution(b: (typeof blocks)[number]): number {
+        if (b.heading) {
+            return (
+                resolveBlockHeadingSpacing(documentStore.model, b)?.below ?? 0
+            );
+        }
+        if (b.list) {
+            return (
+                resolveBlockListSpacing(
+                    documentStore.model,
+                    b,
+                    documentStore.pageBreakBlockIds,
+                )?.below ?? 0
+            );
+        }
+        if (isEmbedBlock(b)) {
+            return documentStore.resolveEmbedSpacing(b)?.below ?? 0;
+        }
+        return 0;
     }
 
     // Non-continuation blocks that directly precede a continuation block must
@@ -176,14 +229,20 @@
                 // Otherwise: parbreak when something follows this blank (another blank
                 // or text), linebreak when this blank is terminal (end of doc, or the
                 // next element is a heading/list that handles its own spacing).
-                // A parbreak only makes visual sense when real content sandwiches
-                // this blank on both sides. With nothing above or below (the doc
-                // is entirely empty / leading or trailing blanks), Enter should
-                // act like a plain newline.
+                // Parbreak only when this blank sits between real content on at
+                // least one side. With nothing anywhere (entirely empty doc)
+                // Enter should just advance a line. And the blank immediately
+                // before a heading/list/embed reverts to linebreak, since the
+                // block-level element supplies its own explicit `above`.
                 let hasContentAbove = false;
                 for (let j = i - 1; j >= 0; j--) {
                     const bb = blocks[j];
-                    if (bb.text !== "" || isEmbedBlock(bb) || bb.heading || bb.list) {
+                    if (
+                        bb.text !== "" ||
+                        isEmbedBlock(bb) ||
+                        bb.heading ||
+                        bb.list
+                    ) {
                         hasContentAbove = true;
                         break;
                     }
@@ -191,16 +250,34 @@
                 let hasContentBelow = false;
                 for (let j = i + 1; j < blocks.length; j++) {
                     const bb = blocks[j];
-                    if (bb.text !== "" || isEmbedBlock(bb) || bb.heading || bb.list) {
+                    if (
+                        bb.text !== "" ||
+                        isEmbedBlock(bb) ||
+                        bb.heading ||
+                        bb.list
+                    ) {
                         hasContentBelow = true;
                         break;
                     }
                 }
+                const prevIsBlank =
+                    prev != null &&
+                    !prev.continuation &&
+                    prev.text === "" &&
+                    !prev.heading &&
+                    !prev.list &&
+                    !isEmbedBlock(prev);
                 if (prev?.heading || isListBlock(prev)) {
                     roles.set(b.id, "linebreak");
-                } else if (!hasContentAbove || !hasContentBelow) {
+                } else if (prevIsBlank) {
+                    // Only the first blank after real content pays the parbreak
+                    // gap; subsequent blanks in the run advance one line each.
                     roles.set(b.id, "linebreak");
-                } else if (next == null || next.heading || isListBlock(next) || next.continuation) {
+                } else if (next == null || next.continuation) {
+                    roles.set(b.id, "linebreak");
+                } else if (next.heading || next.list || isEmbedBlock(next)) {
+                    roles.set(b.id, "linebreak");
+                } else if (!hasContentAbove && !hasContentBelow) {
                     roles.set(b.id, "linebreak");
                 } else {
                     roles.set(b.id, "parbreak");
@@ -221,14 +298,22 @@
             let prev = model.paragraph.spacing;
             let next = model.paragraph.spacing;
             for (let j = i - 1; j >= 0; j--) {
-                if ((blocks[j].text !== "" || isEmbedBlock(blocks[j])) && !blocks[j].continuation) {
-                    prev = documentStore.resolveParagraph(blocks[j]).spacing;
+                const pb = blocks[j];
+                if ((pb.text !== "" || isEmbedBlock(pb)) && !pb.continuation) {
+                    prev = Math.max(
+                        documentStore.resolveParagraph(pb).spacing,
+                        belowContribution(pb),
+                    );
                     break;
                 }
             }
             for (let j = i + 1; j < blocks.length; j++) {
-                if ((blocks[j].text !== "" || isEmbedBlock(blocks[j])) && !blocks[j].continuation) {
-                    next = documentStore.resolveParagraph(blocks[j]).spacing;
+                const nb = blocks[j];
+                if ((nb.text !== "" || isEmbedBlock(nb)) && !nb.continuation) {
+                    next = Math.max(
+                        documentStore.resolveParagraph(nb).spacing,
+                        aboveContribution(nb),
+                    );
                     break;
                 }
             }
@@ -321,7 +406,9 @@
               alignment: "left" | "center" | "right";
           };
 
-    function buildRenderItems(pageBlocks: (typeof blocks)[number][]): RenderItem[] {
+    function buildRenderItems(
+        pageBlocks: (typeof blocks)[number][],
+    ): RenderItem[] {
         const out: RenderItem[] = [];
         let i = 0;
         while (i < pageBlocks.length) {
@@ -329,14 +416,20 @@
             if (b.list) {
                 const kind = b.list.kind;
                 const group: (typeof blocks)[number][] = [];
-                while (i < pageBlocks.length && pageBlocks[i].list?.kind === kind) {
+                while (
+                    i < pageBlocks.length &&
+                    pageBlocks[i].list?.kind === kind
+                ) {
                     group.push(pageBlocks[i]);
                     i++;
                 }
                 out.push({
                     kind: "listGroup",
                     items: group,
-                    alignment: (group[0].alignment ?? "left") as "left" | "center" | "right",
+                    alignment: (group[0].alignment ?? "left") as
+                        | "left"
+                        | "center"
+                        | "right",
                 });
             } else {
                 out.push({ kind: "block", block: b, index: i });
@@ -531,7 +624,10 @@
         const idx = blocks.findIndex((b) => b.id === id);
         if (idx > 0 && blocks[idx]?.text === "") {
             const prev = blocks[idx - 1];
-            if (prev && (prev.image || prev.line || prev.rect || prev.outline)) {
+            if (
+                prev &&
+                (prev.image || prev.line || prev.rect || prev.outline)
+            ) {
                 const result = documentStore.deleteEmbed(prev.id);
                 if (result) {
                     pendingCaret = result;
@@ -624,7 +720,8 @@
                 ) {
                     event.preventDefault();
                     event.stopPropagation();
-                    const newText = text.slice(0, offset - 1) + text.slice(offset);
+                    const newText =
+                        text.slice(0, offset - 1) + text.slice(offset);
                     documentStore.setBlockText(id, newText);
                     syncBlockDom(active, newText);
                     setCaretOffset(active, enterOffset(newText.length, false));
@@ -637,7 +734,8 @@
                 if (isCont) {
                     event.preventDefault();
                     event.stopPropagation();
-                    const newText = text.slice(0, offset - 1) + text.slice(offset);
+                    const newText =
+                        text.slice(0, offset - 1) + text.slice(offset);
                     if (newText === "") {
                         documentStore.setBlockText(id, "");
                         onMergePrev(id);
@@ -673,7 +771,10 @@
                 if (prevEl) {
                     documentStore.activeBlockId = prev.id;
                     prevEl.focus();
-                    setCaretOffset(prevEl, enterOffset(prev.text.length, false));
+                    setCaretOffset(
+                        prevEl,
+                        enterOffset(prev.text.length, false),
+                    );
                 }
             }
         }
@@ -756,25 +857,38 @@
                             item.alignment === "center"
                                 ? "justify-center"
                                 : item.alignment === "right"
-                                    ? "justify-end"
-                                    : "justify-start"}
+                                  ? "justify-end"
+                                  : "justify-start"}
                         <!-- The group is `inline-flex flex-col items-stretch` so it
                              shrinks to the widest item but stretches each row to
                              the group width, keeping markers in column 1. -->
                         <div class={["flex w-full", justifyClass]}>
-                            <div class="inline-flex max-w-full flex-col items-stretch">
+                            <div
+                                class="inline-flex max-w-full flex-col items-stretch"
+                            >
                                 {#each item.items as block (block.id)}
                                     <Block
                                         {block}
                                         scale={RENDER_SCALE}
                                         role={blockRoles.get(block.id)}
-                                        spacingEm={parbreakSpacings.get(block.id)}
-                                        renderInline={renderInlineIds.has(block.id)}
+                                        spacingEm={parbreakSpacings.get(
+                                            block.id,
+                                        )}
+                                        renderInline={renderInlineIds.has(
+                                            block.id,
+                                        )}
                                         marker={listMarkers.get(block.id)}
-                                        headingPrefix={headingNumbers.get(block.id)}
-                                        listTight={listItemLayout.get(block.id)?.tight}
-                                        listHasNext={listItemLayout.get(block.id)?.hasNext}
-                                        listGroupFirst={listItemLayout.get(block.id)?.isFirst}
+                                        headingPrefix={headingNumbers.get(
+                                            block.id,
+                                        )}
+                                        listTight={listItemLayout.get(block.id)
+                                            ?.tight}
+                                        listHasNext={listItemLayout.get(
+                                            block.id,
+                                        )?.hasNext}
+                                        listGroupFirst={listItemLayout.get(
+                                            block.id,
+                                        )?.isFirst}
                                         suppressAbove={pageTopIds.has(block.id)}
                                         registerel={registerEl}
                                         onheight={onHeight}
@@ -799,7 +913,8 @@
                             headingPrefix={headingNumbers.get(block.id)}
                             listTight={listItemLayout.get(block.id)?.tight}
                             listHasNext={listItemLayout.get(block.id)?.hasNext}
-                            listGroupFirst={listItemLayout.get(block.id)?.isFirst}
+                            listGroupFirst={listItemLayout.get(block.id)
+                                ?.isFirst}
                             suppressAbove={pageTopIds.has(block.id)}
                             placeholder={pageIdx === 0 &&
                             item.index === 0 &&
