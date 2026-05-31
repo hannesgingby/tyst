@@ -991,9 +991,29 @@ class DocumentStore {
 	 */
 	mergeWithPrevious(id: string): { id: string; offset: number } | null {
 		const index = this.blockIndex(id);
-		if (index <= 0) return null;
-		const prev = this.model.blocks[index - 1];
+		if (index < 0) return null;
 		const block = this.model.blocks[index];
+		// First block: nothing to merge backwards into. If it's an empty plain
+		// block and another block follows, drop it so the next block becomes the
+		// new top of the document (mirrors Backspace behaviour in other editors).
+		if (index === 0) {
+			if (
+				block.text === "" &&
+				!block.heading &&
+				!block.list &&
+				!block.image &&
+				!block.line &&
+				!block.rect &&
+				!block.outline &&
+				this.model.blocks.length > 1
+			) {
+				this.model.blocks.splice(0, 1);
+				const next = this.model.blocks[0];
+				return { id: next.id, offset: 0 };
+			}
+			return null;
+		}
+		const prev = this.model.blocks[index - 1];
 		const offset = prev.text.length;
 		prev.text += block.text;
 		this.model.blocks.splice(index, 1);

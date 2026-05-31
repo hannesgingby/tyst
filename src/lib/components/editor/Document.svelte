@@ -506,6 +506,9 @@
         }
         const result = documentStore.mergeWithPrevious(id);
         if (!result) return;
+        // Update active block right away so the toolbar reflects the new target,
+        // even when the focus target is an embed with no editable element.
+        documentStore.activeBlockId = result.id;
         pendingCaret = result;
         focusPending();
     }
