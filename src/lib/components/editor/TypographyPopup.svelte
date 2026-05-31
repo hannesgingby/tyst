@@ -147,8 +147,8 @@
 					unit="%"
 					min={-10}
 					max={10}
-					step={1}
-					decimals={0}
+					step={0.1}
+					decimals={1}
 					onchange={(v) => documentStore.setTypography("tracking", v)}
 				/>
 			</div>

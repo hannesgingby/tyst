@@ -58,9 +58,7 @@
 	const canCycleUnit = $derived(
 		!disabled && unit != null && units != null && units.length > 1,
 	);
-	const hasUnitSuffix = $derived(
-		unit != null && (unit !== "%" || canCycleUnit),
-	);
+	const hasUnitSuffix = $derived(unit != null);
 
 	function cycleUnit(): void {
 		if (!canCycleUnit || unit == null || units == null) return;
