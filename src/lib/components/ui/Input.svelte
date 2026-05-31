@@ -16,13 +16,20 @@
 		min?: number;
 		max?: number;
 		step?: number;
+		/** Step used when dragging the icon; defaults to `step`. */
+		dragStep?: number;
 		decimals?: number;
 		emptyLabel?: string;
 		disabled?: boolean;
+		/** Dimmed like disabled but still clickable (e.g. "None" preset fields). */
+		inactive?: boolean;
+		/** Allow clearing the value to `null` with an empty commit. */
+		nullable?: boolean;
 		/** Background utility class for the field surface. */
 		bg?: string;
 		class?: ClassValue;
 		onchange?: (value: number) => void;
+		onnull?: () => void;
 		onunitchange?: (unit: string) => void;
 	}
 
@@ -35,12 +42,16 @@
 		min = 0,
 		max = 100,
 		step = 1,
+		dragStep,
 		decimals,
 		emptyLabel,
 		disabled = false,
+		inactive = false,
+		nullable = false,
 		bg = "bg-bg-950",
 		class: className,
 		onchange,
+		onnull,
 		onunitchange,
 	}: Props = $props();
 
@@ -77,10 +88,18 @@
 
 	const displayText = $derived(formatValue());
 
-	function setValue(next: number): void {
-		const snapped = snapToStep(next, step, min, max);
+	const effectiveDragStep = $derived(dragStep ?? step);
+
+	function setValue(next: number, snap = step): void {
+		const snapped = snapToStep(next, snap, min, max);
 		value = snapped;
 		onchange?.(snapped);
+	}
+
+	function isEmptyCommit(text: string): boolean {
+		if (text === "") return true;
+		if (!emptyLabel) return false;
+		return text.toLowerCase() === emptyLabel.toLowerCase();
 	}
 
 	function startEditing(): void {
@@ -96,7 +115,13 @@
 	function commitEdit(): void {
 		if (!isEditing) return;
 		isEditing = false;
-		const parsed = parseDecimal(editValue.trim());
+		const trimmed = editValue.trim();
+		if (nullable && isEmptyCommit(trimmed)) {
+			value = null;
+			onnull?.();
+			return;
+		}
+		const parsed = parseDecimal(trimmed);
 		if (Number.isNaN(parsed)) return;
 		setValue(parsed);
 	}
@@ -130,7 +155,7 @@
 		const onMove = (moveEvent: PointerEvent): void => {
 			const deltaY = startY - moveEvent.clientY;
 			const steps = Math.round(deltaY / DRAG_PIXELS_PER_STEP);
-			setValue(startValue + steps * step);
+			setValue(startValue + steps * effectiveDragStep, effectiveDragStep);
 		};
 
 		const onUp = (): void => {
@@ -150,7 +175,7 @@
 		"field-shell grid items-center gap-x-2 pl-3",
 		bg,
 		hasUnitSuffix ? "pr-4" : "pr-3",
-		disabled && "opacity-50",
+		(disabled || inactive) && "opacity-50",
 		className,
 	]}
 	style:grid-template-columns={gridColumns}

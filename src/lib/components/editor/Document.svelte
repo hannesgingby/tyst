@@ -287,6 +287,41 @@
         return roles;
     });
 
+    // Match Typst: first-line indent applies to consecutive paragraphs only,
+    // not the first paragraph in the document or after block-level content.
+    const skipsFirstLineIndent = $derived.by(() => {
+        const map = new Map<string, boolean>();
+        for (let i = 0; i < blocks.length; i++) {
+            const b = blocks[i];
+            if (
+                b.continuation ||
+                b.heading ||
+                b.list ||
+                isEmbedBlock(b) ||
+                b.text === ""
+            ) {
+                map.set(b.id, true);
+                continue;
+            }
+            let sawParbreak = false;
+            let skip = true;
+            for (let j = i - 1; j >= 0; j--) {
+                const prev = blocks[j];
+                if (prev.continuation) continue;
+                if (prev.heading || prev.list || isEmbedBlock(prev)) break;
+                if (prev.text !== "") {
+                    skip = !sawParbreak;
+                    break;
+                }
+                if (blockRoles.get(prev.id) === "parbreak") {
+                    sawParbreak = true;
+                }
+            }
+            map.set(b.id, skip);
+        }
+        return map;
+    });
+
     // For each parbreak empty block: the visual gap should reflect the maximum
     // paragraph spacing of the adjacent content blocks (matching Typst's model).
     const parbreakSpacings = $derived.by(() => {
@@ -965,6 +1000,9 @@
                                             block.id,
                                         )?.isFirst}
                                         suppressAbove={pageTopIds.has(block.id)}
+                                        skipsFirstLineIndent={skipsFirstLineIndent.get(
+                                            block.id,
+                                        ) ?? true}
                                         registerel={registerEl}
                                         onheight={onHeight}
                                         onfocusblock={onFocusBlock}
@@ -991,6 +1029,9 @@
                             listGroupFirst={listItemLayout.get(block.id)
                                 ?.isFirst}
                             suppressAbove={pageTopIds.has(block.id)}
+                            skipsFirstLineIndent={skipsFirstLineIndent.get(
+                                block.id,
+                            ) ?? true}
                             placeholder={pageIdx === 0 &&
                             item.index === 0 &&
                             blocks.length === 1

@@ -66,7 +66,7 @@ function defaultModel(): DocumentModel {
 			spacing: 1.2,
 			justify: false,
 			firstLineIndent: null,
-			hangingIndent: null,
+			hangingIndent: 0,
 		},
 		headings: { outlined: true },
 		headingLinks: { 1: true, 2: true, 3: true, 4: true },
@@ -996,7 +996,8 @@ class DocumentStore {
 	}
 
 	resolveParagraph(block: Block): ParagraphSettings {
-		return { ...this.model.paragraph, ...(block.paragraph ?? {}) };
+		const p = { ...this.model.paragraph, ...(block.paragraph ?? {}) };
+		return { ...p, hangingIndent: p.hangingIndent ?? 0 };
 	}
 
 	/**
@@ -1018,16 +1019,24 @@ class DocumentStore {
 	setTypography<K extends keyof TypographySettings>(key: K, value: TypographySettings[K]): void {
 		if (this.typographyLinked) {
 			this.model.typography[key] = value;
-			return;
+		} else {
+			for (const id of this.targetBlockIds) {
+				const b = this.findBlock(id);
+				if (!b) continue;
+				(b.typography ??= {})[key] = value;
+			}
 		}
-		for (const id of this.targetBlockIds) {
-			const b = this.findBlock(id);
-			if (!b) continue;
-			(b.typography ??= {})[key] = value;
-		}
+		if (key === "leading") this.syncSpacingToLeadingIfLinked();
 	}
 
-	setParagraph<K extends keyof ParagraphSettings>(key: K, value: ParagraphSettings[K]): void {
+	setParagraph<K extends keyof ParagraphSettings>(
+		key: K,
+		value: ParagraphSettings[K],
+		opts?: { fromLeadingSync?: boolean },
+	): void {
+		if (key === "spacing" && !opts?.fromLeadingSync) {
+			this.setSpacingFollowsLeading(false);
+		}
 		if (this.paragraphLinked) {
 			this.model.paragraph[key] = value;
 			return;
@@ -1037,6 +1046,51 @@ class DocumentStore {
 			if (!b) continue;
 			(b.paragraph ??= {})[key] = value;
 		}
+	}
+
+	/** Set or clear first-line indent; links paragraph spacing to leading when enabled. */
+	setFirstLineIndent(value: number | null): void {
+		if (value == null) {
+			const wasLinked = this.popupSpacingFollowsLeading();
+			this.setParagraph("firstLineIndent", null);
+			this.setSpacingFollowsLeading(false);
+			if (wasLinked) {
+				this.setParagraph("spacing", 1.2, { fromLeadingSync: true });
+			}
+			return;
+		}
+		const wasUnset = this.popupParagraph.firstLineIndent == null;
+		this.setParagraph("firstLineIndent", value);
+		if (wasUnset) {
+			this.setSpacingFollowsLeading(true);
+			this.syncSpacingToLeadingIfLinked();
+		}
+	}
+
+	private popupSpacingFollowsLeading(): boolean {
+		return this.popupParagraph.spacingFollowsLeading === true;
+	}
+
+	private setSpacingFollowsLeading(value: boolean): void {
+		if (this.paragraphLinked) {
+			if (value) this.model.paragraph.spacingFollowsLeading = true;
+			else delete this.model.paragraph.spacingFollowsLeading;
+			return;
+		}
+		for (const id of this.targetBlockIds) {
+			const b = this.findBlock(id);
+			if (!b) continue;
+			const p = (b.paragraph ??= {});
+			if (value) p.spacingFollowsLeading = true;
+			else delete p.spacingFollowsLeading;
+		}
+	}
+
+	private syncSpacingToLeadingIfLinked(): void {
+		if (!this.popupSpacingFollowsLeading()) return;
+		this.setParagraph("spacing", this.popupTypography.leading, {
+			fromLeadingSync: true,
+		});
 	}
 
 	/**

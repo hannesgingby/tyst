@@ -37,6 +37,8 @@
 		listGroupFirst?: boolean;
 		/** This block is the first non-continuation block on its page. */
 		suppressAbove?: boolean;
+		/** Omit first-line indent (first paragraph in doc / after block-level). */
+		skipsFirstLineIndent?: boolean;
 		registerel: (id: string, el: HTMLElement | null) => void;
 		onheight: (id: string, px: number) => void;
 		onfocusblock: (id: string) => void;
@@ -59,6 +61,7 @@
 		listHasNext = false,
 		listGroupFirst = false,
 		suppressAbove = false,
+		skipsFirstLineIndent = true,
 		registerel,
 		onheight,
 		onfocusblock,
@@ -101,8 +104,10 @@
 	const fontWeight = $derived(
 		block.heading ? 700 : (WEIGHT_CSS[typography.weight] ?? 400),
 	);
-	const firstLineIndentEm = $derived(
-		block.heading || block.list ? 0 : (paragraph.firstLineIndent ?? 0),
+	const firstLineIndentPx = $derived(
+		block.heading || block.list || block.outline || skipsFirstLineIndent
+			? 0
+			: ptToPx(paragraph.firstLineIndent ?? 0) * scale,
 	);
 
 	const effectiveLineHeight = $derived(
@@ -382,7 +387,7 @@
 		style:letter-spacing="{letterSpacingPx}px"
 		style:color={typography.color}
 		style:text-align={textAlign}
-		style:text-indent="{firstLineIndentEm}em"
+		style:text-indent="{firstLineIndentPx}px"
 		style:cursor={role === "parbreak" ? "default" : undefined}
 		onmousedown={onParbreakMouseDown}
 		onfocus={() => onfocusblock(block.id)}

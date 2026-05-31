@@ -20,6 +20,7 @@
 	// otherwise the active block's resolved settings.
 	const typography = $derived(documentStore.popupTypography);
 	const paragraph = $derived(documentStore.popupParagraph);
+	const spacingFollowsLeading = $derived(paragraph.spacingFollowsLeading === true);
 
 	// Size is stored in points; the input may display pt/px/mm. The unit is a
 	// local display preference and converts the value to preserve physical size.
@@ -43,7 +44,8 @@
 				min={0.5}
 				max={3}
 				step={0.1}
-				decimals={1}
+				dragStep={0.1}
+				decimals={spacingFollowsLeading ? 2 : 1}
 				onchange={(v) => documentStore.setParagraph("spacing", v)}
 			/>
 
@@ -51,23 +53,27 @@
 				<FieldLabel label="First-line indent">
 					<Input
 						value={paragraph.firstLineIndent}
-						unit="em"
+						unit="pt"
 						emptyLabel="None"
-						disabled
+						inactive={paragraph.firstLineIndent == null}
+						nullable
 						min={0}
-						max={10}
-						step={0.1}
+						max={72}
+						step={0.5}
+						decimals={1}
+						onchange={(v) => documentStore.setFirstLineIndent(v)}
+						onnull={() => documentStore.setFirstLineIndent(null)}
 					/>
 				</FieldLabel>
 				<FieldLabel label="Hanging indent">
 					<Input
 						value={paragraph.hangingIndent}
-						unit="em"
-						emptyLabel="None"
-						disabled
+						unit="pt"
 						min={0}
-						max={10}
-						step={0.1}
+						max={72}
+						step={0.5}
+						decimals={1}
+						onchange={(v) => documentStore.setParagraph("hangingIndent", v)}
 					/>
 				</FieldLabel>
 			</div>

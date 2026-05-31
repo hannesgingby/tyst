@@ -76,10 +76,16 @@ export interface ParagraphSettings {
 	/** Spacing between paragraphs in em — maps to Typst `par(spacing)`. */
 	spacing: number;
 	justify: boolean;
-	/** First-line indent in em, or `null` for none. */
+	/** First-line indent in pt, or `null` for none. */
 	firstLineIndent: number | null;
-	/** Hanging indent in em, or `null` for none. */
-	hangingIndent: number | null;
+	/** Hanging indent in pt — Typst default is `0pt`. */
+	hangingIndent: number;
+	/**
+	 * When true, `spacing` tracks `typography.leading` (Typst recommends
+	 * `spacing: 0.65em` with a first-line indent). Cleared when spacing is
+	 * edited directly or first-line indent is removed.
+	 */
+	spacingFollowsLeading?: boolean;
 }
 
 /** Per-block overrides of the document's default typography ("body" tag). */

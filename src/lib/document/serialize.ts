@@ -60,8 +60,9 @@ function parArgs(leading: number | undefined, p: Partial<ParagraphSettings>): st
 	if (leading !== undefined) lines.push(`leading: ${typstNumber(leading)}em`);
 	if (p.spacing !== undefined) lines.push(`spacing: ${typstNumber(p.spacing)}em`);
 	if (p.justify !== undefined) lines.push(`justify: ${p.justify ? "true" : "false"}`);
-	if (p.firstLineIndent != null) lines.push(`first-line-indent: ${typstNumber(p.firstLineIndent)}em`);
-	if (p.hangingIndent != null) lines.push(`hanging-indent: ${typstNumber(p.hangingIndent)}em`);
+	if (p.firstLineIndent != null)
+		lines.push(`first-line-indent: ${typstNumber(p.firstLineIndent)}pt`);
+	if (p.hangingIndent) lines.push(`hanging-indent: ${typstNumber(p.hangingIndent)}pt`);
 	return lines;
 }
 
