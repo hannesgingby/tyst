@@ -166,6 +166,19 @@ class DocumentStore {
 		return null;
 	});
 
+	/**
+	 * Set by the toolbar when the user clicks outside the tied popup. Suppresses
+	 * the popup until either the active block changes or the user re-clicks the
+	 * matching embed (which calls `activateEmbed` to clear this).
+	 */
+	popupDismissed = $state<EmbedKind | null>(null);
+
+	/** Make `id` the active block and clear any popup dismissal for it. */
+	activateEmbed(id: string): void {
+		this.popupDismissed = null;
+		this.activeBlockId = id;
+	}
+
 	readonly typ = $derived.by(() =>
 		serializeDocument(this.model, this.pageBreakBlockIds),
 	);
@@ -710,13 +723,12 @@ class DocumentStore {
 		};
 	}
 
-	/** Default settings for a freshly-inserted rectangle embed. */
+	/** Default settings for a freshly-inserted rectangle embed (60×30 px in pt). */
 	defaultRectSettings(): RectSettings {
 		return {
-			width: 60,
-			widthUnit: "px",
-			height: 30,
-			heightUnit: "px",
+			// 60px = 45pt, 30px = 22.5pt. The popup displays in px by default.
+			width: 45,
+			height: 22.5,
 			fillEnabled: false,
 			fillColor: "#000000",
 			radius: 0,

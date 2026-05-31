@@ -31,13 +31,12 @@
 
     // Click-outside-to-close. When the user clicks somewhere that's neither
     // the open popup nor the matching embed block in the document, dismiss
-    // the tied popup. Reset whenever the active block changes (re-clicking the
-    // embed always re-opens the popup).
-    let dismissedKind = $state<"image" | "line" | null>(null);
+    // the tied popup. The store resets dismissal whenever the user re-clicks
+    // the embed (which goes through `activateEmbed`).
     $effect(() => {
         // Reset dismissal whenever the active block id changes.
         documentStore.activeBlockId;
-        dismissedKind = null;
+        documentStore.popupDismissed = null;
     });
 
     let imageWrapEl = $state<HTMLDivElement | null>(null);
@@ -52,16 +51,16 @@
 
     function onDocumentPointerDown(event: PointerEvent): void {
         const target = event.target;
-        if (imageTied && !dismissedKind) {
+        if (imageTied && !documentStore.popupDismissed) {
             const inPopup = imageWrapEl != null && target instanceof Node && imageWrapEl.contains(target);
             if (!inPopup && !isInsideActiveEmbed(target)) {
-                dismissedKind = "image";
+                documentStore.popupDismissed = "image";
             }
         }
-        if (lineTied && !dismissedKind) {
+        if (lineTied && !documentStore.popupDismissed) {
             const inPopup = lineWrapEl != null && target instanceof Node && lineWrapEl.contains(target);
             if (!inPopup && !isInsideActiveEmbed(target)) {
-                dismissedKind = "line";
+                documentStore.popupDismissed = "line";
             }
         }
     }
@@ -72,9 +71,9 @@
         return () => document.removeEventListener("pointerdown", onDocumentPointerDown, true);
     });
 
-    const imageOpen = $derived(imageTied && dismissedKind !== "image");
+    const imageOpen = $derived(imageTied && documentStore.popupDismissed !== "image");
     const lineOpen = $derived(
-        (lineTied && dismissedKind !== "line") || lineHoverOpen,
+        (lineTied && documentStore.popupDismissed !== "line") || lineHoverOpen,
     );
 
     type PopupKind = "typography" | "headings" | "list" | "alignment";
@@ -243,8 +242,8 @@
     async function handleImageClick(): Promise<void> {
         // If the image popup was dismissed for a still-active image block,
         // clicking the trigger should just re-open it without a file picker.
-        if (activeBlock.image && imageTied && dismissedKind === "image") {
-            dismissedKind = null;
+        if (activeBlock.image && imageTied && documentStore.popupDismissed === "image") {
+            documentStore.popupDismissed = null;
             return;
         }
         // If an image is already active, picking a file replaces its bytes /
@@ -266,6 +265,7 @@
         if (!picked) return;
         const blockId = documentStore.insertEmbed({
             text: "",
+            alignment: "center",
             image: documentStore.defaultImageSettings(picked.fileName, picked.ext),
         });
         // Move the cached bytes from the reserved id onto the real block id.
@@ -307,18 +307,27 @@
     active: boolean,
     onclick: () => void,
     iconClass = "size-6",
+    chevron = false,
 )}
     <Tooltip {label} position="bottom" disabled={active}>
         <button
             type="button"
             class={[
-                "relative flex h-6 items-center justify-center rounded-md transition-opacity duration-150 [transition-timing-function:cubic-bezier(0.33,1,0.68,1)]",
+                "tool-btn relative flex h-6 items-center justify-center gap-0.5 rounded-md transition-opacity duration-150 [transition-timing-function:cubic-bezier(0.33,1,0.68,1)]",
                 active ? "toolbar-tool-active" : "hover:opacity-50",
             ]}
             aria-expanded={active}
             {onclick}
         >
             <Icon {name} class="{iconClass} {active ? 'text-current' : 'text-icon'}" />
+            {#if chevron}
+                <span class="chevron" class:active class:open={active}>
+                    <Icon
+                        name="nav-arrow-down"
+                        class="size-3.5 {active ? 'text-current' : 'text-icon'}"
+                    />
+                </span>
+            {/if}
         </button>
     </Tooltip>
 {/snippet}
@@ -349,8 +358,10 @@
                     >
                         {@render embedTrigger("line", "Line", lineOpen, () => {
                             // Reopen if the popup was previously dismissed for a still-active shape.
-                            if (lineTied && dismissedKind === "line") dismissedKind = null;
-                        })}
+                            if (lineTied && documentStore.popupDismissed === "line") {
+                                documentStore.popupDismissed = null;
+                            }
+                        }, "size-6", true)}
                         {#if lineOpen}
                             <div
                                 class="absolute bottom-full -left-8 z-[60] pb-2.5"
@@ -440,3 +451,16 @@
         {/each}
     </div>
 </div>
+
+<style>
+    .chevron {
+        display: inline-flex;
+        transform: rotate(0deg);
+        transform-origin: center;
+        transition: transform 300ms cubic-bezier(0.33, 1, 0.68, 1);
+    }
+    .chevron.open,
+    .tool-btn:hover .chevron {
+        transform: rotate(180deg);
+    }
+</style>

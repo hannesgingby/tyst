@@ -160,9 +160,9 @@ export interface ImageSettings {
 	/** Lowercase file extension without the dot (e.g. "png"). */
 	ext: string;
 	alt?: string;
-	/** Width in px. null/undefined = auto. */
+	/** Width in pt (Typst native). null/undefined = auto. Popup may cycle pt/px display. */
 	width?: number | null;
-	/** Height in px. null/undefined = auto. */
+	/** Height in pt (Typst native). null/undefined = auto. */
 	height?: number | null;
 	fit?: ImageFit;
 	scaling?: ImageScaling;
@@ -194,14 +194,12 @@ export interface LineSettings {
 	spacing?: BlockSpacing;
 }
 
-export type LengthUnit = "px" | "pt";
-
 /** Embed: a rectangle block (non-editable). Maps to Typst `#rect(...)`. */
 export interface RectSettings {
+	/** Width in pt. null/undefined = auto. Popup may cycle pt/px display. */
 	width: number | null;
-	widthUnit: LengthUnit;
+	/** Height in pt. null/undefined = auto. */
 	height: number | null;
-	heightUnit: LengthUnit;
 	fillEnabled: boolean;
 	fillColor: string;
 	radius: number;

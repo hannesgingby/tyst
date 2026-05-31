@@ -314,24 +314,33 @@
 	{@const rect = block.rect}
 	{@const cached = img ? imageCache.get(block.id) : undefined}
 	{@const spacing = documentStore.resolveEmbedSpacing(block)}
+	{@const alignClass =
+		block.alignment === "center"
+			? "justify-center"
+			: block.alignment === "right"
+				? "justify-end"
+				: "justify-start"}
 	{@const dashCss = (d: StrokeDash) =>
 		d === "dotted" ? "dotted" : d === "dashed" ? "dashed" : "solid"}
 	<!-- svelte-ignore a11y_click_events_have_key_events -->
 	<!-- svelte-ignore a11y_no_static_element_interactions -->
 	<div
 		bind:this={embedEl}
-		class="doc-embed flex w-full cursor-pointer justify-center"
+		class={["doc-embed flex w-full cursor-pointer", alignClass]}
 		data-block-id={block.id}
 		style:margin-top="{spacing?.above ?? 1.2}em"
 		style:margin-bottom="{spacing?.below ?? 0.35}em"
 		onclick={(e) => {
 			e.preventDefault();
+			// Goes through the store so any earlier popup-dismissal is cleared,
+			// even when the active block id doesn't change.
+			documentStore.activateEmbed(block.id);
 			onfocusblock(block.id);
 		}}
 	>
 		{#if img}
-			{@const wPx = img.width ? img.width * scale : undefined}
-			{@const hPx = img.height ? img.height * scale : undefined}
+			{@const wPx = img.width != null ? ptToPx(img.width) * scale : undefined}
+			{@const hPx = img.height != null ? ptToPx(img.height) * scale : undefined}
 			{#if cached}
 				<img
 					src={cached.dataUrl}
@@ -371,18 +380,8 @@
 				></div>
 			</div>
 		{:else if rect}
-			{@const wRaw = rect.width
-				? rect.widthUnit === "pt"
-					? ptToPx(rect.width)
-					: rect.width
-				: undefined}
-			{@const hRaw = rect.height
-				? rect.heightUnit === "pt"
-					? ptToPx(rect.height)
-					: rect.height
-				: 60}
-			{@const wPx = wRaw != null ? wRaw * scale : undefined}
-			{@const hPx = hRaw * scale}
+			{@const wPx = rect.width != null ? ptToPx(rect.width) * scale : undefined}
+			{@const hPx = (rect.height != null ? ptToPx(rect.height) : 60) * scale}
 			<div
 				class="block"
 				style:width={wPx ? `${wPx}px` : "100%"}

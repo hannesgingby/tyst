@@ -6,6 +6,7 @@
 	import Popup from "$lib/components/ui/Popup.svelte";
 	import { documentStore } from "$lib/document/store.svelte";
 	import type { ImageFit, ImageScaling, ImageSettings } from "$lib/document/types";
+	import { FONT_SIZE_UNITS, fontSizeUnit, ptToUnit, unitToPt } from "$lib/document/units";
 	import { pickAndLoadImage } from "$lib/system/imageCache.svelte";
 	import ShapeSpacingSection from "./ShapeSpacingSection.svelte";
 
@@ -52,6 +53,24 @@
 		patch({ fileName: picked.fileName, ext: picked.ext });
 	}
 
+	// Width/height stored in pt; popup displays in the user's chosen unit
+	// (defaults to px). Matches the font-size cycle in the typography popup.
+	const dimensionUnits = FONT_SIZE_UNITS.map((u) => u.unit);
+	let widthUnit = $state("px");
+	let heightUnit = $state("px");
+	const widthCfg = $derived(fontSizeUnit(widthUnit));
+	const heightCfg = $derived(fontSizeUnit(heightUnit));
+	const widthDisplay = $derived(
+		image?.width != null
+			? Number(ptToUnit(image.width, widthUnit).toFixed(widthCfg.decimals))
+			: null,
+	);
+	const heightDisplay = $derived(
+		image?.height != null
+			? Number(ptToUnit(image.height, heightUnit).toFixed(heightCfg.decimals))
+			: null,
+	);
+
 	// Spacing reads the *resolved* value (block override → shared default).
 	// Writes route through the store so that editing while "linked" updates
 	// the shared default instead of forcing an unlink.
@@ -93,26 +112,30 @@
 		<div class="grid grid-cols-2 gap-2">
 			<FieldLabel label="Width">
 				<Input
-					value={image?.width ?? null}
-					onchange={(v) => patch({ width: v })}
+					value={widthDisplay}
+					onchange={(v) => patch({ width: unitToPt(v, widthUnit) })}
 					emptyLabel="Auto"
-					unit="px"
-					min={1}
-					max={10000}
-					step={1}
-					decimals={0}
+					unit={widthUnit}
+					units={dimensionUnits}
+					onunitchange={(u) => (widthUnit = u)}
+					min={ptToUnit(1, widthUnit)}
+					max={ptToUnit(10000, widthUnit)}
+					step={widthCfg.step}
+					decimals={widthCfg.decimals}
 				/>
 			</FieldLabel>
 			<FieldLabel label="Height">
 				<Input
-					value={image?.height ?? null}
-					onchange={(v) => patch({ height: v })}
+					value={heightDisplay}
+					onchange={(v) => patch({ height: unitToPt(v, heightUnit) })}
 					emptyLabel="Auto"
-					unit="px"
-					min={1}
-					max={10000}
-					step={1}
-					decimals={0}
+					unit={heightUnit}
+					units={dimensionUnits}
+					onunitchange={(u) => (heightUnit = u)}
+					min={ptToUnit(1, heightUnit)}
+					max={ptToUnit(10000, heightUnit)}
+					step={heightCfg.step}
+					decimals={heightCfg.decimals}
 				/>
 			</FieldLabel>
 		</div>
