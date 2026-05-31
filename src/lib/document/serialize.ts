@@ -10,6 +10,7 @@ import type {
 	LineSettings,
 	ListSettings,
 	Margins,
+	OutlineSettings,
 	PageSettings,
 	ParagraphSettings,
 	RectSettings,
@@ -253,10 +254,23 @@ function serializeRect(rect: RectSettings): string {
 	return `#rect(${args.join(", ")})`;
 }
 
+function serializeOutline(block: Block, outline: OutlineSettings): string {
+	const args: string[] = [];
+	const title = block.text.trim();
+	if (title) args.push(`title: [${escapeText(block.text)}]`);
+	if (outline.target && outline.target.trim() && outline.target.trim() !== "heading") {
+		args.push(`target: ${outline.target.trim()}`);
+	}
+	if (outline.depth != null) args.push(`depth: ${outline.depth}`);
+	if (outline.indent != null) args.push(`indent: ${typstNumber(outline.indent)}pt`);
+	return args.length > 0 ? `#outline(${args.join(", ")})` : `#outline()`;
+}
+
 function serializeEmbed(doc: DocumentModel, block: Block): string | null {
 	if (block.image) return serializeImage(doc, block, block.image);
 	if (block.line) return serializeLine(block.line);
 	if (block.rect) return serializeRect(block.rect);
+	if (block.outline) return serializeOutline(block, block.outline);
 	return null;
 }
 
@@ -461,14 +475,19 @@ export function serializeDocument(
 		if (embed) {
 			if (hasContent) parts.push("");
 			for (let k = 0; k < pendingBlanks; k++) parts.push("#linebreak()");
-			const sharedKey: "imageSpacingShared" | "lineSpacingShared" | "rectSpacingShared" =
-				block.image
-					? "imageSpacingShared"
-					: block.line
-						? "lineSpacingShared"
-						: "rectSpacingShared";
+			const sharedKey:
+				| "imageSpacingShared"
+				| "lineSpacingShared"
+				| "rectSpacingShared"
+				| "outlineSpacingShared" = block.image
+				? "imageSpacingShared"
+				: block.line
+					? "lineSpacingShared"
+					: block.rect
+						? "rectSpacingShared"
+						: "outlineSpacingShared";
 			const ownSpacing =
-				block.image?.spacing ?? block.line?.spacing ?? block.rect?.spacing;
+				block.image?.spacing ?? block.line?.spacing ?? block.rect?.spacing ?? block.outline?.spacing;
 			const spacing = ownSpacing ?? doc[sharedKey] ?? EMBED_SPACING_DEFAULT;
 			parts.push(wrapAligned(wrapBlock(embed, spacing), block.alignment));
 			pushBlockSeparator();

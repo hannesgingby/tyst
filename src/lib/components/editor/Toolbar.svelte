@@ -9,6 +9,7 @@
     import ImagePopup from "./ImagePopup.svelte";
     import LinePopup from "./LinePopup.svelte";
     import ListPopup from "./ListPopup.svelte";
+    import OutlinePopup from "./OutlinePopup.svelte";
     import TypographyPopup from "./TypographyPopup.svelte";
 
     const activeBlock = $derived(documentStore.activeBlock);
@@ -24,6 +25,7 @@
     const lineTied = $derived(
         documentStore.tiedPopup === "line" || documentStore.tiedPopup === "rect",
     );
+    const outlineTied = $derived(documentStore.tiedPopup === "outline");
 
     // Hover-to-open for the Line tool (matches Headings/List behaviour). When
     // a shape is active the popup is "tied" open regardless of hover.
@@ -41,6 +43,7 @@
 
     let imageWrapEl = $state<HTMLDivElement | null>(null);
     let lineWrapEl = $state<HTMLDivElement | null>(null);
+    let outlineWrapEl = $state<HTMLDivElement | null>(null);
 
     function isInsideActiveEmbed(target: EventTarget | null): boolean {
         if (!(target instanceof HTMLElement)) return false;
@@ -63,10 +66,16 @@
                 documentStore.popupDismissed = "line";
             }
         }
+        if (outlineTied && !documentStore.popupDismissed) {
+            const inPopup = outlineWrapEl != null && target instanceof Node && outlineWrapEl.contains(target);
+            if (!inPopup && !isInsideActiveEmbed(target)) {
+                documentStore.popupDismissed = "outline";
+            }
+        }
     }
 
     $effect(() => {
-        if (!imageTied && !lineTied) return;
+        if (!imageTied && !lineTied && !outlineTied) return;
         document.addEventListener("pointerdown", onDocumentPointerDown, true);
         return () => document.removeEventListener("pointerdown", onDocumentPointerDown, true);
     });
@@ -75,6 +84,25 @@
     const lineOpen = $derived(
         (lineTied && documentStore.popupDismissed !== "line") || lineHoverOpen,
     );
+    const outlineOpen = $derived(outlineTied && documentStore.popupDismissed !== "outline");
+
+    function handleOutlineClick(): void {
+        // If popup was dismissed for an active outline block, reopen it.
+        if (activeBlock.outline && outlineTied && documentStore.popupDismissed === "outline") {
+            documentStore.popupDismissed = null;
+            return;
+        }
+        if (activeBlock.outline) {
+            documentStore.popupDismissed = null;
+            return;
+        }
+        documentStore.insertEmbed({
+            text: "",
+            outline: documentStore.defaultOutlineSettings(),
+            placeholder: "Title",
+        });
+        documentStore.pendingFocus = documentStore.activeBlockId;
+    }
 
     type PopupKind = "typography" | "headings" | "list" | "alignment";
 
@@ -173,12 +201,7 @@
         },
         {
             tools: [
-                {
-                    kind: "icon",
-                    name: "outline",
-                    label: "Outline",
-                    iconClass: "size-7",
-                },
+                // outline rendered inline below (bespoke wiring)
                 {
                     kind: "icon",
                     name: "footnote",
@@ -399,6 +422,36 @@
                             </div>
                         {/if}
                     </div>
+                {:else if groupIndex === 4}
+                    <div bind:this={outlineWrapEl} class="relative flex items-center">
+                        {@render embedTrigger(
+                            "outline",
+                            "Outline",
+                            outlineTied,
+                            outlineOpen,
+                            handleOutlineClick,
+                            "size-7",
+                        )}
+                        {#if outlineOpen}
+                            <div
+                                class="absolute bottom-full -left-8 z-[60] pb-2.5"
+                                role="dialog"
+                                aria-label="Outline"
+                            >
+                                <OutlinePopup />
+                            </div>
+                        {/if}
+                    </div>
+                    {#each group.tools as tool, toolIndex (toolIndex)}
+                        {#if tool.kind === "icon"}
+                            {@render toolIcon(
+                                tool.name,
+                                tool.label,
+                                tool.iconClass,
+                                tool.shortcut,
+                            )}
+                        {/if}
+                    {/each}
                 {:else}
                     {#each group.tools as tool, toolIndex (toolIndex)}
                         {#if tool.kind === "icon"}

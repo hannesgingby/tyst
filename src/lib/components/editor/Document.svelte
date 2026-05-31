@@ -144,7 +144,7 @@
     }
 
     function isEmbedBlock(b: (typeof blocks)[number] | undefined): boolean {
-        return !!(b && (b.image || b.line || b.rect));
+        return !!(b && (b.image || b.line || b.rect || b.outline));
     }
 
     // Non-continuation blocks that directly precede a continuation block must
@@ -479,7 +479,7 @@
         const idx = blocks.findIndex((b) => b.id === id);
         if (idx > 0 && blocks[idx]?.text === "") {
             const prev = blocks[idx - 1];
-            if (prev && (prev.image || prev.line || prev.rect)) {
+            if (prev && (prev.image || prev.line || prev.rect || prev.outline)) {
                 const result = documentStore.deleteEmbed(prev.id);
                 if (result) {
                     pendingCaret = result;

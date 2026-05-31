@@ -11,6 +11,7 @@ import type {
 	LineSettings,
 	ListKind,
 	ListSettings,
+	OutlineSettings,
 	PageSection,
 	PageSettings,
 	ParagraphSettings,
@@ -93,6 +94,7 @@ function defaultModel(): DocumentModel {
 		imageSpacingShared: { above: 1.2, below: 0.35 },
 		lineSpacingShared: { above: 1.2, below: 0.35 },
 		rectSpacingShared: { above: 1.2, below: 0.35 },
+		outlineSpacingShared: { above: 1.2, below: 0.35 },
 		blocks: [{ id: newId(), text: "" }],
 	};
 }
@@ -163,6 +165,7 @@ class DocumentStore {
 		if (b.image) return "image";
 		if (b.line) return "line";
 		if (b.rect) return "rect";
+		if (b.outline) return "outline";
 		return null;
 	});
 
@@ -194,6 +197,7 @@ class DocumentStore {
 			active.image ||
 			active.line ||
 			active.rect ||
+			active.outline ||
 			active.heading ||
 			active.list
 		)
@@ -201,7 +205,7 @@ class DocumentStore {
 		const idx = this.blockIndex(active.id);
 		if (idx <= 0) return null;
 		const prev = this.model.blocks[idx - 1];
-		if (prev.image || prev.line || prev.rect) return prev.id;
+		if (prev.image || prev.line || prev.rect || prev.outline) return prev.id;
 		return null;
 	});
 
@@ -214,7 +218,7 @@ class DocumentStore {
 		const idx = this.blockIndex(id);
 		if (idx < 0) return null;
 		const b = this.model.blocks[idx];
-		if (!(b.image || b.line || b.rect)) return null;
+		if (!(b.image || b.line || b.rect || b.outline)) return null;
 		this.model.blocks.splice(idx, 1);
 		if (idx > 0) {
 			const before = this.model.blocks[idx - 1];
@@ -733,7 +737,7 @@ class DocumentStore {
 		// Always ensure there's a writable text block after the embed.
 		const nextIndex = this.blockIndex(id) + 1;
 		const next = this.model.blocks[nextIndex];
-		if (!next || next.continuation || next.image || next.line || next.rect) {
+		if (!next || next.continuation || next.image || next.line || next.rect || next.outline) {
 			this.insertBlockObjectAfter(id, { text: "" });
 		}
 		this.activeBlockId = id;
@@ -772,6 +776,11 @@ class DocumentStore {
 		};
 	}
 
+	/** Default settings for a freshly-inserted outline embed. */
+	defaultOutlineSettings(): OutlineSettings {
+		return { target: "heading" };
+	}
+
 	/** Default settings for a freshly-inserted rectangle embed (60×30 px in pt). */
 	defaultRectSettings(): RectSettings {
 		return {
@@ -793,18 +802,21 @@ class DocumentStore {
 	// Editing the popup while "linked" writes to the shared value; clicking
 	// unlink copies the resolved value to the block.
 
-	private embedSharedKey(kind: "image" | "line" | "rect"):
+	private embedSharedKey(kind: EmbedKind):
 		| "imageSpacingShared"
 		| "lineSpacingShared"
-		| "rectSpacingShared" {
+		| "rectSpacingShared"
+		| "outlineSpacingShared" {
 		return kind === "image"
 			? "imageSpacingShared"
 			: kind === "line"
 				? "lineSpacingShared"
-				: "rectSpacingShared";
+				: kind === "rect"
+					? "rectSpacingShared"
+					: "outlineSpacingShared";
 	}
 
-	embedSharedSpacing(kind: "image" | "line" | "rect"): BlockSpacing {
+	embedSharedSpacing(kind: EmbedKind): BlockSpacing {
 		const key = this.embedSharedKey(kind);
 		return (this.model[key] ??= { above: 1.2, below: 0.35 });
 	}
@@ -814,6 +826,7 @@ class DocumentStore {
 		if (block.image) return block.image.spacing ?? this.embedSharedSpacing("image");
 		if (block.line) return block.line.spacing ?? this.embedSharedSpacing("line");
 		if (block.rect) return block.rect.spacing ?? this.embedSharedSpacing("rect");
+		if (block.outline) return block.outline.spacing ?? this.embedSharedSpacing("outline");
 		return null;
 	}
 
@@ -821,7 +834,16 @@ class DocumentStore {
 		if (block.image) return block.image.spacing == null;
 		if (block.line) return block.line.spacing == null;
 		if (block.rect) return block.rect.spacing == null;
+		if (block.outline) return block.outline.spacing == null;
 		return true;
+	}
+
+	private embedKind(block: Block): EmbedKind | null {
+		if (block.image) return "image";
+		if (block.line) return "line";
+		if (block.rect) return "rect";
+		if (block.outline) return "outline";
+		return null;
 	}
 
 	/** Set above/below spacing for an embed block, honouring its linked state. */
@@ -831,14 +853,14 @@ class DocumentStore {
 	): void {
 		const linked = this.embedSpacingLinked(block);
 		if (linked) {
-			const kind = block.image ? "image" : block.line ? "line" : block.rect ? "rect" : null;
+			const kind = this.embedKind(block);
 			if (!kind) return;
 			const shared = this.embedSharedSpacing(kind);
 			if (patch.above !== undefined) shared.above = patch.above;
 			if (patch.below !== undefined) shared.below = patch.below;
 			return;
 		}
-		const target = block.image ?? block.line ?? block.rect;
+		const target = block.image ?? block.line ?? block.rect ?? block.outline;
 		if (!target?.spacing) return;
 		if (patch.above !== undefined) target.spacing.above = patch.above;
 		if (patch.below !== undefined) target.spacing.below = patch.below;
@@ -850,6 +872,7 @@ class DocumentStore {
 			if (block.image) block.image.spacing = undefined;
 			else if (block.line) block.line.spacing = undefined;
 			else if (block.rect) block.rect.spacing = undefined;
+			else if (block.outline) block.outline.spacing = undefined;
 			return;
 		}
 		// Unlinking: copy the resolved value onto the block.
@@ -858,6 +881,7 @@ class DocumentStore {
 		if (block.image) block.image.spacing = copy;
 		else if (block.line) block.line.spacing = copy;
 		else if (block.rect) block.rect.spacing = copy;
+		else if (block.outline) block.outline.spacing = copy;
 	}
 
 	/** Update settings of an embed block in place; no-op if kind mismatches. */
@@ -877,6 +901,12 @@ class DocumentStore {
 		const b = this.findBlock(id);
 		if (!b?.rect) return;
 		b.rect = { ...b.rect, ...patch };
+	}
+
+	updateOutline(id: string, patch: Partial<OutlineSettings>): void {
+		const b = this.findBlock(id);
+		if (!b?.outline) return;
+		b.outline = { ...b.outline, ...patch };
 	}
 
 	/**

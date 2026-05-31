@@ -194,6 +194,21 @@ export interface LineSettings {
 	spacing?: BlockSpacing;
 }
 
+/**
+ * Embed: an outline block. The block's `text` is the (editable) outline title;
+ * everything else (the rendered table-of-contents body) is auto-generated from
+ * the document's headings and is not directly editable.
+ */
+export interface OutlineSettings {
+	/** Typst target selector (e.g. `"heading"`). Empty/`"heading"` = default. */
+	target?: string;
+	/** Maximum depth to include; null/undefined = no limit. */
+	depth?: number | null;
+	/** Indent per level in pt; null/undefined = Typst default (auto). */
+	indent?: number | null;
+	spacing?: BlockSpacing;
+}
+
 /** Embed: a rectangle block (non-editable). Maps to Typst `#rect(...)`. */
 export interface RectSettings {
 	/** Width in pt. null/undefined = auto. Popup may cycle pt/px display. */
@@ -244,10 +259,12 @@ export interface Block {
 	line?: LineSettings;
 	/** Embed: rectangle. Mutually exclusive with image / line / text content. */
 	rect?: RectSettings;
+	/** Embed: outline (table of contents). `text` holds the editable title. */
+	outline?: OutlineSettings;
 }
 
 /** Embed block kinds. */
-export type EmbedKind = "image" | "line" | "rect";
+export type EmbedKind = "image" | "line" | "rect" | "outline";
 
 export interface DocumentModel {
 	name: string;
@@ -286,6 +303,7 @@ export interface DocumentModel {
 	imageSpacingShared?: BlockSpacing;
 	lineSpacingShared?: BlockSpacing;
 	rectSpacingShared?: BlockSpacing;
+	outlineSpacingShared?: BlockSpacing;
 	/** Document body as an ordered list of paragraph blocks. */
 	blocks: Block[];
 }

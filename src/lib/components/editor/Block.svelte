@@ -2,6 +2,7 @@
 	import { untrack } from "svelte";
 	import { resolveBlockHeadingSpacing, resolveBlockListSpacing } from "$lib/document/blockLevelStyle";
 	import { documentStore } from "$lib/document/store.svelte";
+	import { formatNumbering } from "$lib/document/numbering";
 	import { ptToPx } from "$lib/document/units";
 	import type { Block, StrokeDash } from "$lib/document/types";
 	import { imageCache } from "$lib/system/imageCache.svelte";
@@ -146,6 +147,51 @@
 	const isInline = $derived(block.continuation || renderInline);
 	const isList = $derived(!!block.list);
 	const isEmbed = $derived(!!(block.image || block.line || block.rect));
+	const isOutline = $derived(!!block.outline);
+
+	// Outline body entries: walk all blocks, count outlined headings, and pick
+	// the page each heading falls on so the rendered TOC matches Typst's PDF.
+	const outlineEntries = $derived.by(() => {
+		if (!block.outline) return [] as {
+			id: string;
+			level: number;
+			prefix: string;
+			text: string;
+			page: number;
+		}[];
+		const docModel = documentStore.model;
+		const pageBreakSet = new Set(documentStore.pageBreakBlockIds);
+		const maxDepth = block.outline.depth ?? 4;
+		const counters = [0, 0, 0, 0, 0];
+		let page = 1;
+		const out: {
+			id: string;
+			level: number;
+			prefix: string;
+			text: string;
+			page: number;
+		}[] = [];
+		for (const b of docModel.blocks) {
+			if (pageBreakSet.has(b.id)) page += 1;
+			if (!b.heading || b.heading.level === 0) continue;
+			const level = b.heading.level;
+			const baseStyle = documentStore.resolveHeadingStyle(level);
+			const style = b.headingNumbering
+				? { ...baseStyle, ...b.headingNumbering }
+				: baseStyle;
+			if (style.outlined === false) continue;
+			counters[level] += 1;
+			for (let l = level + 1; l <= 4; l++) counters[l] = 0;
+			if (level > maxDepth) continue;
+			let prefix = "";
+			if (style.numbering) {
+				const nums = counters.slice(1, level + 1);
+				prefix = formatNumbering(style.numbering, nums) + " ";
+			}
+			out.push({ id: b.id, level, prefix, text: b.text, page });
+		}
+		return out;
+	});
 
 	// Marker glyph and the space it reserves on the left.
 	const markerText = $derived(marker ?? "");
@@ -419,7 +465,96 @@
 	</div>
 {/snippet}
 
-{#if isEmbed}
+{#snippet outlineView()}
+	{@const outline = block.outline!}
+	{@const spacing = documentStore.resolveEmbedSpacing(block)}
+	{@const docTypo = documentStore.model.typography}
+	{@const baseFontPx = ptToPx(docTypo.size) * scale}
+	{@const titleFontPx = baseFontPx * 1.4}
+	{@const indentEm = outline.indent != null ? outline.indent / docTypo.size : 1.5}
+	{@const awaitingDelete = documentStore.embedAwaitingDelete === block.id}
+	<div
+		bind:this={outerEl}
+		class="relative w-full"
+		style:margin-top="{spacing?.above ?? 1.2}em"
+		style:margin-bottom="{spacing?.below ?? 0.35}em"
+	>
+		{#if awaitingDelete}
+			<span
+				class="text-text-150 pointer-events-none absolute right-0 bottom-full select-none"
+				style:font-size="{10 * scale}px"
+				style:line-height="1"
+				style:padding-bottom="{8 * scale}px"
+			>
+				Backspace to delete
+			</span>
+		{/if}
+		<div
+			bind:this={el}
+			class="doc-block outline-none w-full"
+			contenteditable="true"
+			spellcheck="false"
+			role="textbox"
+			tabindex="0"
+			aria-multiline="false"
+			data-block-id={block.id}
+			data-placeholder={effectivePlaceholder ?? "Title"}
+			style:font-family={`"${docTypo.fontFamily}", serif`}
+			style:font-size="{titleFontPx}px"
+			style:font-weight={700}
+			style:line-height={1.2}
+			style:color={docTypo.color}
+			onfocus={() => onfocusblock(block.id)}
+			oninput={onInput}
+			onkeydown={onKeydown}
+			onpaste={onPaste}
+		></div>
+		<!-- svelte-ignore a11y_click_events_have_key_events -->
+		<!-- svelte-ignore a11y_no_static_element_interactions -->
+		<div
+			class="doc-embed mt-[0.5em] w-full cursor-pointer select-none"
+			data-block-id={block.id}
+			style:font-family={`"${docTypo.fontFamily}", serif`}
+			style:font-size="{baseFontPx}px"
+			style:line-height={docTypo.leading + 0.658}
+			style:color={docTypo.color}
+			onclick={(e) => {
+				e.preventDefault();
+				documentStore.activateEmbed(block.id);
+				onfocusblock(block.id);
+				// Put caret in title for editing convenience.
+				if (el) {
+					el.focus();
+				}
+			}}
+		>
+			{#if outlineEntries.length === 0}
+				<div class="opacity-30">(no outlined headings yet)</div>
+			{:else}
+				{#each outlineEntries as entry (entry.id)}
+					<div
+						class="flex w-full items-baseline gap-1"
+						style:padding-left="{(entry.level - 1) * indentEm}em"
+					>
+						<span class="whitespace-pre">{entry.prefix}{entry.text}</span>
+						<span
+							class="min-w-0 flex-1 overflow-hidden"
+							style:letter-spacing="0.1em"
+							style:opacity="0.8"
+							aria-hidden="true"
+							>{".".repeat(200)}</span
+						>
+						<span class="shrink-0 tabular-nums">{entry.page}</span>
+					</div>
+				{/each}
+			{/if}
+		</div>
+	</div>
+{/snippet}
+
+{#if isOutline}
+	{@render outlineView()}
+{:else if isEmbed}
 	{@render embedView()}
 {:else if isList}
 	<!-- List items render as a single flex row (marker + body). Horizontal
