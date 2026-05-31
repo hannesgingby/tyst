@@ -301,6 +301,35 @@
 		}
 	}
 
+	// A parbreak blank renders the paragraph-spacing gap. Clicking inside that
+	// gap shouldn't drop the caret into the empty block — the visual whitespace
+	// belongs to the paragraph above. Steal the click and redirect focus to the
+	// nearest preceding content block.
+	function onParbreakMouseDown(event: MouseEvent): void {
+		if (role !== "parbreak") return;
+		event.preventDefault();
+		const idx = documentStore.blockIndex(block.id);
+		for (let j = idx - 1; j >= 0; j--) {
+			const prev = documentStore.model.blocks[j];
+			if (prev.continuation) continue;
+			const isBlankText =
+				prev.text === "" &&
+				!prev.heading &&
+				!prev.list &&
+				!prev.image &&
+				!prev.line &&
+				!prev.rect &&
+				!prev.outline;
+			if (isBlankText) continue;
+			if (prev.image || prev.line || prev.rect || prev.outline) {
+				documentStore.activateEmbed(prev.id);
+			} else {
+				documentStore.pendingFocus = prev.id;
+			}
+			return;
+		}
+	}
+
 	function onPaste(event: ClipboardEvent): void {
 		event.preventDefault();
 		const raw = event.clipboardData?.getData("text/plain") ?? "";
@@ -350,6 +379,8 @@
 		style:color={typography.color}
 		style:text-align={textAlign}
 		style:text-indent="{firstLineIndentEm}em"
+		style:cursor={role === "parbreak" ? "default" : undefined}
+		onmousedown={onParbreakMouseDown}
 		onfocus={() => onfocusblock(block.id)}
 		oninput={onInput}
 		onkeydown={onKeydown}
