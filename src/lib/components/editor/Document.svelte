@@ -176,7 +176,29 @@
                 // Otherwise: parbreak when something follows this blank (another blank
                 // or text), linebreak when this blank is terminal (end of doc, or the
                 // next element is a heading/list that handles its own spacing).
+                // A parbreak only makes visual sense when real content sandwiches
+                // this blank on both sides. With nothing above or below (the doc
+                // is entirely empty / leading or trailing blanks), Enter should
+                // act like a plain newline.
+                let hasContentAbove = false;
+                for (let j = i - 1; j >= 0; j--) {
+                    const bb = blocks[j];
+                    if (bb.text !== "" || isEmbedBlock(bb) || bb.heading || bb.list) {
+                        hasContentAbove = true;
+                        break;
+                    }
+                }
+                let hasContentBelow = false;
+                for (let j = i + 1; j < blocks.length; j++) {
+                    const bb = blocks[j];
+                    if (bb.text !== "" || isEmbedBlock(bb) || bb.heading || bb.list) {
+                        hasContentBelow = true;
+                        break;
+                    }
+                }
                 if (prev?.heading || isListBlock(prev)) {
+                    roles.set(b.id, "linebreak");
+                } else if (!hasContentAbove || !hasContentBelow) {
                     roles.set(b.id, "linebreak");
                 } else if (next == null || next.heading || isListBlock(next) || next.continuation) {
                     roles.set(b.id, "linebreak");
@@ -480,10 +502,14 @@
 
     function syncBlockDom(el: HTMLElement, text: string): void {
         el.textContent = text;
+        // A trailing <br> keeps an empty contenteditable from collapsing, but
+        // it also defeats the `:empty::before` rule that paints the placeholder.
+        // Only add the <br> when the block has no placeholder to fall back on.
+        const placeholder = el.dataset.placeholder;
         const hasTrailingBr = el.lastChild?.nodeName === "BR";
-        if (text === "" && !hasTrailingBr) {
+        if (text === "" && !placeholder && !hasTrailingBr) {
             el.append(document.createElement("br"));
-        } else if (text !== "" && hasTrailingBr) {
+        } else if ((text !== "" || placeholder) && hasTrailingBr) {
             el.lastChild?.remove();
         }
     }
