@@ -34,7 +34,9 @@
 	});
 
 	$effect(() => {
-		if (documentStore.isEditingHeadingBlock) return;
+		// The right-hand panel always follows the hovered/selected row so the
+		// user can configure any level's numbering/spacing — even while their
+		// caret sits inside a different heading block.
 		documentStore.headingMenuIsTitle = activeIndex === 0;
 		if (activeIndex > 0) {
 			documentStore.headingMenuLevel = activeIndex as HeadingLevel;

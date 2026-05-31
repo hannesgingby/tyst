@@ -20,12 +20,7 @@ import type {
 	StrokeSettings,
 	TypographySettings,
 } from "./types";
-import {
-	isHeadingSpacingLinked,
-	isListSpacingLinked,
-	resolveHeadingSpacing,
-	resolveListSpacing,
-} from "./blockSpacing";
+import { resolveHeadingSpacing, resolveListSpacing } from "./blockSpacing";
 import {
 	hasBlockHeadingNumberingOverride,
 	hasBlockHeadingSpacingOverride,
@@ -314,12 +309,12 @@ class DocumentStore {
 		return this.headingMenuLevel;
 	});
 
-	/** Level used by the headings popup (active heading block, else menu selection). */
-	readonly headingEditLevel = $derived.by((): HeadingLevel => {
-		const level = this.activeBlock.heading?.level;
-		if (level === 1 || level === 2 || level === 3 || level === 4) return level;
-		return this.headingMenuLevel;
-	});
+	/**
+	 * Level used by the headings popup's right-hand panel. Always follows the
+	 * hovered/selected row so the user can configure any level without leaving
+	 * their current heading block.
+	 */
+	readonly headingEditLevel = $derived.by((): HeadingLevel => this.headingMenuLevel);
 
 	/** List kind for spacing tags / insert preview. */
 	readonly listSpacingKind = $derived(
@@ -331,9 +326,14 @@ class DocumentStore {
 	}
 
 	private get headingNumberingTargetBlock(): Block | null {
+		// Only treat the active block as the override target when the popup's
+		// hovered level matches it — otherwise the user is configuring a
+		// different level entirely.
 		const block = this.activeBlock;
-		if (block.heading && block.heading.level !== 0) return block;
-		return null;
+		if (!block.heading || block.heading.level === 0) return null;
+		if (this.headingMenuIsTitle) return null;
+		if (block.heading.level !== this.headingMenuLevel) return null;
+		return block;
 	}
 
 	get headingNumberingLinked(): boolean {
@@ -366,7 +366,12 @@ class DocumentStore {
 
 	readonly popupHeadingStyle = $derived.by((): HeadingNumberingSettings => {
 		const block = this.activeBlock;
-		if (block.heading && block.heading.level !== 0) {
+		if (
+			block.heading &&
+			block.heading.level !== 0 &&
+			!this.headingMenuIsTitle &&
+			block.heading.level === this.headingMenuLevel
+		) {
 			return (
 				resolveBlockHeadingNumbering(this.model, block) ??
 				this.resolveHeadingStyle(block.heading.level as HeadingLevel)
@@ -414,63 +419,50 @@ class DocumentStore {
 
 	/** Level key used for spacing — includes 0 (title) unlike headingEditLevel. */
 	get headingSpacingLevel(): 0 | HeadingLevel {
-		if (this.activeBlock.heading?.level !== undefined) {
-			return this.activeBlock.heading.level as 0 | HeadingLevel;
-		}
 		if (this.headingMenuIsTitle) return 0;
-		return this.headingEditLevel;
+		return this.headingMenuLevel;
 	}
 
 	private get headingSpacingTargetBlock(): Block | null {
 		const block = this.activeBlock;
-		if (block.heading) return block;
-		return null;
-	}
-
-	private ensureHeadingSpacingShared(): BlockSpacing {
-		return (this.model.headingSpacingShared ??= { above: 1.2, below: 0.35 });
+		if (!block.heading) return null;
+		const blockLevel = block.heading.level as 0 | HeadingLevel;
+		const menuLevel: 0 | HeadingLevel = this.headingMenuIsTitle ? 0 : this.headingMenuLevel;
+		if (blockLevel !== menuLevel) return null;
+		return block;
 	}
 
 	private ensureHeadingSpacing(level: 0 | HeadingLevel): BlockSpacing {
 		if (!this.model.headingSpacing) this.model.headingSpacing = {};
-		return (this.model.headingSpacing[level] ??= { above: 1.0, below: 0.3 });
+		const resolved = resolveHeadingSpacing(this.model, level);
+		return (this.model.headingSpacing[level] ??= {
+			above: resolved?.above ?? 1.0,
+			below: resolved?.below ?? 0.3,
+		});
 	}
 
 	get headingSpacingLinked(): boolean {
+		// "Linked" now reflects whether the active block follows its level's
+		// document-default spacing. With no heading block on the relevant level,
+		// nothing can be overridden so the tag stays linked.
 		const block = this.headingSpacingTargetBlock;
 		if (block) return !hasBlockHeadingSpacingOverride(block);
-		return isHeadingSpacingLinked(this.model, this.headingSpacingLevel);
+		return true;
 	}
 
 	set headingSpacingLinked(value: boolean) {
-		const level = this.headingSpacingLevel;
 		const block = this.headingSpacingTargetBlock;
-		if (block) {
-			if (value) {
-				delete block.headingSpacing;
-			} else {
-				const level = block.heading!.level as 0 | HeadingLevel;
-				const resolved = resolveHeadingSpacing(this.model, level);
-				block.headingSpacing = {
-					above: resolved?.above ?? 1.0,
-					below: resolved?.below ?? 0.3,
-				};
-			}
+		if (!block) return;
+		if (value) {
+			delete block.headingSpacing;
 			return;
 		}
-		if (!this.model.headingSpacingLinks) this.model.headingSpacingLinks = {};
-		if (value) {
-			this.model.headingSpacingLinks[level] = true;
-			if (this.model.headingSpacing) delete this.model.headingSpacing[level];
-		} else {
-			const resolved = resolveHeadingSpacing(this.model, level);
-			this.model.headingSpacingLinks[level] = false;
-			this.model.headingSpacing ??= {};
-			this.model.headingSpacing[level] = {
-				above: resolved?.above ?? 1.0,
-				below: resolved?.below ?? 0.3,
-			};
-		}
+		const level = block.heading!.level as 0 | HeadingLevel;
+		const resolved = resolveHeadingSpacing(this.model, level);
+		block.headingSpacing = {
+			above: resolved?.above ?? 1.0,
+			below: resolved?.below ?? 0.3,
+		};
 	}
 
 	get popupHeadingSpacingAbove(): number {
@@ -488,11 +480,7 @@ class DocumentStore {
 			(block.headingSpacing ??= { above: 1.0, below: 0.3 }).above = value;
 			return;
 		}
-		if (isHeadingSpacingLinked(this.model, level)) {
-			this.ensureHeadingSpacingShared().above = value;
-		} else {
-			this.ensureHeadingSpacing(level).above = value;
-		}
+		this.ensureHeadingSpacing(level).above = value;
 	}
 
 	get popupHeadingSpacingBelow(): number {
@@ -510,20 +498,16 @@ class DocumentStore {
 			(block.headingSpacing ??= { above: 1.0, below: 0.3 }).below = value;
 			return;
 		}
-		if (isHeadingSpacingLinked(this.model, level)) {
-			this.ensureHeadingSpacingShared().below = value;
-		} else {
-			this.ensureHeadingSpacing(level).below = value;
-		}
-	}
-
-	private ensureListSpacingShared(): BlockSpacing {
-		return (this.model.listSpacingShared ??= { above: 0.8, below: 0.8 });
+		this.ensureHeadingSpacing(level).below = value;
 	}
 
 	private ensureListSpacing(kind: ListKind): BlockSpacing {
 		if (!this.model.listSpacing) this.model.listSpacing = {};
-		return (this.model.listSpacing[kind] ??= { above: 0.8, below: 0.8 });
+		const resolved = resolveListSpacing(this.model, kind);
+		return (this.model.listSpacing[kind] ??= {
+			above: resolved?.above ?? 0.8,
+			below: resolved?.below ?? 0.8,
+		});
 	}
 
 	private listSpacingTargetBlock(kind: ListKind): Block | null {
@@ -547,38 +531,23 @@ class DocumentStore {
 		if (block.list?.kind === kind) {
 			return !hasBlockListSpacingOverride(this.model, block, this.pageBreakBlockIds);
 		}
-		return isListSpacingLinked(this.model, kind);
+		return true;
 	}
 
 	setListSpacingLinkedFor(kind: ListKind, value: boolean): void {
 		const block = this.listSpacingTargetBlock(kind);
-		if (block) {
-			if (value) {
-				delete block.listSpacing;
-				this.clearListSpacingFromGroup(kind);
-			} else {
-				const resolved = resolveListSpacing(this.model, kind);
-				block.listSpacing = {
-					above: resolved?.above ?? 0.8,
-					below: resolved?.below ?? 0.8,
-				};
-				this.clearListSpacingFromGroup(kind, block.id);
-			}
+		if (!block) return;
+		if (value) {
+			delete block.listSpacing;
+			this.clearListSpacingFromGroup(kind);
 			return;
 		}
-		if (!this.model.listSpacingLinks) this.model.listSpacingLinks = {};
-		if (value) {
-			this.model.listSpacingLinks[kind] = true;
-			if (this.model.listSpacing) delete this.model.listSpacing[kind];
-		} else {
-			const resolved = resolveListSpacing(this.model, kind);
-			this.model.listSpacingLinks[kind] = false;
-			this.model.listSpacing ??= {};
-			this.model.listSpacing[kind] = {
-				above: resolved?.above ?? 0.8,
-				below: resolved?.below ?? 0.8,
-			};
-		}
+		const resolved = resolveListSpacing(this.model, kind);
+		block.listSpacing = {
+			above: resolved?.above ?? 0.8,
+			below: resolved?.below ?? 0.8,
+		};
+		this.clearListSpacingFromGroup(kind, block.id);
 	}
 
 	get bulletListSpacingLinked(): boolean {
@@ -614,11 +583,7 @@ class DocumentStore {
 			this.clearListSpacingFromGroup(kind, block.id);
 			return;
 		}
-		if (isListSpacingLinked(this.model, kind)) {
-			this.ensureListSpacingShared().above = value;
-		} else {
-			this.ensureListSpacing(kind).above = value;
-		}
+		this.ensureListSpacing(kind).above = value;
 	}
 
 	private popupListSpacingBelow(kind: ListKind): number {
@@ -638,11 +603,7 @@ class DocumentStore {
 			this.clearListSpacingFromGroup(kind, block.id);
 			return;
 		}
-		if (isListSpacingLinked(this.model, kind)) {
-			this.ensureListSpacingShared().below = value;
-		} else {
-			this.ensureListSpacing(kind).below = value;
-		}
+		this.ensureListSpacing(kind).below = value;
 	}
 
 	get popupBulletListSpacingAbove(): number {
