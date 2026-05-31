@@ -618,10 +618,26 @@
     }
 
     function onMergePrev(id: string): void {
+        const idx = blocks.findIndex((b) => b.id === id);
+        const block = idx >= 0 ? blocks[idx] : undefined;
+
+        // Backspace on an empty heading/list block: strip the metadata so the
+        // block becomes a plain empty paragraph. User can press Backspace again
+        // to merge with whatever sits above. Mirrors the Enter-on-empty rule.
+        if (block && block.text === "" && (block.heading || block.list)) {
+            if (block.heading) documentStore.setHeading(id, undefined);
+            if (block.list) documentStore.setList(id, undefined);
+            block.placeholder = undefined;
+            const el = blockEls.get(id);
+            if (el) syncBlockDom(el, "");
+            pendingCaret = { id, offset: 0 };
+            focusPending();
+            return;
+        }
+
         // Special case: Backspace at the start of an empty text block whose
         // previous block is an embed → delete the embed and place the caret
         // at the end of the block above it (see store.embedAwaitingDelete).
-        const idx = blocks.findIndex((b) => b.id === id);
         if (idx > 0 && blocks[idx]?.text === "") {
             const prev = blocks[idx - 1];
             if (
@@ -690,6 +706,35 @@
                         onMergePrev(id);
                     }
                     // Non-continuation at offset 0: let Block.svelte handle via bubble phase.
+                    return;
+                }
+
+                // Ctrl/Cmd+Backspace: delete the word to the left of the caret.
+                // Take it over so we can merge with the previous block in the
+                // same stroke when the block becomes empty (matches the holding-
+                // backspace behaviour: empty + one more press removes the block).
+                if (event.ctrlKey || event.metaKey) {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    let start = offset;
+                    while (start > 0 && /\s/.test(text[start - 1])) start--;
+                    while (start > 0 && !/\s/.test(text[start - 1])) start--;
+                    const newText = text.slice(0, start) + text.slice(offset);
+                    documentStore.setBlockText(id, newText);
+                    syncBlockDom(active, newText);
+                    if (newText === "") {
+                        if (idx === 0 && blocks.length === 1) {
+                            // First and only block — nothing to merge into.
+                            // Refocus via the pending-caret cycle so the DOM
+                            // settles cleanly and the placeholder shows.
+                            pendingCaret = { id, offset: 0 };
+                            focusPending();
+                        } else {
+                            onMergePrev(id);
+                        }
+                    } else {
+                        setCaretOffset(active, start);
+                    }
                     return;
                 }
 

@@ -267,10 +267,14 @@
 
 	$effect(() => {
 		const text = block.text;
-		if (el && el.textContent !== text && document.activeElement !== el) {
+		if (!el) return;
+		if (el.textContent !== text && document.activeElement !== el) {
 			el.textContent = text;
-			ensureTrailingBr();
 		}
+		// Reconcile trailing <br> on every text change, even when the element
+		// is focused. Browsers can leave behind sentinel <br>s after a word
+		// delete that defeat the `:empty::before` placeholder rule.
+		ensureTrailingBr();
 	});
 
 	// Toggling the placeholder on an empty block must re-evaluate the sentinel <br>:
