@@ -179,20 +179,20 @@ class DocumentStore {
 
 	/**
 	 * The embed block that's currently "armed" for deletion via Backspace:
-	 * the user is in an empty, non-continuation text block that sits directly
-	 * after this embed. Used by the editor to surface a "Backspace to delete"
-	 * indicator and by the Backspace handler to delete the embed.
+	 * either the user clicked the embed (image / line / rect, or an outline
+	 * with an empty title), or they're in an empty text block directly after
+	 * an embed. Used for the "Backspace to delete" indicator and deletion.
 	 */
 	readonly embedAwaitingDelete = $derived.by((): string | null => {
 		const active = this.activeBlock;
 		if (!active) return null;
+
+		if (active.image || active.line || active.rect) return active.id;
+		if (active.outline && active.text === "") return active.id;
+
 		if (
 			active.text !== "" ||
 			active.continuation ||
-			active.image ||
-			active.line ||
-			active.rect ||
-			active.outline ||
 			active.heading ||
 			active.list
 		)

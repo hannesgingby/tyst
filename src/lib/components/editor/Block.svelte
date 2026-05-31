@@ -413,6 +413,7 @@
 		bind:this={embedEl}
 		class={["doc-embed relative flex w-full cursor-pointer", alignClass]}
 		data-block-id={block.id}
+		tabindex="-1"
 		style:margin-top={suppressAbove ? "0" : `${spacing?.above ?? 1.2}em`}
 		style:margin-bottom="{spacing?.below ?? 0.35}em"
 		onclick={(e) => {
@@ -421,6 +422,7 @@
 			// even when the active block id doesn't change.
 			documentStore.activateEmbed(block.id);
 			onfocusblock(block.id);
+			embedEl?.focus({ preventScroll: true });
 		}}
 	>
 		{#snippet deleteBadge()}
@@ -552,6 +554,7 @@
 		<div
 			class="doc-embed mt-[0.5em] w-full cursor-pointer select-none"
 			data-block-id={block.id}
+			tabindex="-1"
 			style:font-family={`"${docTypo.fontFamily}", serif`}
 			style:font-size="{baseFontPx}px"
 			style:line-height={docTypo.leading + 0.658}

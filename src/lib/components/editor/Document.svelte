@@ -680,6 +680,36 @@
                 event.key !== "Backspace"
             )
                 return;
+
+            // Click-selected embed: delete on Backspace even when focus is not
+            // in a contenteditable (e.g. focus on the embed wrapper or a prior block).
+            if (
+                event.key === "Backspace" &&
+                !event.ctrlKey &&
+                !event.metaKey &&
+                !event.altKey
+            ) {
+                const awaiting = documentStore.embedAwaitingDelete;
+                const activeBlock = documentStore.activeBlock;
+                if (
+                    awaiting &&
+                    activeBlock?.id === awaiting &&
+                    (activeBlock.image ||
+                        activeBlock.line ||
+                        activeBlock.rect ||
+                        activeBlock.outline)
+                ) {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    const result = documentStore.deleteEmbed(awaiting);
+                    if (result) {
+                        pendingCaret = result;
+                        focusPending();
+                    }
+                    return;
+                }
+            }
+
             const active = document.activeElement;
             if (
                 !(active instanceof HTMLElement) ||
