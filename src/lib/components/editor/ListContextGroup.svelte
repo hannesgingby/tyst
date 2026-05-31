@@ -15,6 +15,7 @@
 	import ListBulletSettingsMenu from "./ListBulletSettingsMenu.svelte";
 	import ListNumberedSettingsMenu from "./ListNumberedSettingsMenu.svelte";
 	import SelectableList from "./SelectableList.svelte";
+	import TwoPanelMenu from "./TwoPanelMenu.svelte";
 
 	interface Props {
 		onselect?: (settings: ListSettings) => void;
@@ -24,11 +25,8 @@
 
 	let activeIndex = $state(0);
 	let rowEls = $state<HTMLElement[]>([]);
-	let bulletPanelEl = $state<HTMLElement | null>(null);
-	let numberedPanelEl = $state<HTMLElement | null>(null);
-	/** Keep the taller numbered panel visible while the clip shrinks to bullet height. */
-	let holdNumbered = $state(false);
-	let prevActiveIndex = 0;
+	let menuEl = $state<HTMLElement | null>(null);
+	let twoPanelMenu = $state<{ releaseHold: () => void } | null>(null);
 	/** First block id of the list group being edited; null = insert preview only. */
 	let listEditAnchorId = $state<string | null>(null);
 
@@ -49,12 +47,7 @@
 	let numberedFull = $state(false);
 	let numberedReversed = $state(false);
 
-	const isNumbered = $derived(activeIndex === 1);
-	const showNumbered = $derived(isNumbered || holdNumbered);
 	const activeRowEl = $derived(rowEls[activeIndex] ?? null);
-	const menuEl = $derived(
-		holdNumbered ? bulletPanelEl : isNumbered ? numberedPanelEl : bulletPanelEl,
-	);
 
 	function buildBulletSettings(): ListSettings {
 		return {
@@ -174,26 +167,12 @@
 		}
 	});
 
-	$effect(() => {
-		if (prevActiveIndex === 1 && activeIndex === 0) {
-			holdNumbered = true;
-		}
-		if (activeIndex === 1) {
-			holdNumbered = false;
-		}
-		prevActiveIndex = activeIndex;
-	});
-
-	function finishHeightTransition(): void {
-		holdNumbered = false;
-	}
-
 	function handleSelect(index: number): void {
 		onselect?.(index === 0 ? buildBulletSettings() : buildNumberedSettings());
 	}
 </script>
 
-<ContextGroup {activeRowEl} {menuEl} onClipHeightTransitionEnd={finishHeightTransition}>
+<ContextGroup {activeRowEl} {menuEl} onClipHeightTransitionEnd={() => twoPanelMenu?.releaseHold()}>
 	{#snippet list()}
 		<SelectableList
 			items={LIST_TYPES}
@@ -206,12 +185,17 @@
 		/>
 	{/snippet}
 	{#snippet menu()}
-		<div class="relative w-full">
-			<div
-				bind:this={numberedPanelEl}
-				class={[!showNumbered && "pointer-events-none invisible absolute inset-x-0 top-0"]}
-				aria-hidden={!showNumbered}
-			>
+		<TwoPanelMenu bind:this={twoPanelMenu} {activeIndex} bind:menuEl>
+			{#snippet panelA()}
+				<ListBulletSettingsMenu
+					bind:marker={bulletMarker}
+					bind:spacing={bulletSpacing}
+					bind:indent={bulletIndent}
+					bind:bodyIndent={bulletBodyIndent}
+					bind:tight={bulletTight}
+				/>
+			{/snippet}
+			{#snippet panelB()}
 				<ListNumberedSettingsMenu
 					bind:marker={numberedMarker}
 					bind:start={numberedStart}
@@ -222,20 +206,7 @@
 					bind:full={numberedFull}
 					bind:reversed={numberedReversed}
 				/>
-			</div>
-			<div
-				bind:this={bulletPanelEl}
-				class={[showNumbered && "pointer-events-none invisible absolute inset-x-0 top-0"]}
-				aria-hidden={showNumbered}
-			>
-				<ListBulletSettingsMenu
-					bind:marker={bulletMarker}
-					bind:spacing={bulletSpacing}
-					bind:indent={bulletIndent}
-					bind:bodyIndent={bulletBodyIndent}
-					bind:tight={bulletTight}
-				/>
-			</div>
-		</div>
+			{/snippet}
+		</TwoPanelMenu>
 	{/snippet}
 </ContextGroup>
