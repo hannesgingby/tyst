@@ -6,7 +6,7 @@
 	import { ptToPx } from "$lib/document/units";
 	import type { Block, StrokeDash } from "$lib/document/types";
 	import { imageCache } from "$lib/system/imageCache.svelte";
-	import { getCaretOffset } from "./caret";
+	import { getCaretOffset, setCaretOffset } from "./caret";
 
 	const WEIGHT_CSS: Record<string, number> = { Regular: 400, Medium: 500, Bold: 700 };
 
@@ -563,14 +563,15 @@
 				e.preventDefault();
 				documentStore.activateEmbed(block.id);
 				onfocusblock(block.id);
-				// Put caret in title for editing convenience.
+				// Put caret at end of title for editing convenience.
 				if (el) {
 					el.focus();
+					setCaretOffset(el, el.textContent?.length ?? 0);
 				}
 			}}
 		>
 			{#if outlineEntries.length === 0}
-				<div class="opacity-30">(no outlined headings yet)</div>
+				<div class="opacity-30">No outlined headings yet...</div>
 			{:else}
 				{#each outlineEntries as entry (entry.id)}
 					<div
