@@ -654,6 +654,14 @@ class DocumentStore {
 		block.text = text;
 	}
 
+	/** Insert a new (override-free) block before `id`, returning its id. */
+	insertBlockBefore(id: string, text: string): string {
+		const index = this.blockIndex(id);
+		const created: Block = { id: newId(), text };
+		this.model.blocks.splice(Math.max(0, index), 0, created);
+		return created.id;
+	}
+
 	/** Insert a new (override-free) block after `id`, returning its id. */
 	insertBlockAfter(id: string, text: string): string {
 		const index = this.blockIndex(id);

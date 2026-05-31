@@ -467,6 +467,16 @@
             return;
         }
 
+        // Enter at the very start of a heading or list item: insert an empty
+        // plain block above and leave the original (with its metadata + text)
+        // untouched, caret pinned where it was.
+        if (caretOffset === 0 && (block.heading || block.list)) {
+            documentStore.insertBlockBefore(id, "");
+            pendingCaret = { id, offset: 0 };
+            focusPending();
+            return;
+        }
+
         const before = text.slice(0, caretOffset);
         const after = text.slice(caretOffset);
         documentStore.setBlockText(id, before);
