@@ -184,13 +184,14 @@
         isFootnoteBody ? documentStore.footnoteNumberForBody(block.id) : 0,
     );
 
-    /** Empty tail segment after an inline footnote marker — needs a hit target. */
-    const trailAfterFootnoteMarker = $derived.by(() => {
+    /** Empty tail segment after an inline embed — needs a hit target and caret. */
+    const trailAfterInlineEmbed = $derived.by(() => {
         if (!isInline || block.footnoteMarker || block.text !== "")
             return false;
         const i = documentStore.blockIndex(block.id);
         if (i <= 0) return false;
-        return !!documentStore.model.blocks[i - 1]?.footnoteMarker;
+        const prev = documentStore.model.blocks[i - 1];
+        return !!(prev?.footnoteMarker || prev?.hSpacing);
     });
 
     // Outline body entries: walk all blocks, count outlined headings, and pick
@@ -437,7 +438,7 @@
         class={[
             "doc-block outline-none",
             !isInline && "w-full",
-            trailAfterFootnoteMarker && "trail-after-footnote-marker",
+            trailAfterInlineEmbed && "trail-after-inline-embed",
         ]}
         contenteditable="true"
         spellcheck="false"
@@ -446,9 +447,7 @@
         aria-multiline="false"
         data-block-id={block.id}
         data-placeholder={effectivePlaceholder}
-        style:display={isInline && !trailAfterFootnoteMarker
-            ? "inline"
-            : undefined}
+        style:display={isInline && !trailAfterInlineEmbed ? "inline" : undefined}
         style:font-family={`"${typography.fontFamily}", serif`}
         style:font-size="{isFootnoteBody ? footnoteFontSizePx : fontSizePx}px"
         style:font-weight={fontWeight}
@@ -466,7 +465,12 @@
         style:text-indent="{firstLineIndentPx}px"
         style:cursor={role === "parbreak" ? "default" : undefined}
         onmousedown={onParbreakMouseDown}
-        onfocus={() => onfocusblock(block.id)}
+        onfocus={() => {
+            onfocusblock(block.id);
+            if (trailAfterInlineEmbed && el) {
+                requestAnimationFrame(() => setCaretOffset(el, 0));
+            }
+        }}
         oninput={onInput}
         onkeydown={onKeydown}
         onpaste={onPaste}
@@ -947,8 +951,8 @@
         pointer-events: none;
     }
 
-    /* Zero-width inline tails after a footnote marker need a box for clicks/caret. */
-    .doc-block.trail-after-footnote-marker {
+    /* Zero-width inline tails after an inline embed need a box for clicks/caret. */
+    .doc-block.trail-after-inline-embed {
         display: inline-block;
         min-width: 0.25em;
         vertical-align: baseline;

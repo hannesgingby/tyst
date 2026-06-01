@@ -639,29 +639,49 @@
         documentStore.activeBlockId = id;
     }
 
-    /** Clicks in the gap after an inline footnote marker focus the tail segment. */
+    /** Empty continuation segment whose previous block is an inline embed (h-spacing, footnote marker). */
+    function isEmptyTailAfterInlineEmbed(idx: number): boolean {
+        const block = blocks[idx];
+        if (!block?.continuation || block.text !== "") return false;
+        const prev = idx > 0 ? blocks[idx - 1] : undefined;
+        return !!(prev?.hSpacing || prev?.footnoteMarker);
+    }
+
+    /** Clicks in the gap after an inline embed focus the empty tail segment. */
     function onInlineLineMouseDown(
         event: MouseEvent,
         items: (typeof blocks)[number][],
     ): void {
-        const markerIdx = items.findIndex((b) => b.footnoteMarker);
-        if (markerIdx < 0) return;
-        const markerEl = blockEls.get(items[markerIdx].id);
-        if (!markerEl) return;
+        const lineEl = event.currentTarget as HTMLElement;
         const target = event.target as Node;
-        if (markerEl.contains(target)) return;
-        const tail = items[markerIdx + 1];
-        if (!tail?.continuation || tail.footnoteMarker) return;
-        const tailEl = blockEls.get(tail.id);
-        if (!tailEl) return;
-        if (tailEl.contains(target)) return;
-        const { right } = markerEl.getBoundingClientRect();
-        if (event.clientX <= right) return;
-        event.preventDefault();
-        documentStore.activeBlockId = tail.id;
-        tailEl.focus();
-        const off = enterOffset(tail.text.length, true);
-        requestAnimationFrame(() => setCaretOffset(tailEl, off));
+
+        for (let i = 0; i < items.length - 1; i++) {
+            const anchor = items[i];
+            const tail = items[i + 1];
+            if (!tail?.continuation || tail.text !== "" || tail.footnoteMarker) continue;
+            if (!anchor.footnoteMarker && !anchor.hSpacing) continue;
+
+            const anchorEl = lineEl.querySelector(
+                `[data-block-id="${anchor.id}"]`,
+            ) as HTMLElement | null;
+            if (!anchorEl) continue;
+            if (anchorEl.contains(target)) continue;
+
+            const tailEl = blockEls.get(tail.id);
+            if (!tailEl) continue;
+            if (tailEl.contains(target)) continue;
+
+            const { right } = anchorEl.getBoundingClientRect();
+            if (event.clientX <= right) continue;
+
+            event.preventDefault();
+            documentStore.activeBlockId = tail.id;
+            tailEl.focus();
+            requestAnimationFrame(() =>
+                setCaretOffset(tailEl, enterOffset(tail.text.length, true)),
+            );
+            return;
+        }
     }
 
     function onInputBlock(id: string, text: string): void {
@@ -889,19 +909,27 @@
 
                 const awaiting = documentStore.embedAwaitingDelete;
                 const activeBlock = documentStore.activeBlock;
-                if (
+                const activeIdx = activeBlock
+                    ? blocks.findIndex((b) => b.id === activeBlock.id)
+                    : -1;
+                const prevForActive =
+                    activeIdx > 0 ? blocks[activeIdx - 1] : undefined;
+                const deleteAwaitingEmbed =
                     awaiting &&
-                    activeBlock?.id === awaiting &&
-                    (activeBlock.image ||
-                        activeBlock.line ||
-                        activeBlock.rect ||
-                        activeBlock.outline ||
-                        activeBlock.footnote ||
-                        activeBlock.footnoteSeparator ||
-                        activeBlock.vSpacing ||
-                        activeBlock.hSpacing ||
-                        activeBlock.pageBreak)
-                ) {
+                    (awaiting === activeBlock?.id ||
+                        (activeBlock?.text === "" &&
+                            prevForActive?.id === awaiting &&
+                            (prevForActive.hSpacing ||
+                                prevForActive.footnoteMarker ||
+                                prevForActive.image ||
+                                prevForActive.line ||
+                                prevForActive.rect ||
+                                prevForActive.outline ||
+                                prevForActive.footnote ||
+                                prevForActive.footnoteSeparator ||
+                                prevForActive.vSpacing ||
+                                prevForActive.pageBreak)));
+                if (deleteAwaitingEmbed) {
                     event.preventDefault();
                     event.stopPropagation();
                     const result = documentStore.deleteEmbed(awaiting);
@@ -955,7 +983,10 @@
                     documentStore.setBlockText(id, newText);
                     syncBlockDom(active, newText);
                     if (newText === "") {
-                        if (idx === 0 && blocks.length === 1) {
+                        if (isEmptyTailAfterInlineEmbed(idx)) {
+                            syncBlockDom(active, "");
+                            documentStore.pendingFocusAction = { kind: "caret", blockId: id, offset: 0 };
+                        } else if (idx === 0 && blocks.length === 1) {
                             // First and only block — nothing to merge into.
                             // Refocus so the DOM settles and the placeholder shows.
                             documentStore.pendingFocusAction = { kind: "caret", blockId: id, offset: 0 };
@@ -1004,7 +1035,6 @@
 
                 // Take over all backspace events inside continuation blocks to prevent
                 // browsers from jumping the cursor out of inline contenteditable spans.
-                // Merge immediately when the block becomes empty (no two-step dance).
                 if (isCont) {
                     event.preventDefault();
                     event.stopPropagation();
@@ -1012,7 +1042,16 @@
                         text.slice(0, offset - 1) + text.slice(offset);
                     if (newText === "") {
                         documentStore.setBlockText(id, "");
-                        onMergePrev(id);
+                        syncBlockDom(active, "");
+                        if (isEmptyTailAfterInlineEmbed(idx)) {
+                            documentStore.pendingFocusAction = {
+                                kind: "caret",
+                                blockId: id,
+                                offset: 0,
+                            };
+                        } else {
+                            onMergePrev(id);
+                        }
                     } else {
                         documentStore.setBlockText(id, newText);
                         syncBlockDom(active, newText);

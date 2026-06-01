@@ -305,13 +305,8 @@ class DocumentStore {
 		if (active.outline && active.text === "") return active.id;
 		if (active.vSpacing || active.hSpacing || active.pageBreak) return active.id;
 
-		if (
-			active.text !== "" ||
-			active.continuation ||
-			active.heading ||
-			active.list
-		)
-			return null;
+		if (active.text !== "" || active.heading || active.list) return null;
+
 		const idx = this.blockIndex(active.id);
 		if (idx <= 0) return null;
 		const prev = this.model.blocks[idx - 1];
@@ -324,9 +319,14 @@ class DocumentStore {
 			prev.footnoteSeparator ||
 			prev.vSpacing ||
 			prev.hSpacing ||
-			prev.pageBreak
+			prev.pageBreak ||
+			prev.footnoteMarker
 		)
 			return prev.id;
+
+		// Other empty continuation segments merge with the previous text block.
+		if (active.continuation) return null;
+
 		return null;
 	});
 
@@ -354,6 +354,7 @@ class DocumentStore {
 		)
 			return null;
 
+		let footnoteCaret: { id: string; offset: number } | null = null;
 		if (b.footnote) {
 			const footnoteId = b.footnote.footnoteId;
 			const pageIndex = this.blockPageIndex(id);
@@ -395,10 +396,25 @@ class DocumentStore {
 				);
 				if (sepIdx >= 0) this.model.blocks.splice(sepIdx, 1);
 			}
-			if (caretBlock) return { id: caretBlock.id, offset: caretBlock.text.length };
+			if (caretBlock) {
+				footnoteCaret = { id: caretBlock.id, offset: caretBlock.text.length };
+			}
+		} else if (b.hSpacing) {
+			this.model.blocks.splice(idx, 1);
+			const next = this.model.blocks[idx];
+			if (
+				next?.continuation &&
+				next.text === "" &&
+				!next.hSpacing &&
+				!next.footnoteMarker
+			) {
+				this.model.blocks.splice(idx, 1);
+			}
 		} else {
 			this.model.blocks.splice(idx, 1);
 		}
+		this.normalizeInlineStructure();
+		if (footnoteCaret) return footnoteCaret;
 		if (this.model.blocks.length === 0) {
 			const fresh: Block = { id: newId(), text: "" };
 			this.model.blocks.push(fresh);
@@ -886,6 +902,66 @@ class DocumentStore {
 		return this.model.blocks.findIndex((b) => b.id === id);
 	}
 
+	/** True when the block carries no user-visible document content. */
+	private isEffectivelyEmptyBlock(b: Block): boolean {
+		if (b.text !== "") return false;
+		if (
+			b.heading ||
+			b.list ||
+			b.image ||
+			b.line ||
+			b.rect ||
+			b.outline ||
+			b.footnote ||
+			b.footnoteSeparator ||
+			b.footnoteMarker ||
+			b.vSpacing ||
+			b.pageBreak
+		)
+			return false;
+		return true;
+	}
+
+	private isEffectivelyEmptyDocument(): boolean {
+		return (
+			this.model.blocks.length > 0 &&
+			this.model.blocks.every((b) => this.isEffectivelyEmptyBlock(b))
+		);
+	}
+
+	/**
+	 * Keep inline-paragraph block invariants: no leading orphan continuations,
+	 * and collapse an all-empty document to a single starter block.
+	 */
+	private normalizeInlineStructure(): void {
+		while (this.model.blocks.length > 0 && this.model.blocks[0].continuation) {
+			const head = this.model.blocks[0];
+			if (head.hSpacing) {
+				this.model.blocks.splice(0, 1);
+				continue;
+			}
+			if (head.text === "" && !head.footnoteMarker) {
+				head.continuation = false;
+				break;
+			}
+			break;
+		}
+
+		if (!this.isEffectivelyEmptyDocument()) return;
+
+		const active = this.findBlock(this.activeBlockId);
+		const id =
+			active && this.isEffectivelyEmptyBlock(active) ? active.id : newId();
+		const existing = this.findBlock(id);
+		if (this.model.blocks.length === 1 && existing && !existing.continuation) {
+			existing.text = "";
+			delete existing.hSpacing;
+			return;
+		}
+		this.model.blocks = [{ id, text: "" }];
+		this.activeBlockId = id;
+	}
+
 	setBlockText(id: string, text: string): void {
 		const block = this.findBlock(id);
 		if (!block) return;
@@ -894,6 +970,7 @@ class DocumentStore {
 			block.placeholder = undefined;
 		}
 		block.text = text;
+		if (text === "") this.normalizeInlineStructure();
 	}
 
 	/** Insert a new (override-free) block before `id`, returning its id. */
@@ -1024,19 +1101,41 @@ class DocumentStore {
 
 	/** Insert a horizontal inline spacing block (`#h(…)`) after the active block. */
 	insertHSpacing(): void {
+		this.normalizeInlineStructure();
 		const active = this.activeBlock;
-		const id = this.insertBlockObjectAfter(active.id, {
+		const idx = this.blockIndex(active.id);
+		const emptyTail =
+			active.continuation &&
+			active.text === "" &&
+			!active.hSpacing &&
+			!active.footnoteMarker &&
+			idx > 0;
+
+		// Insert before a trailing empty tail so we get [paragraph][h][tail], not
+		// [paragraph][tail][h][tail].
+		const insertAfterId = emptyTail
+			? this.model.blocks[idx - 1].id
+			: active.id;
+
+		const id = this.insertBlockObjectAfter(insertAfterId, {
 			text: "",
 			continuation: true,
 			hSpacing: { amount: { value: 15, unit: "em" } },
 		});
-		// Ensure a writable text block follows the inline spacing.
-		const nextIndex = this.blockIndex(id) + 1;
-		const next = this.model.blocks[nextIndex];
-		if (!next || next.hSpacing) {
-			this.insertBlockObjectAfter(id, { text: "", continuation: true });
+		if (!emptyTail) {
+			const nextIndex = this.blockIndex(id) + 1;
+			const next = this.model.blocks[nextIndex];
+			if (!next || next.hSpacing) {
+				this.insertBlockObjectAfter(id, { text: "", continuation: true });
+			}
 		}
-		this.activeBlockId = id;
+		const tail = this.model.blocks[this.blockIndex(id) + 1];
+		if (tail) {
+			this.activeBlockId = tail.id;
+			this.pendingFocusAction = { kind: "caret", blockId: tail.id, offset: 0 };
+		} else {
+			this.activeBlockId = id;
+		}
 		this.popupDismissed = null;
 	}
 
@@ -1412,6 +1511,7 @@ class DocumentStore {
 				this.model.blocks.length > 1
 			) {
 				this.model.blocks.splice(0, 1);
+				this.normalizeInlineStructure();
 				const next = this.model.blocks[0];
 				return { id: next.id, offset: 0 };
 			}
@@ -1420,9 +1520,11 @@ class DocumentStore {
 		const prev = this.model.blocks[index - 1];
 		if (prev.footnote || prev.footnoteSeparator || prev.footnoteMarker) return null;
 		if (prev.image || prev.line || prev.rect || prev.outline) return null;
+		if (prev.hSpacing || prev.vSpacing || prev.pageBreak) return null;
 		const offset = prev.text.length;
 		prev.text += block.text;
 		this.model.blocks.splice(index, 1);
+		this.normalizeInlineStructure();
 		return { id: prev.id, offset };
 	}
 
