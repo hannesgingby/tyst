@@ -12,6 +12,7 @@
     import ListPopup from "./ListPopup.svelte";
     import FootnotePopup from "./FootnotePopup.svelte";
     import OutlinePopup from "./OutlinePopup.svelte";
+    import SpacingPopup from "./SpacingPopup.svelte";
     import TypographyPopup from "./TypographyPopup.svelte";
 
     const activeBlock = $derived(documentStore.activeBlock);
@@ -32,6 +33,7 @@
     );
     const outlineTied = $derived(documentStore.tiedPopup === "outline");
     const footnoteTied = $derived(documentStore.tiedPopup === "footnote");
+    const spacingTied = $derived(documentStore.tiedPopup === "spacing");
 
     // Hover-to-open for the Line tool (matches Headings/List behaviour). When
     // a shape is active the popup is "tied" open regardless of hover.
@@ -51,6 +53,7 @@
     let lineWrapEl = $state<HTMLDivElement | null>(null);
     let outlineWrapEl = $state<HTMLDivElement | null>(null);
     let footnoteWrapEl = $state<HTMLDivElement | null>(null);
+    let spacingWrapEl = $state<HTMLDivElement | null>(null);
 
     function isInsideActiveEmbed(target: EventTarget | null): boolean {
         if (!(target instanceof HTMLElement)) return false;
@@ -86,10 +89,17 @@
                 documentStore.popupDismissed = "footnote";
             }
         }
+        if (spacingTied && !documentStore.popupDismissed) {
+            const inPopup =
+                spacingWrapEl != null && target instanceof Node && spacingWrapEl.contains(target);
+            if (!inPopup && !isInsideActiveEmbed(target)) {
+                documentStore.popupDismissed = "spacing";
+            }
+        }
     }
 
     $effect(() => {
-        if (!imageTied && !lineTied && !outlineTied && !footnoteTied) return;
+        if (!imageTied && !lineTied && !outlineTied && !footnoteTied && !spacingTied) return;
         document.addEventListener("pointerdown", onDocumentPointerDown, true);
         return () => document.removeEventListener("pointerdown", onDocumentPointerDown, true);
     });
@@ -100,6 +110,7 @@
     );
     const outlineOpen = $derived(outlineTied && documentStore.popupDismissed !== "outline");
     const footnoteOpen = $derived(footnoteTied && documentStore.popupDismissed !== "footnote");
+    const spacingOpen = $derived(spacingTied && documentStore.popupDismissed !== "spacing");
 
     function handleFootnoteClick(): void {
         if (
@@ -479,6 +490,50 @@
                             </div>
                         {/if}
                     </div>
+                {:else if groupIndex === 5}
+                    <!-- Spacing group: h-spacing + v-spacing (tied popups) + page-break -->
+                    <div bind:this={spacingWrapEl} class="relative flex items-center gap-3">
+                        {@render embedTrigger(
+                            "horizontal-spacing",
+                            "Horizontal spacing",
+                            spacingTied && !!documentStore.activeBlock.hSpacing,
+                            spacingOpen && !!documentStore.activeBlock.hSpacing,
+                            () => {
+                                if (spacingTied && documentStore.activeBlock.hSpacing) {
+                                    documentStore.popupDismissed = documentStore.popupDismissed === "spacing" ? null : "spacing";
+                                    return;
+                                }
+                                documentStore.insertHSpacing();
+                            },
+                        )}
+                        {@render embedTrigger(
+                            "vertical-spacing",
+                            "Vertical spacing",
+                            spacingTied && !!documentStore.activeBlock.vSpacing,
+                            spacingOpen && !!documentStore.activeBlock.vSpacing,
+                            () => {
+                                if (spacingTied && documentStore.activeBlock.vSpacing) {
+                                    documentStore.popupDismissed = documentStore.popupDismissed === "spacing" ? null : "spacing";
+                                    return;
+                                }
+                                documentStore.insertVSpacing();
+                            },
+                        )}
+                        {#if spacingOpen}
+                            <div
+                                class="absolute bottom-full left-0 z-[60] pb-2.5"
+                                role="dialog"
+                                aria-label="Spacing"
+                            >
+                                <SpacingPopup />
+                            </div>
+                        {/if}
+                    </div>
+                    {#each group.tools as tool, toolIndex (toolIndex)}
+                        {#if tool.kind === "icon" && tool.name !== "horizontal-spacing" && tool.name !== "vertical-spacing"}
+                            {@render toolIcon(tool.name, tool.label, tool.iconClass, tool.shortcut)}
+                        {/if}
+                    {/each}
                 {:else if groupIndex === 4}
                     <div bind:this={outlineWrapEl} class="relative flex items-center">
                         {@render embedTrigger(

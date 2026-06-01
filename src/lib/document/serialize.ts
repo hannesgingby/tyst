@@ -669,6 +669,40 @@ export function serializeDocument(
 			continue;
 		}
 
+		// ── Vertical spacing ────────────────────────────────────────────────────
+		if (block.vSpacing) {
+			if (hasContent) parts.push("");
+			for (let k = 0; k < pendingBlanks; k++) parts.push("#linebreak()");
+			const { value, unit } = block.vSpacing.amount;
+			const args = [`${typstNumber(value)}${unit}`];
+			if (block.vSpacing.weak) args.push("weak: true");
+			parts.push(`#v(${args.join(", ")})`);
+			hasContent = true;
+			afterList = false;
+			afterHeading = false;
+			pendingBlanks = 0;
+			i++;
+			continue;
+		}
+
+		// ── Horizontal spacing (inline continuation) ────────────────────────────
+		if (block.hSpacing) {
+			const { value, unit } = block.hSpacing.amount;
+			const args = [`${typstNumber(value)}${unit}`];
+			if (block.hSpacing.weak) args.push("weak: true");
+			const serialized = `#h(${args.join(", ")})`;
+			if (hasContent && block.continuation) {
+				parts[parts.length - 1] += serialized;
+			} else {
+				if (hasContent) parts.push("");
+				parts.push(serialized);
+				hasContent = true;
+			}
+			pendingBlanks = 0;
+			i++;
+			continue;
+		}
+
 		// ── Blank block (paragraph-break placeholder) ───────────────────────────
 		// footnoteMarker blocks intentionally have text:"" but must not be skipped here —
 		// they serialize to #footnote[...] via serializeTextBlock.

@@ -215,6 +215,18 @@ export interface FootnotePageSettings {
 	indent: number;
 }
 
+export type SpacingUnit = "pt" | "em" | "cm" | "mm" | "fr" | "%";
+
+export interface SpacingAmount {
+	value: number;
+	unit: SpacingUnit;
+}
+
+export interface SpacingSettings {
+	amount: SpacingAmount;
+	weak?: boolean;
+}
+
 /** Inline footnote reference (superscript in body text). */
 export interface FootnoteMarker {
 	footnoteId: string;
@@ -298,10 +310,14 @@ export interface Block {
 	footnote?: FootnoteBody;
 	/** Line block used as the footnote listing separator for this page. */
 	footnoteSeparator?: boolean;
+	/** Embed: vertical spacing (`#v(…)`). */
+	vSpacing?: SpacingSettings;
+	/** Embed: horizontal inline spacing (`#h(…)`). Continuation block. */
+	hSpacing?: SpacingSettings;
 }
 
 /** Embed block kinds. */
-export type EmbedKind = "image" | "line" | "rect" | "outline" | "footnote";
+export type EmbedKind = "image" | "line" | "rect" | "outline" | "footnote" | "spacing";
 
 export interface DocumentModel {
 	name: string;

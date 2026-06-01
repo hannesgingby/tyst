@@ -18,6 +18,8 @@ import type {
 	ParagraphSettings,
 	PaperPreset,
 	RectSettings,
+	SpacingSettings,
+	SpacingUnit,
 	StrokeSettings,
 	TypographySettings,
 } from "./types";
@@ -183,6 +185,7 @@ class DocumentStore {
 		if (b.rect) return "rect";
 		if (b.outline) return "outline";
 		if (b.footnote || b.footnoteMarker) return "footnote";
+		if (b.vSpacing || b.hSpacing) return "spacing";
 		return null;
 	});
 
@@ -300,6 +303,7 @@ class DocumentStore {
 		if (active.footnote && active.text === "") return active.id;
 		if (active.footnoteSeparator && active.line) return active.id;
 		if (active.outline && active.text === "") return active.id;
+		if (active.vSpacing || active.hSpacing) return active.id;
 
 		if (
 			active.text !== "" ||
@@ -332,7 +336,9 @@ class DocumentStore {
 				b.rect ||
 				b.outline ||
 				b.footnote ||
-				b.footnoteSeparator
+				b.footnoteSeparator ||
+				b.vSpacing ||
+				b.hSpacing
 			)
 		)
 			return null;
@@ -467,7 +473,8 @@ class DocumentStore {
 			b.image !== undefined ||
 			b.line !== undefined ||
 			b.rect !== undefined ||
-			b.outline !== undefined;
+			b.outline !== undefined ||
+			b.vSpacing !== undefined;
 
 		let groupStart = idx;
 		for (let j = idx - 1; j >= 0; j--) {
@@ -929,7 +936,7 @@ class DocumentStore {
 		// Always ensure there's a writable text block after the embed.
 		const nextIndex = this.blockIndex(id) + 1;
 		const next = this.model.blocks[nextIndex];
-		if (!next || next.continuation || next.image || next.line || next.rect || next.outline) {
+		if (!next || next.continuation || next.image || next.line || next.rect || next.outline || next.vSpacing) {
 			this.insertBlockObjectAfter(id, { text: "" });
 		}
 		this.activeBlockId = id;
@@ -985,6 +992,54 @@ class DocumentStore {
 			inset: 5,
 			stroke: this.defaultStroke(),
 		};
+	}
+
+	/** Insert a vertical spacing block (`#v(…)`) after the active block. */
+	insertVSpacing(): void {
+		this.insertEmbed({ text: "", vSpacing: { amount: { value: 12, unit: "pt" } } });
+		this.popupDismissed = null;
+	}
+
+	/** Insert a horizontal inline spacing block (`#h(…)`) after the active block. */
+	insertHSpacing(): void {
+		const active = this.activeBlock;
+		const id = this.insertBlockObjectAfter(active.id, {
+			text: "",
+			continuation: true,
+			hSpacing: { amount: { value: 15, unit: "em" } },
+		});
+		// Ensure a writable text block follows the inline spacing.
+		const nextIndex = this.blockIndex(id) + 1;
+		const next = this.model.blocks[nextIndex];
+		if (!next || next.hSpacing) {
+			this.insertBlockObjectAfter(id, { text: "", continuation: true });
+		}
+		this.activeBlockId = id;
+		this.popupDismissed = null;
+	}
+
+	/** Update the spacing amount value for the active vSpacing or hSpacing block. */
+	updateSpacingValue(id: string, value: number): void {
+		const b = this.findBlock(id);
+		if (!b) return;
+		if (b.vSpacing) b.vSpacing = { ...b.vSpacing, amount: { ...b.vSpacing.amount, value } };
+		else if (b.hSpacing) b.hSpacing = { ...b.hSpacing, amount: { ...b.hSpacing.amount, value } };
+	}
+
+	/** Update the spacing amount unit for the active vSpacing or hSpacing block. */
+	updateSpacingUnit(id: string, unit: SpacingUnit): void {
+		const b = this.findBlock(id);
+		if (!b) return;
+		if (b.vSpacing) b.vSpacing = { ...b.vSpacing, amount: { ...b.vSpacing.amount, unit } };
+		else if (b.hSpacing) b.hSpacing = { ...b.hSpacing, amount: { ...b.hSpacing.amount, unit } };
+	}
+
+	/** Toggle the `weak` flag on the active vSpacing or hSpacing block. */
+	updateSpacingWeak(id: string, weak: boolean): void {
+		const b = this.findBlock(id);
+		if (!b) return;
+		if (b.vSpacing) b.vSpacing = { ...b.vSpacing, weak };
+		else if (b.hSpacing) b.hSpacing = { ...b.hSpacing, weak };
 	}
 
 	private isFootnoteZoneBlock(b: Block): boolean {

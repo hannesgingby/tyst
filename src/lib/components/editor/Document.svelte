@@ -888,7 +888,9 @@
                         activeBlock.rect ||
                         activeBlock.outline ||
                         activeBlock.footnote ||
-                        activeBlock.footnoteSeparator)
+                        activeBlock.footnoteSeparator ||
+                        activeBlock.vSpacing ||
+                        activeBlock.hSpacing)
                 ) {
                     event.preventDefault();
                     event.stopPropagation();
