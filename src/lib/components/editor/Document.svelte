@@ -849,13 +849,8 @@
 
         const before = text.slice(0, caretOffset);
         const after = text.slice(caretOffset);
-        documentStore.setBlockText(id, before);
-        const el = blockEls.get(id);
-        if (el) {
-            el.textContent = before;
-            if (before === "") el.append(document.createElement("br"));
-        }
-        // List items continue the list; headings end and the next block is plain.
+        // Insert the "after" block first so the document is never transiently
+        // all-empty, which would trigger normalizeInlineStructure and collapse it.
         let newId: string;
         if (block.list) {
             newId = documentStore.insertBlockObjectAfter(id, {
@@ -865,6 +860,12 @@
             });
         } else {
             newId = documentStore.insertBlockAfter(id, after);
+        }
+        documentStore.setBlockText(id, before);
+        const el = blockEls.get(id);
+        if (el) {
+            el.textContent = before;
+            if (before === "") el.append(document.createElement("br"));
         }
         documentStore.pendingFocusAction = { kind: "caret", blockId: newId, offset: 0 };
     }
@@ -977,6 +978,11 @@
         if (!result) return;
         // Update active block right away so the toolbar reflects the new target.
         documentStore.activeBlockId = result.id;
+        // Eagerly sync DOM: Block.svelte's $effect skips updates when activeBlockId
+        // already matches, so after a merge the merged text won't re-render without this.
+        const targetEl = blockEls.get(result.id);
+        const mergedBlock = documentStore.findBlock(result.id);
+        if (targetEl && mergedBlock) syncBlockDom(targetEl, mergedBlock.text);
         documentStore.pendingFocusAction = { kind: "caret", blockId: result.id, offset: result.offset };
     }
 
