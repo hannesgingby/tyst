@@ -1,5 +1,6 @@
 <script lang="ts">
 	import Icon from "$lib/components/Icon.svelte";
+	import Tooltip from "$lib/components/Tooltip.svelte";
 	import DropdownMenu from "$lib/components/ui/DropdownMenu.svelte";
 	import { documentStore } from "$lib/document/store.svelte";
 	import { PAPER_PRESETS } from "$lib/document/paperSizes";
@@ -151,6 +152,8 @@
 				</button>
 			{/snippet}
 		</DropdownMenu>
-		<button type="button" class={actionClass} onclick={onMore}>More...</button>
+		<Tooltip label="Page settings" position="bottom">
+			<button type="button" class={actionClass} onclick={onMore}>More...</button>
+		</Tooltip>
 	</div>
 </div>

@@ -277,7 +277,7 @@
 				bind:this={scrollEl}
 				class={[
 					"reference-list-scroll overflow-x-hidden overflow-y-auto",
-					hasElements ? "min-h-[400px] max-h-[400px]" : "max-h-[400px]",
+					isSearching ? "min-h-[400px] max-h-[400px]" : "max-h-[400px]",
 				]}
 			>
 				{#if hasElements}
