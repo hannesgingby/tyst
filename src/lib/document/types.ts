@@ -341,6 +341,13 @@ export interface DocumentModel {
 	lineSpacingShared?: BlockSpacing;
 	rectSpacingShared?: BlockSpacing;
 	outlineSpacingShared?: BlockSpacing;
+	/**
+	 * Per-heading-level typography overrides. Applied via `#show heading.where(level: N): set text(…)`
+	 * so changing e.g. font size here updates ALL headings of that level.
+	 */
+	headingTypography?: Partial<Record<HeadingLevel, Partial<TypographySettings>>>;
+	/** Typography overrides for footnote body text. Applied via `#show footnote.entry: set text(…)`. */
+	footnoteTypography?: Partial<TypographySettings>;
 	/** Document body as an ordered list of paragraph blocks. */
 	blocks: Block[];
 }

@@ -1289,10 +1289,44 @@ class DocumentStore {
 		return { id: prev.id, offset };
 	}
 
-	// --- Typography / paragraph (with "body" tag scoping) ---------------------
+	// --- Typography / paragraph (with context-aware scoping) -----------------
+	//
+	// "Context" is the typography scope the active block belongs to:
+	//   body      — plain text, lists, titles (level 0)
+	//   heading-N — heading blocks at level N (1–4)
+	//   footnote  — footnote body blocks
+	//
+	// When the typography tag is linked, mutations write to the context-level
+	// store rather than to doc.typography, so e.g. changing font size on a
+	// heading-1 block updates ALL heading-1 blocks.
+
+	readonly typographyContext = $derived.by((): string => {
+		const block = this.activeBlock;
+		if (block.heading && block.heading.level > 0) return `heading-${block.heading.level}`;
+		if (block.footnote) return "footnote";
+		return "body";
+	});
+
+	/** Resolved typography for a given context string (no block-level override). */
+	private resolveContextTypography(context: string): TypographySettings {
+		const base = { ...this.model.typography };
+		if (context.startsWith("heading-")) {
+			const level = parseInt(context.slice(8)) as HeadingLevel;
+			Object.assign(base, this.model.headingTypography?.[level] ?? {});
+		} else if (context === "footnote") {
+			Object.assign(base, this.model.footnoteTypography ?? {});
+		}
+		return base;
+	}
 
 	resolveTypography(block: Block): TypographySettings {
-		return { ...this.model.typography, ...(block.typography ?? {}) };
+		const base = { ...this.model.typography };
+		if (block.heading && block.heading.level > 0) {
+			Object.assign(base, this.model.headingTypography?.[block.heading.level as HeadingLevel] ?? {});
+		} else if (block.footnote) {
+			Object.assign(base, this.model.footnoteTypography ?? {});
+		}
+		return { ...base, ...(block.typography ?? {}) };
 	}
 
 	resolveParagraph(block: Block): ParagraphSettings {
@@ -1301,11 +1335,12 @@ class DocumentStore {
 	}
 
 	/**
-	 * Values shown in the typography popup. When linked, shows the global
-	 * default. When unlinked, shows the resolved style of the first target block.
+	 * Values shown in the typography popup. When linked, shows the context-level
+	 * defaults (heading-N / footnote / body). When unlinked, shows the resolved
+	 * style of the first target block.
 	 */
 	readonly popupTypography = $derived.by(() => {
-		if (this.typographyLinked) return this.model.typography;
+		if (this.typographyLinked) return this.resolveContextTypography(this.typographyContext);
 		const b = this.findBlock(this.targetBlockIds[0]) ?? this.activeBlock;
 		return this.resolveTypography(b);
 	});
@@ -1318,7 +1353,16 @@ class DocumentStore {
 
 	setTypography<K extends keyof TypographySettings>(key: K, value: TypographySettings[K]): void {
 		if (this.typographyLinked) {
-			this.model.typography[key] = value;
+			const context = this.typographyContext;
+			if (context === "body") {
+				this.model.typography[key] = value;
+			} else if (context.startsWith("heading-")) {
+				const level = parseInt(context.slice(8)) as HeadingLevel;
+				if (!this.model.headingTypography) this.model.headingTypography = {};
+				(this.model.headingTypography[level] ??= {})[key] = value;
+			} else if (context === "footnote") {
+				(this.model.footnoteTypography ??= {})[key] = value;
+			}
 		} else {
 			for (const id of this.targetBlockIds) {
 				const b = this.findBlock(id);

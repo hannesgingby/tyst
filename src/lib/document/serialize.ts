@@ -181,6 +181,29 @@ function serializePreamble(doc: DocumentModel): string {
 	const parts = [serializePageSetFull(doc.pages[0]), textRule, parRule];
 	if (headingRule) parts.push(headingRule);
 	parts.push(...serializeFootnotePageRules(doc, 0, blockIndexById, []));
+
+	// Per-level heading typography: #show heading.where(level: N): set text(…)
+	if (doc.headingTypography) {
+		for (let n = 1; n <= 4; n++) {
+			const lvlTypo = doc.headingTypography[n as HeadingLevel];
+			if (!lvlTypo || Object.keys(lvlTypo).length === 0) continue;
+			const { underline: _u, leading: _l, ...textTypo } = lvlTypo;
+			const tArgs = textArgs(textTypo);
+			if (tArgs.length > 0) {
+				parts.push(`#show heading.where(level: ${n}): set text(${tArgs.join(", ")})`);
+			}
+		}
+	}
+
+	// Footnote body typography: #show footnote.entry: set text(…)
+	if (doc.footnoteTypography && Object.keys(doc.footnoteTypography).length > 0) {
+		const { underline: _u, leading: _l, ...textTypo } = doc.footnoteTypography;
+		const tArgs = textArgs(textTypo);
+		if (tArgs.length > 0) {
+			parts.push(`#show footnote.entry: set text(${tArgs.join(", ")})`);
+		}
+	}
+
 	return parts.join("\n\n");
 }
 
@@ -453,7 +476,15 @@ function serializeTextBlock(
 	const overrides: string[] = [];
 	const tArgs = textArgs(typo);
 	if (tArgs.length > 0) overrides.push(`#set text(${tArgs.join(", ")})`);
-	const pArgs = parArgs(typo.leading, para);
+	// Only emit par args that actually differ from the global document defaults.
+	const docPara = doc.paragraph;
+	const paraDiff: Partial<ParagraphSettings> = {};
+	for (const k of Object.keys(para) as (keyof ParagraphSettings)[]) {
+		if (para[k] !== docPara[k]) (paraDiff as Record<string, unknown>)[k] = para[k];
+	}
+	const leadingForPar =
+		typo.leading !== undefined && typo.leading !== docTypo.leading ? typo.leading : undefined;
+	const pArgs = parArgs(leadingForPar, paraDiff);
 	if (pArgs.length > 0) overrides.push(`#set par(${pArgs.join(", ")})`);
 
 	if (overrides.length === 0 && !underline) return text;

@@ -349,7 +349,7 @@
                     break;
                 }
             }
-            spacings.set(b.id, Math.max(prev, next));
+            spacings.set(b.id, prev);
         }
         return spacings;
     });

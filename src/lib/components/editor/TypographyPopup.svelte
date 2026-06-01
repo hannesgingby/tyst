@@ -111,7 +111,7 @@
 
 	<section class="mt-[41px]">
 		<PopupSectionHeader title="Typography">
-			<Tag label="body" variant="blue" bind:linked={documentStore.typographyLinked} />
+			<Tag label={documentStore.typographyContext} variant="blue" bind:linked={documentStore.typographyLinked} />
 		</PopupSectionHeader>
 
 		<div class="mt-[13px] flex flex-col gap-2">
