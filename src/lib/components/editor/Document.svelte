@@ -69,7 +69,7 @@
     } | null>(null);
 
     /** Extra downward offset so the header popup sits closer to the page body. */
-    const HEADER_ZONE_POPUP_OFFSET = 120;
+    const HEADER_ZONE_POPUP_OFFSET = -40;
     /** Offset above the footer margin edge (popup anchor). */
     const FOOTER_ZONE_POPUP_OFFSET = -40;
 
@@ -135,7 +135,7 @@
                 zonePopupStyle = {
                     left: `${centerX}px`,
                     top: `${rect.bottom + HEADER_ZONE_POPUP_OFFSET}px`,
-                    transform: "translate(-50%, -100%)",
+                    transform: "translate(-50%, 0)",
                 };
             } else {
                 zonePopupStyle = {
