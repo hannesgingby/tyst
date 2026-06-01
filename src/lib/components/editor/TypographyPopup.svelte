@@ -18,7 +18,9 @@
 	import type { FontWeightName } from "$lib/document/types";
 
 	const weightOptions: FontWeightName[] = ["Regular", "Medium", "Bold"];
-	const sizeUnitOptions = FONT_SIZE_UNITS.map((u) => u.unit);
+	// "em" is added as a context-relative unit; handled separately since its
+	// conversion factor depends on the body font size, not a fixed pt ratio.
+	const sizeUnitOptions = [...FONT_SIZE_UNITS.map((u) => u.unit), "em"];
 
 	const fontOptions = $derived(fontStore.families);
 	// Values shown reflect the current scope: the shared default when linked,
@@ -30,11 +32,31 @@
 	const isHeadingBlock = $derived(documentStore.isEditingHeadingBlock);
 	const spacingFollowsLeading = $derived(paragraph.spacingFollowsLeading === true);
 
-	// Size is stored in points; the input may display pt/px/mm. The unit is a
-	// local display preference and converts the value to preserve physical size.
+	// Body font size in pt — the reference for em unit conversions.
+	const bodySize = $derived(documentStore.model.typography.size);
+
+	// Size is stored in points; the input may display pt/px/em.
+	// "em" is shown relative to the body font size and auto-selected for headings.
 	let sizeUnit = $state("pt");
-	const sizeCfg = $derived(fontSizeUnit(sizeUnit));
-	const sizeValue = $derived(Number(ptToUnit(typography.size, sizeUnit).toFixed(sizeCfg.decimals)));
+
+	$effect(() => {
+		if (isHeadingBlock) sizeUnit = "em";
+		else if (sizeUnit === "em") sizeUnit = "pt";
+	});
+
+	const sizeDecimals = $derived(sizeUnit === "em" ? 2 : fontSizeUnit(sizeUnit).decimals);
+	const sizeStep = $derived(sizeUnit === "em" ? 0.05 : fontSizeUnit(sizeUnit).step);
+	const sizeMin = $derived(sizeUnit === "em" ? 0.1 : ptToUnit(1, sizeUnit));
+	const sizeMax = $derived(sizeUnit === "em" ? 10 : ptToUnit(720, sizeUnit));
+	const sizeValue = $derived(
+		sizeUnit === "em"
+			? Number((typography.size / bodySize).toFixed(2))
+			: Number(ptToUnit(typography.size, sizeUnit).toFixed(sizeDecimals)),
+	);
+
+	function onSizeChange(v: number): void {
+		documentStore.setTypography("size", sizeUnit === "em" ? v * bodySize : unitToPt(v, sizeUnit));
+	}
 
 	const hoverPin = getContext<HoverPopupPin | undefined>(HOVER_POPUP_PIN_KEY);
 	let fontMenuOpen = $state(false);
@@ -142,11 +164,11 @@
 					value={sizeValue}
 					unit={sizeUnit}
 					units={sizeUnitOptions}
-					min={ptToUnit(1, sizeUnit)}
-					max={ptToUnit(720, sizeUnit)}
-					step={sizeCfg.step}
-					decimals={sizeCfg.decimals}
-					onchange={(v) => documentStore.setTypography("size", unitToPt(v, sizeUnit))}
+					min={sizeMin}
+					max={sizeMax}
+					step={sizeStep}
+					decimals={sizeDecimals}
+					onchange={onSizeChange}
 					onunitchange={(u) => (sizeUnit = u)}
 				/>
 			</div>

@@ -344,8 +344,15 @@ export interface DocumentModel {
 	/**
 	 * Per-heading-level typography overrides. Applied via `#show heading.where(level: N): set text(…)`
 	 * so changing e.g. font size here updates ALL headings of that level.
+	 * Size is NOT stored here — use `headingScale` instead so it stays relative to the body.
 	 */
 	headingTypography?: Partial<Record<HeadingLevel, Partial<TypographySettings>>>;
+	/**
+	 * Per-heading-level size as an em multiplier relative to the body font size.
+	 * Serialized as `size: Xem` in `#show heading.where(level: N): set text(…)`.
+	 * Falls back to `TYPST_HEADING_SCALE` defaults when unset.
+	 */
+	headingScale?: Partial<Record<HeadingLevel, number>>;
 	/** Typography overrides for footnote body text. Applied via `#show footnote.entry: set text(…)`. */
 	footnoteTypography?: Partial<TypographySettings>;
 	/** Document body as an ordered list of paragraph blocks. */

@@ -56,6 +56,9 @@ export type EditorSelection =
 	| { kind: "intraBlock"; blockId: string; start: number; end: number }
 	| { kind: "multiBlock"; blockIds: string[] };
 
+/** Typst's built-in heading size multipliers relative to the body font size. */
+const TYPST_HEADING_SCALE: Record<HeadingLevel, number> = { 1: 1.4, 2: 1.2, 3: 1.06, 4: 1.0 };
+
 export function defaultFootnotePageSettings(): FootnotePageSettings {
 	return { numbering: "1", clearance: 1, gap: 0.5, indent: 1 };
 }
@@ -1367,7 +1370,12 @@ class DocumentStore {
 		const base = { ...this.model.typography };
 		if (context.startsWith("heading-")) {
 			const level = parseInt(context.slice(8)) as HeadingLevel;
-			Object.assign(base, this.model.headingTypography?.[level] ?? {});
+			// Size is always em-relative: use headingScale if set, else the Typst default.
+			const scale = this.model.headingScale?.[level] ?? TYPST_HEADING_SCALE[level] ?? 1;
+			base.size = base.size * scale;
+			// Apply other per-level overrides (never size — that lives in headingScale).
+			const { size: _s, ...restOverride } = this.model.headingTypography?.[level] ?? {};
+			Object.assign(base, restOverride);
 		} else if (context === "footnote") {
 			Object.assign(base, this.model.footnoteTypography ?? {});
 		}
@@ -1377,7 +1385,11 @@ class DocumentStore {
 	resolveTypography(block: Block): TypographySettings {
 		const base = { ...this.model.typography };
 		if (block.heading && block.heading.level > 0) {
-			Object.assign(base, this.model.headingTypography?.[block.heading.level as HeadingLevel] ?? {});
+			const level = block.heading.level as HeadingLevel;
+			const scale = this.model.headingScale?.[level] ?? TYPST_HEADING_SCALE[level] ?? 1;
+			base.size = base.size * scale;
+			const { size: _s, ...restOverride } = this.model.headingTypography?.[level] ?? {};
+			Object.assign(base, restOverride);
 		} else if (block.footnote) {
 			Object.assign(base, this.model.footnoteTypography ?? {});
 		}
@@ -1413,8 +1425,15 @@ class DocumentStore {
 				this.model.typography[key] = value;
 			} else if (context.startsWith("heading-")) {
 				const level = parseInt(context.slice(8)) as HeadingLevel;
-				if (!this.model.headingTypography) this.model.headingTypography = {};
-				(this.model.headingTypography[level] ??= {})[key] = value;
+				if (key === "size") {
+					// Store as em scale relative to body so it tracks body size changes.
+					// The popup passes pt (em × bodySize), so divide back to get the multiplier.
+					if (!this.model.headingScale) this.model.headingScale = {};
+					this.model.headingScale[level] = (value as number) / this.model.typography.size;
+				} else {
+					if (!this.model.headingTypography) this.model.headingTypography = {};
+					(this.model.headingTypography[level] ??= {})[key] = value;
+				}
 			} else if (context === "footnote") {
 				(this.model.footnoteTypography ??= {})[key] = value;
 			}

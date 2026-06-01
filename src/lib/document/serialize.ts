@@ -183,15 +183,16 @@ function serializePreamble(doc: DocumentModel): string {
 	parts.push(...serializeFootnotePageRules(doc, 0, blockIndexById, []));
 
 	// Per-level heading typography: #show heading.where(level: N): set text(…)
-	if (doc.headingTypography) {
-		for (let n = 1; n <= 4; n++) {
-			const lvlTypo = doc.headingTypography[n as HeadingLevel];
-			if (!lvlTypo || Object.keys(lvlTypo).length === 0) continue;
-			const { underline: _u, leading: _l, ...textTypo } = lvlTypo;
-			const tArgs = textArgs(textTypo);
-			if (tArgs.length > 0) {
-				parts.push(`#show heading.where(level: ${n}): set text(${tArgs.join(", ")})`);
-			}
+	for (let n = 1; n <= 4; n++) {
+		const level = n as HeadingLevel;
+		const scale = doc.headingScale?.[level];
+		const lvlTypo = doc.headingTypography?.[level] ?? {};
+		const { size: _s, underline: _u, leading: _l, ...textTypo } = lvlTypo;
+		const args: string[] = [];
+		if (scale !== undefined) args.push(`size: ${typstNumber(scale)}em`);
+		args.push(...textArgs(textTypo));
+		if (args.length > 0) {
+			parts.push(`#show heading.where(level: ${n}): set text(${args.join(", ")})`);
 		}
 	}
 
