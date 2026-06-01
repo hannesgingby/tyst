@@ -23,6 +23,7 @@ import type {
 	StrokeSettings,
 	TypographySettings,
 } from "./types";
+import { DEFAULT_LANGUAGE, LANGUAGE_CODE } from "./languages";
 import {
 	hasBlockHeadingNumberingOverride,
 	resolveBlockHeadingSpacing,
@@ -47,6 +48,10 @@ function escapeText(text: string): string {
 
 function hexToRgb(hex: string): string {
 	return `rgb("${hex.toUpperCase()}")`;
+}
+
+function langCode(displayName: string): string {
+	return LANGUAGE_CODE[displayName] ?? displayName;
 }
 
 /** Build `text(...)` argument lines from a (possibly partial) typography object. */
@@ -240,9 +245,12 @@ function serializeDocumentMetadata(meta: DocumentMetadata): string | null {
 
 /** The document preamble: page, default text and default paragraph set rules. */
 function serializePreamble(doc: DocumentModel, hasPageFormRef = false): string {
-	const textRule = `#set text(\n${textArgs(doc.typography)
-		.map((l) => `  ${l},`)
-		.join("\n")}\n)`;
+	const docLangCode = langCode(doc.lang ?? DEFAULT_LANGUAGE);
+	const textRuleArgs = [
+		...textArgs(doc.typography),
+		`lang: "${docLangCode}"`,
+	];
+	const textRule = `#set text(\n${textRuleArgs.map((l) => `  ${l},`).join("\n")}\n)`;
 	const parRule = `#set par(\n${parArgs(doc.typography.leading, doc.paragraph)
 		.map((l) => `  ${l},`)
 		.join("\n")}\n)`;
@@ -653,6 +661,8 @@ function serializeTextBlock(
 	const text = escapeText(block.text);
 	const typo = block.typography ?? {};
 	const para = block.paragraph ?? {};
+	const docLang = doc.lang ?? DEFAULT_LANGUAGE;
+	const blockLangChanged = block.lang !== undefined && block.lang !== docLang;
 
 	if (block.continuation) {
 		// Inline block: use #text(...)[content] with only the args that differ
@@ -666,6 +676,7 @@ function serializeTextBlock(
 		const underlineChanged = (typo.underline ?? false) !== (docTypo.underline ?? false);
 		const { underline: _u, ...textDiffTypo } = diffTypo;
 		const tArgs = textArgs(textDiffTypo);
+		if (blockLangChanged) tArgs.push(`lang: "${langCode(block.lang!)}"`);
 		let result = text;
 		if (tArgs.length > 0) result = `#text(${tArgs.join(", ")})[${result}]`;
 		if (underlineChanged) result = `#underline[${result}]`;
@@ -676,6 +687,7 @@ function serializeTextBlock(
 	const underline = typo.underline === true;
 	const overrides: string[] = [];
 	const tArgs = textArgs(typo);
+	if (blockLangChanged) tArgs.push(`lang: "${langCode(block.lang!)}"`);
 	if (tArgs.length > 0) overrides.push(`#set text(${tArgs.join(", ")})`);
 	// Only emit par args that actually differ from the global document defaults.
 	const docPara = doc.paragraph;

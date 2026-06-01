@@ -327,6 +327,8 @@ export interface Block {
 	reference?: ReferenceSettings;
 	/** Inline citation chip (continuation). Points to a BibliographySource. */
 	citation?: CitationSettings;
+	/** Per-block language override (display name, e.g. "French"). Unlinked from the document default. */
+	lang?: string;
 	/** Inline link chip (continuation). Serializes as `#link(url)[body]`. */
 	link?: LinkSettings;
 	/** Bibliography block (like outline). `text` holds the editable title. */
@@ -429,6 +431,8 @@ export interface DocumentModel {
 	pages: PageSettings[];
 	/** Which page is currently being configured in the settings modal. */
 	activePageIndex: number;
+	/** Document language (display name, e.g. "English") — maps to Typst `text(lang: ...)`. */
+	lang?: string;
 	/** Default typography (the "body" style applied to all unlinked blocks). */
 	typography: TypographySettings;
 	/** Default paragraph settings. */

@@ -47,6 +47,7 @@ import { isHeadingLevelLinked, resolveHeadingLevelStyle } from "./headingStyle";
 import { PAPER_SIZES, matchPreset } from "./paperSizes";
 import { serializeDocument } from "./serialize";
 import { normalizeUrl } from "./url";
+import { DEFAULT_LANGUAGE } from "./languages";
 
 function newId(): string {
 	return crypto.randomUUID();
@@ -612,6 +613,49 @@ class DocumentStore {
 			const b = this.findBlock(id);
 			if (!b) continue;
 			b.paragraph = value ? undefined : { ...this.resolveParagraph(b) };
+		}
+	}
+
+	get langLinked(): boolean {
+		return this.targetBlockIds.every((id) => !this.findBlock(id)?.lang);
+	}
+
+	set langLinked(value: boolean) {
+		const sel = this.selection;
+		if (!value && sel?.kind === "intraBlock") {
+			const { blockId, start, end } = sel;
+			const midId = this.splitBlockAtSelection(blockId, start, end);
+			if (midId) {
+				const mid = this.findBlock(midId);
+				if (mid) {
+					mid.lang = this.model.lang ?? DEFAULT_LANGUAGE;
+					this.pendingFocusAction = { kind: "selection", blockId: midId, start: 0, end: mid.text.length };
+				}
+				return;
+			}
+		}
+		for (const id of this.targetBlockIds) {
+			const b = this.findBlock(id);
+			if (!b) continue;
+			b.lang = value ? undefined : (b.lang ?? this.model.lang ?? DEFAULT_LANGUAGE);
+		}
+	}
+
+	get popupLang(): string {
+		if (this.langLinked) return this.model.lang ?? DEFAULT_LANGUAGE;
+		const b = this.findBlock(this.targetBlockIds[0]) ?? this.activeBlock;
+		return b.lang ?? this.model.lang ?? DEFAULT_LANGUAGE;
+	}
+
+	setLang(value: string): void {
+		if (this.langLinked) {
+			this.model.lang = value;
+		} else {
+			for (const id of this.targetBlockIds) {
+				const b = this.findBlock(id);
+				if (!b) continue;
+				b.lang = value;
+			}
 		}
 	}
 

@@ -7,7 +7,7 @@
 	import { documentStore } from "$lib/document/store.svelte";
 </script>
 
-<div class="shell relative z-[60] w-[324px] rounded-lg p-3">
+<div class="shell relative z-[60] w-[324px] rounded-lg p-3 pb-5">
 	<div
 		class="grid transition-[grid-template-rows] duration-100 ease-[cubic-bezier(0.33,1,0.68,1)]"
 		style:grid-template-rows={documentStore.headingMenuIsTitle ? "0fr" : "1fr"}
@@ -55,7 +55,7 @@
 
 	<button
 		type="button"
-		class="mt-8 ml-auto flex items-center gap-1 text-body-14-tight text-text-200 transition-colors duration-150 ease-out hover:text-text-150"
+		class="mt-6 ml-auto flex items-center gap-1 text-body-14-tight text-text-200 transition-colors duration-150 ease-out hover:text-text-150"
 	>
 		Style rules
 		<Icon name="arrow-up-right" class="size-4" />

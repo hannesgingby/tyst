@@ -15,6 +15,7 @@
 	import { documentStore } from "$lib/document/store.svelte";
 	import { fontStore } from "$lib/system/fonts.svelte";
 	import { FONT_SIZE_UNITS, fontSizeUnit, ptToUnit, unitToPt } from "$lib/document/units";
+	import { LANGUAGES } from "$lib/document/languages";
 
 	// "em" is added as a context-relative unit; handled separately since its
 	// conversion factor depends on the body font size, not a fixed pt ratio.
@@ -133,7 +134,7 @@
 		</div>
 	</section>
 
-	<section class="mt-[41px]">
+	<section class="mt-6">
 		<PopupSectionHeader title="Typography">
 			<Tag label={documentStore.typographyContext} variant="blue" bind:linked={documentStore.typographyLinked} />
 		</PopupSectionHeader>
@@ -198,9 +199,29 @@
 		</div>
 	</section>
 
+	<section class="mt-6">
+		<PopupSectionHeader title="Language">
+			<Tag label="default" variant="blue" bind:linked={documentStore.langLinked} />
+		</PopupSectionHeader>
+
+		<div class="mt-[13px]">
+			<DropdownMenu
+				value={documentStore.popupLang}
+				options={LANGUAGES}
+				placement="right"
+				verticalAlign="center"
+				searchable
+				searchPlaceholder="Search languages…"
+				popupClass="flex h-[300px] w-[280px] min-w-[280px] shrink-0 flex-col"
+				maxHeightClass="min-h-0 flex-1 overflow-y-auto"
+				onchange={(v) => documentStore.setLang(v)}
+			/>
+		</div>
+	</section>
+
 	<button
 		type="button"
-		class="mt-8 ml-auto flex items-center gap-1 text-body-14-tight text-text-200 transition-colors duration-150 ease-out hover:text-text-150"
+		class="mt-6 ml-auto flex items-center gap-1 text-body-14-tight text-text-200 transition-colors duration-150 ease-out hover:text-text-150"
 	>
 		Format groups
 		<Icon name="arrow-up-right" class="size-4" />
