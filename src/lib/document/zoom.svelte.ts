@@ -2,7 +2,9 @@ const STEP = 0.1;
 const MIN = 0.4;
 const MAX = 1.0;
 
-let zoom = $state(1);
+const DEFAULT = 0.9;
+
+let zoom = $state(DEFAULT);
 
 export const zoomStore = {
     get value() {
@@ -21,6 +23,6 @@ export const zoomStore = {
         zoom = Math.min(MAX, Math.max(MIN, value));
     },
     reset() {
-        zoom = 1;
+        zoom = DEFAULT;
     },
 };

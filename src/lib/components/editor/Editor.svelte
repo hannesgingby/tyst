@@ -127,7 +127,7 @@
         class="zoom-badge"
         class:visible={badgeVisible}
         onclick={handleZoomReset}
-        aria-label="Reset zoom to 100%"
+        aria-label="Reset zoom to 90%"
     >
         zoom: {zoomStore.percent}%
     </button>
