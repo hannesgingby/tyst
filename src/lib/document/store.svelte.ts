@@ -18,6 +18,8 @@ import type {
 	OutlineSettings,
 	PageSection,
 	PageSettings,
+	PageZone,
+	PageZoneNumbering,
 	ParagraphSettings,
 	PaperPreset,
 	RectSettings,
@@ -2187,6 +2189,51 @@ class DocumentStore {
 		const page = this.model.pages[0];
 		page.preset = preset;
 		if (preset !== "Custom") page.size = { ...PAPER_SIZES[preset] };
+	}
+
+	// ── Page zones (header / footer) ─────────────────────────────────────────
+
+	/** Currently active zone kind (null = none). */
+	activeZone = $state<"header" | "footer" | null>(null);
+
+	getZone(kind: "header" | "footer"): PageZone | undefined {
+		return this.model.pages[0]?.[kind];
+	}
+
+	activateZone(kind: "header" | "footer"): void {
+		this.activeZone = kind;
+		this.activeBlockId = null;
+	}
+
+	deactivateZone(): void {
+		this.activeZone = null;
+	}
+
+	updateZoneText(kind: "header" | "footer", text: string): void {
+		const page = this.model.pages[0];
+		if (!page) return;
+		const existing = page[kind];
+		page[kind] = { ...(existing ?? { text: "" }), text };
+	}
+
+	updateZoneNumbering(kind: "header" | "footer", numbering: PageZoneNumbering | undefined): void {
+		const page = this.model.pages[0];
+		if (!page) return;
+		const existing = page[kind] ?? { text: "" };
+		page[kind] = { ...existing, numbering };
+	}
+
+	updateZoneAscent(ascent: string | undefined): void {
+		const page = this.model.pages[0];
+		if (!page) return;
+		const existing = page.header ?? { text: "" };
+		page.header = { ...existing, ascent };
+	}
+
+	clearZone(kind: "header" | "footer"): void {
+		const page = this.model.pages[0];
+		if (!page) return;
+		delete page[kind];
 	}
 
 	load(model: DocumentModel): void {

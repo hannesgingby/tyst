@@ -1,6 +1,7 @@
 <script lang="ts">
     import { tick } from "svelte";
     import Block from "./Block.svelte";
+    import PageZoneEditor from "./PageZoneEditor.svelte";
     import {
         resolveBlockHeadingSpacing,
         resolveBlockListSpacing,
@@ -637,6 +638,7 @@
 
     function onFocusBlock(id: string): void {
         documentStore.activeBlockId = id;
+        documentStore.deactivateZone();
     }
 
     /** Empty continuation segment whose previous block is an inline embed (h-spacing, footnote marker, reference, citation). */
@@ -1198,6 +1200,27 @@
             )}
             {@const renderItems = buildRenderItems(mainPageBlocks)}
             {@const contentHeightPx = pageHeightPx - mp.top - mp.bottom}
+            {@const zoneWidth = pageWidthPx - mp.left - mp.right}
+            <!-- Header zone -->
+            <div
+                class="absolute"
+                style:top="{pageTop}px"
+                style:left="{mp.left}px"
+                style:width="{zoneWidth}px"
+                style:height="{mp.top}px"
+            >
+                <PageZoneEditor kind="header" pageIdx={pageIdx} />
+            </div>
+            <!-- Footer zone -->
+            <div
+                class="absolute"
+                style:top="{pageTop + pageHeightPx - mp.bottom}px"
+                style:left="{mp.left}px"
+                style:width="{zoneWidth}px"
+                style:height="{mp.bottom}px"
+            >
+                <PageZoneEditor kind="footer" pageIdx={pageIdx} />
+            </div>
             <!-- Content area for this page (margins are per-page) -->
             <div
                 class="absolute flex flex-col"

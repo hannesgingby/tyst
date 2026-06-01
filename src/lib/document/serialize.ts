@@ -15,6 +15,7 @@ import type {
 	FootnotePageSettings,
 	OutlineSettings,
 	PageSettings,
+	PageZone,
 	ParagraphSettings,
 	RectSettings,
 	ReferenceSettings,
@@ -83,6 +84,34 @@ function serializeMargins(m: Margins): string {
 	return `(${parts.join(", ")})`;
 }
 
+function serializePageZone(zone: PageZone): string {
+	const { text, numbering } = zone;
+	const parts: string[] = [];
+
+	if (numbering) {
+		const needsBoth = numbering.pattern.length > 1;
+		const counter = needsBoth
+			? `#counter(page).display("${numbering.pattern}", both: true)`
+			: `#counter(page).display("${numbering.pattern}")`;
+
+		if (numbering.align === "left") {
+			parts.push(counter);
+			if (text) parts.push(text);
+		} else if (numbering.align === "center") {
+			if (text) parts.push(text);
+			parts.push("#h(1fr)", counter, "#h(1fr)");
+		} else {
+			if (text) parts.push(text);
+			parts.push("#h(1fr)", counter);
+		}
+	} else if (text) {
+		parts.push(text);
+	}
+
+	if (parts.length === 0) return "";
+	return `context [${parts.join(" ")}]`;
+}
+
 /** Serialize a full #set page(...) call for a given PageSettings. */
 function serializePageSetFull(page: PageSettings, numbering?: string): string {
 	const lines: string[] = [];
@@ -97,6 +126,17 @@ function serializePageSetFull(page: PageSettings, numbering?: string): string {
 	lines.push(`  margin: ${serializeMargins(page.margins)},`);
 	lines.push(`  fill: ${hexToRgb(page.fill)},`);
 	if (numbering) lines.push(`  numbering: "${numbering}",`);
+	if (page.header) {
+		const hSerialized = serializePageZone(page.header);
+		if (hSerialized) {
+			lines.push(`  header: ${hSerialized},`);
+			if (page.header.ascent) lines.push(`  header-ascent: ${page.header.ascent},`);
+		}
+	}
+	if (page.footer) {
+		const fSerialized = serializePageZone(page.footer);
+		if (fSerialized) lines.push(`  footer: ${fSerialized},`);
+	}
 	return `#set page(\n${lines.join("\n")}\n)`;
 }
 

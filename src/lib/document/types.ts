@@ -38,6 +38,26 @@ export interface PageLinks {
 
 export type PageSection = keyof PageLinks;
 
+export type PageZoneCounterPattern = "1" | "1/1" | "I" | "i" | "A" | "a";
+
+export interface PageZoneNumbering {
+	pattern: PageZoneCounterPattern;
+	align: "left" | "center" | "right";
+}
+
+/** Content for a page header or footer zone. */
+export interface PageZone {
+	/** Free text shown in the zone. */
+	text: string;
+	/** Optional inline page counter. */
+	numbering?: PageZoneNumbering;
+	/**
+	 * Header-only: how far the header is raised into the top margin.
+	 * Typst `header-ascent` value, e.g. "30%" or "12pt". Omit for default.
+	 */
+	ascent?: string;
+}
+
 export interface PageSettings {
 	preset: PaperPreset;
 	size: PageSize;
@@ -54,6 +74,10 @@ export interface PageSettings {
 	/** Per-page footnote overrides when `footnoteLinked` is false. */
 	footnote?: FootnotePageSettings;
 	footnoteLinked?: boolean;
+	/** Page header zone content. */
+	header?: PageZone;
+	/** Page footer zone content. */
+	footer?: PageZone;
 }
 
 export type FontWeightName = "Regular" | "Medium" | "Bold";
