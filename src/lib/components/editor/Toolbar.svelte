@@ -35,6 +35,7 @@
     const outlineTied = $derived(documentStore.tiedPopup === "outline");
     const footnoteTied = $derived(documentStore.tiedPopup === "footnote");
     const spacingTied = $derived(documentStore.tiedPopup === "spacing");
+    const referenceTied = $derived(documentStore.tiedPopup === "reference");
 
     // Hover-to-open for the Line tool (matches Headings/List behaviour). When
     // a shape is active the popup is "tied" open regardless of hover.
@@ -56,6 +57,7 @@
     let footnoteWrapEl = $state<HTMLDivElement | null>(null);
     let hSpacingWrapEl = $state<HTMLDivElement | null>(null);
     let vSpacingWrapEl = $state<HTMLDivElement | null>(null);
+    let referenceWrapEl = $state<HTMLDivElement | null>(null);
 
     function isInsideActiveEmbed(target: EventTarget | null): boolean {
         if (!(target instanceof HTMLElement)) return false;
@@ -103,10 +105,19 @@
                 documentStore.popupDismissed = "spacing";
             }
         }
+        if (referenceTied && !documentStore.popupDismissed) {
+            const inPopup =
+                referenceWrapEl != null &&
+                target instanceof Node &&
+                referenceWrapEl.contains(target);
+            if (!inPopup && !isInsideActiveEmbed(target)) {
+                documentStore.popupDismissed = "reference";
+            }
+        }
     }
 
     $effect(() => {
-        if (!imageTied && !lineTied && !outlineTied && !footnoteTied && !spacingTied) return;
+        if (!imageTied && !lineTied && !outlineTied && !footnoteTied && !spacingTied && !referenceTied) return;
         document.addEventListener("pointerdown", onDocumentPointerDown, true);
         return () => document.removeEventListener("pointerdown", onDocumentPointerDown, true);
     });
@@ -118,6 +129,15 @@
     const outlineOpen = $derived(outlineTied && documentStore.popupDismissed !== "outline");
     const footnoteOpen = $derived(footnoteTied && documentStore.popupDismissed !== "footnote");
     const spacingOpen = $derived(spacingTied && documentStore.popupDismissed !== "spacing");
+    const referenceOpen = $derived(referenceTied && documentStore.popupDismissed !== "reference");
+
+    function handleReferenceClick(): void {
+        if (referenceTied && (activeBlock.reference || activeBlock.citation)) {
+            documentStore.popupDismissed =
+                documentStore.popupDismissed === "reference" ? null : "reference";
+            return;
+        }
+    }
 
     function handleFootnoteClick(): void {
         if (
@@ -601,13 +621,35 @@
                             </div>
                         {/if}
                     </div>
-                    <HoverPopup
-                        label="Reference"
-                        icon="at-sign"
-                        iconClass="size-5"
-                    >
-                        {#snippet popup()}<ReferencePopup />{/snippet}
-                    </HoverPopup>
+                    <div bind:this={referenceWrapEl} class="relative flex items-center">
+                        {#if referenceTied}
+                            {@render embedTrigger(
+                                "at-sign",
+                                "Reference",
+                                referenceTied,
+                                referenceOpen,
+                                handleReferenceClick,
+                                "size-5",
+                            )}
+                            {#if referenceOpen}
+                                <div
+                                    class="absolute bottom-full -left-8 z-[60] pb-2.5"
+                                    role="dialog"
+                                    aria-label="Reference"
+                                >
+                                    <ReferencePopup />
+                                </div>
+                            {/if}
+                        {:else}
+                            <HoverPopup
+                                label="Reference"
+                                icon="at-sign"
+                                iconClass="size-5"
+                            >
+                                {#snippet popup()}<ReferencePopup />{/snippet}
+                            </HoverPopup>
+                        {/if}
+                    </div>
                     {#each group.tools as tool, toolIndex (toolIndex)}
                         {#if tool.kind === "icon"}
                             {@render toolIcon(

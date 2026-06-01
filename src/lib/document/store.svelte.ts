@@ -1,6 +1,9 @@
 import type {
+	BibliographySettings,
+	BibliographySource,
 	Block,
 	BlockSpacing,
+	CitationSettings,
 	DocumentModel,
 	EmbedKind,
 	HeadingLevel,
@@ -18,11 +21,13 @@ import type {
 	ParagraphSettings,
 	PaperPreset,
 	RectSettings,
+	ReferenceSettings,
 	SpacingSettings,
 	SpacingUnit,
 	StrokeSettings,
 	TypographySettings,
 } from "./types";
+import { createBibliographySource } from "./bibliographySource";
 import { resolveHeadingSpacing, resolveListSpacing } from "./blockSpacing";
 import {
 	hasBlockHeadingNumberingOverride,
@@ -186,6 +191,7 @@ class DocumentStore {
 		if (b.outline) return "outline";
 		if (b.footnote || b.footnoteMarker) return "footnote";
 		if (b.vSpacing || b.hSpacing) return "spacing";
+		if (b.reference || b.citation) return "reference";
 		return null;
 	});
 
@@ -304,6 +310,8 @@ class DocumentStore {
 		if (active.footnoteSeparator && active.line) return active.id;
 		if (active.outline && active.text === "") return active.id;
 		if (active.vSpacing || active.hSpacing || active.pageBreak) return active.id;
+		if (active.reference || active.citation) return active.id;
+		if (active.bibliography) return active.id;
 
 		if (active.text !== "" || active.heading || active.list) return null;
 
@@ -320,7 +328,9 @@ class DocumentStore {
 			prev.vSpacing ||
 			prev.hSpacing ||
 			prev.pageBreak ||
-			prev.footnoteMarker
+			prev.footnoteMarker ||
+			prev.reference ||
+			prev.citation
 		)
 			return prev.id;
 
@@ -349,7 +359,10 @@ class DocumentStore {
 				b.footnoteSeparator ||
 				b.vSpacing ||
 				b.hSpacing ||
-				b.pageBreak
+				b.pageBreak ||
+				b.reference ||
+				b.citation ||
+				b.bibliography
 			)
 		)
 			return null;
@@ -416,6 +429,22 @@ class DocumentStore {
 			if (next && this.isEffectivelyEmptyBlock(next) && !next.continuation) {
 				this.model.blocks.splice(idx, 1);
 			}
+		} else if (b.reference || b.citation) {
+			this.model.blocks.splice(idx, 1);
+			// Clean up the trailing empty continuation if it exists
+			const next = this.model.blocks[idx];
+			if (
+				next?.continuation &&
+				next.text === "" &&
+				!next.reference &&
+				!next.citation &&
+				!next.hSpacing &&
+				!next.footnoteMarker
+			) {
+				this.model.blocks.splice(idx, 1);
+			}
+		} else if (b.bibliography) {
+			this.model.blocks.splice(idx, 1);
 		} else {
 			this.model.blocks.splice(idx, 1);
 		}
@@ -955,7 +984,7 @@ class DocumentStore {
 
 		if (!this.isEffectivelyEmptyDocument()) return;
 
-		const active = this.findBlock(this.activeBlockId);
+		const active = this.findBlock(this.activeBlockId ?? "");
 		const id =
 			active && this.isEffectivelyEmptyBlock(active) ? active.id : newId();
 		const existing = this.findBlock(id);
@@ -1189,6 +1218,150 @@ class DocumentStore {
 			this.activeBlockId = id;
 		}
 		this.popupDismissed = null;
+	}
+
+	/** Computed sections for the reference picker. */
+	readonly referenceSections = $derived.by((): { headings: Block[]; figures: Block[] } => {
+		const headings = this.model.blocks.filter(b => b.heading && b.heading.level > 0);
+		const figures = this.model.blocks.filter(b => b.image);
+		return { headings, figures };
+	});
+
+	/** Bibliography settings accessor (defaults when not set). */
+	get bibliographySettings(): BibliographySettings {
+		return this.model.bibliography ?? {
+			sources: [],
+			citationStyleId: "ieee",
+			titleOption: "your-choice",
+			full: false,
+		};
+	}
+
+	/** Insert an inline reference chip after the active block. */
+	insertReference(targetBlockId: string, displayText?: string, pageForm?: boolean): void {
+		this.normalizeInlineStructure();
+		const active = this.activeBlock;
+		const idx = this.blockIndex(active.id);
+		const emptyTail =
+			active.continuation &&
+			active.text === "" &&
+			!active.reference &&
+			!active.citation &&
+			idx > 0;
+		const insertAfterId = emptyTail ? this.model.blocks[idx - 1].id : active.id;
+		const id = this.insertBlockObjectAfter(insertAfterId, {
+			text: "",
+			continuation: true,
+			reference: { targetBlockId, displayText, pageForm },
+		});
+		if (!emptyTail) {
+			const nextIndex = this.blockIndex(id) + 1;
+			const next = this.model.blocks[nextIndex];
+			if (!next || next.reference || next.citation) {
+				this.insertBlockObjectAfter(id, { text: "", continuation: true });
+			}
+		}
+		const tail = this.model.blocks[this.blockIndex(id) + 1];
+		if (tail) {
+			this.activeBlockId = tail.id;
+			this.pendingFocusAction = { kind: "caret", blockId: tail.id, offset: 0 };
+		} else {
+			this.activeBlockId = id;
+		}
+		this.popupDismissed = null;
+	}
+
+	/** Insert an inline citation chip after the active block. */
+	insertCitation(sourceId: string, supplement?: string): void {
+		this.normalizeInlineStructure();
+		const active = this.activeBlock;
+		const idx = this.blockIndex(active.id);
+		const emptyTail =
+			active.continuation &&
+			active.text === "" &&
+			!active.reference &&
+			!active.citation &&
+			idx > 0;
+		const insertAfterId = emptyTail ? this.model.blocks[idx - 1].id : active.id;
+		const id = this.insertBlockObjectAfter(insertAfterId, {
+			text: "",
+			continuation: true,
+			citation: { sourceId, supplement },
+		});
+		if (!emptyTail) {
+			const nextIndex = this.blockIndex(id) + 1;
+			const next = this.model.blocks[nextIndex];
+			if (!next || next.reference || next.citation) {
+				this.insertBlockObjectAfter(id, { text: "", continuation: true });
+			}
+		}
+		const tail = this.model.blocks[this.blockIndex(id) + 1];
+		if (tail) {
+			this.activeBlockId = tail.id;
+			this.pendingFocusAction = { kind: "caret", blockId: tail.id, offset: 0 };
+		} else {
+			this.activeBlockId = id;
+		}
+		this.popupDismissed = null;
+		this.ensureBibliographyBlock();
+	}
+
+	updateReference(blockId: string, patch: Partial<ReferenceSettings>): void {
+		const b = this.findBlock(blockId);
+		if (!b?.reference) return;
+		b.reference = { ...b.reference, ...patch };
+	}
+
+	updateCitation(blockId: string, patch: Partial<CitationSettings>): void {
+		const b = this.findBlock(blockId);
+		if (!b?.citation) return;
+		b.citation = { ...b.citation, ...patch };
+	}
+
+	activateReference(blockId: string): void {
+		this.popupDismissed = null;
+		this.activeBlockId = blockId;
+	}
+
+	/** Ensure a bibliography block exists at the end of the document. */
+	ensureBibliographyBlock(): void {
+		if (this.model.blocks.some(b => b.bibliography)) return;
+		if (!this.model.bibliography) {
+			this.model.bibliography = {
+				sources: [],
+				citationStyleId: "ieee",
+				titleOption: "your-choice",
+				full: false,
+			};
+		}
+		this.insertBlockObjectAt(this.model.blocks.length, {
+			text: "Sources",
+			bibliography: true,
+			placeholder: "Sources",
+		});
+	}
+
+	updateBibliographySettings(patch: Partial<BibliographySettings>): void {
+		this.model.bibliography = { ...this.bibliographySettings, ...patch };
+	}
+
+	addBibliographySource(): void {
+		const bib = this.bibliographySettings;
+		const newSource = createBibliographySource();
+		this.model.bibliography = { ...bib, sources: [...bib.sources, newSource] };
+	}
+
+	removeBibliographySource(sourceId: string): void {
+		const bib = this.bibliographySettings;
+		this.model.bibliography = { ...bib, sources: bib.sources.filter(s => s.id !== sourceId) };
+	}
+
+	updateBibliographySource(sourceId: string, patch: Partial<BibliographySource>): void {
+		const bib = this.bibliographySettings;
+		this.model.bibliography = {
+			...bib,
+			sources: bib.sources.map(s => s.id === sourceId ? { ...s, ...patch } : s),
+		};
 	}
 
 	/** Update the spacing amount value for the active vSpacing or hSpacing block. */

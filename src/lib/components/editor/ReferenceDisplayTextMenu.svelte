@@ -1,11 +1,13 @@
 <script lang="ts">
+	import Checkbox from "$lib/components/ui/Checkbox.svelte";
 	import PopupSectionHeader from "$lib/components/ui/PopupSectionHeader.svelte";
 
 	interface Props {
 		value?: string;
+		pageForm?: boolean;
 	}
 
-	let { value = $bindable("") }: Props = $props();
+	let { value = $bindable(""), pageForm = $bindable(false) }: Props = $props();
 </script>
 
 <div class="shell relative z-[60] w-[324px] rounded-lg p-3">
@@ -22,5 +24,9 @@
 				autocomplete="off"
 			/>
 		</label>
+	</div>
+
+	<div class="mt-3">
+		<Checkbox label="Page form" bind:checked={pageForm} />
 	</div>
 </div>

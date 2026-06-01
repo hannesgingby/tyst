@@ -316,10 +316,60 @@ export interface Block {
 	hSpacing?: SpacingSettings;
 	/** Forces a page break before the next block. Serializes as `#pagebreak()`. */
 	pageBreak?: boolean;
+	/** Inline reference chip (continuation). Points to a heading or figure block. */
+	reference?: ReferenceSettings;
+	/** Inline citation chip (continuation). Points to a BibliographySource. */
+	citation?: CitationSettings;
+	/** Bibliography block (like outline). `text` holds the editable title. */
+	bibliography?: true;
+}
+
+/** Source types for bibliography entries. */
+export const SOURCE_TYPES = ["Article", "Book", "Chapter", "Conference", "Report", "Thesis", "Web"] as const;
+export type SourceType = (typeof SOURCE_TYPES)[number];
+
+export interface BibliographySource {
+	id: string;
+	/** UI accordion state. */
+	expanded: boolean;
+	type: SourceType;
+	title: string;
+	authors: string;
+	date: string;
+	journalName: string;
+	volume: string;
+	issue: string;
+	pageRange: string;
+}
+
+/** Inline reference chip — points to a heading or figure block. */
+export interface ReferenceSettings {
+	/** Block ID of the referenced heading / image. */
+	targetBlockId: string;
+	/** Custom display text; empty means Typst auto-generates it. */
+	displayText?: string;
+	/** When true, renders `#ref(<label>, form: "page")`. */
+	pageForm?: boolean;
+}
+
+/** Inline citation chip — points to a BibliographySource. */
+export interface CitationSettings {
+	/** BibliographySource.id to cite. */
+	sourceId: string;
+	/** Optional supplement text. */
+	supplement?: string;
+}
+
+export interface BibliographySettings {
+	sources: BibliographySource[];
+	citationStyleId: string;
+	titleOption: "your-choice" | "none";
+	full: boolean;
+	spacing?: BlockSpacing;
 }
 
 /** Embed block kinds. */
-export type EmbedKind = "image" | "line" | "rect" | "outline" | "footnote" | "spacing";
+export type EmbedKind = "image" | "line" | "rect" | "outline" | "footnote" | "spacing" | "reference";
 
 export interface DocumentModel {
 	name: string;
@@ -383,4 +433,6 @@ export interface DocumentModel {
 	footnoteTypography?: Partial<TypographySettings>;
 	/** Document body as an ordered list of paragraph blocks. */
 	blocks: Block[];
+	/** Bibliography settings (sources, style, etc.). Undefined until first citation is inserted. */
+	bibliography?: BibliographySettings;
 }

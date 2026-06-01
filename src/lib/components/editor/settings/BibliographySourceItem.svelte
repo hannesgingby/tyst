@@ -15,13 +15,18 @@
 	interface Props {
 		source: BibliographySource;
 		label: string;
+		onchange?: (patch: Partial<BibliographySource>) => void;
 		onremove?: () => void;
 	}
 
-	let { source = $bindable(), label, onremove }: Props = $props();
+	let { source, label, onchange, onremove }: Props = $props();
 
 	function toggleExpanded(): void {
-		source.expanded = !source.expanded;
+		onchange?.({ expanded: !source.expanded });
+	}
+
+	function updateField<K extends keyof BibliographySource>(key: K, value: BibliographySource[K]): void {
+		onchange?.({ [key]: value } as Partial<BibliographySource>);
 	}
 </script>
 
@@ -63,8 +68,9 @@
 					<DropdownMenu
 						class="w-full"
 						bg={FIELD_BG}
-						bind:value={source.type}
+						value={source.type}
 						options={SOURCE_TYPES}
+						onchange={(v) => updateField("type", v as typeof source.type)}
 					/>
 				</div>
 
@@ -75,7 +81,8 @@
 					<input
 						type="text"
 						class={FIELD_CLASS}
-						bind:value={source.title}
+						value={source.title}
+						oninput={(e) => updateField("title", (e.target as HTMLInputElement).value)}
 						spellcheck="false"
 					/>
 				</div>
@@ -87,7 +94,8 @@
 					<input
 						type="text"
 						class={FIELD_CLASS}
-						bind:value={source.authors}
+						value={source.authors}
+						oninput={(e) => updateField("authors", (e.target as HTMLInputElement).value)}
 						spellcheck="false"
 					/>
 				</div>
@@ -99,7 +107,8 @@
 					<input
 						type="text"
 						class={FIELD_CLASS}
-						bind:value={source.date}
+						value={source.date}
+						oninput={(e) => updateField("date", (e.target as HTMLInputElement).value)}
 						placeholder="yyyy-(mm)-(dd)"
 						spellcheck="false"
 					/>
@@ -110,7 +119,8 @@
 					<input
 						type="text"
 						class={FIELD_CLASS}
-						bind:value={source.journalName}
+						value={source.journalName}
+						oninput={(e) => updateField("journalName", (e.target as HTMLInputElement).value)}
 						spellcheck="false"
 					/>
 				</div>
@@ -120,7 +130,8 @@
 					<input
 						type="text"
 						class={FIELD_CLASS}
-						bind:value={source.volume}
+						value={source.volume}
+						oninput={(e) => updateField("volume", (e.target as HTMLInputElement).value)}
 						spellcheck="false"
 					/>
 				</div>
@@ -130,7 +141,8 @@
 					<input
 						type="text"
 						class={FIELD_CLASS}
-						bind:value={source.issue}
+						value={source.issue}
+						oninput={(e) => updateField("issue", (e.target as HTMLInputElement).value)}
 						spellcheck="false"
 					/>
 				</div>
@@ -140,7 +152,8 @@
 					<input
 						type="text"
 						class={FIELD_CLASS}
-						bind:value={source.pageRange}
+						value={source.pageRange}
+						oninput={(e) => updateField("pageRange", (e.target as HTMLInputElement).value)}
 						spellcheck="false"
 					/>
 				</div>

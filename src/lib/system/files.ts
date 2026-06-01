@@ -2,6 +2,7 @@ import { save } from "@tauri-apps/plugin-dialog";
 import { compilePdf, ensureDir, isTauri, writeBytesFile, writeTextFile } from "./tauri";
 import { documentStore } from "$lib/document/store.svelte";
 import { imageCache } from "./imageCache.svelte";
+import { serializeSourcesYaml } from "$lib/document/serialize";
 
 function sanitizeFileName(name: string): string {
 	return name.trim().replace(/[\\/:*?"<>|]/g, "-") || "document";
@@ -64,11 +65,25 @@ async function pickPath(extension: string, filterName: string): Promise<string |
 	});
 }
 
+/**
+ * Write the sources YAML file next to the given .typ path (in the images folder).
+ * No-op when there are no sources or not in Tauri.
+ */
+async function writeSourcesYaml(typPath: string): Promise<void> {
+	const yaml = serializeSourcesYaml(documentStore.model);
+	if (!yaml) return;
+	const dir = dirNameOf(typPath);
+	const folder = pathJoin(dir, imagesFolderName());
+	await ensureDir(folder);
+	await writeTextFile(pathJoin(folder, "sources.yaml"), yaml);
+}
+
 /** Save the current document as a `.typ` file via a native save dialog. */
 export async function saveTypFile(): Promise<void> {
 	const path = await pickPath("typ", "Typst");
 	if (!path) return;
 	await writeEmbeddedImages(path);
+	await writeSourcesYaml(path);
 	await writeTextFile(path, documentStore.typ);
 }
 
@@ -80,5 +95,6 @@ export async function exportPdf(): Promise<void> {
 	// in a temp dir during compile. Write image bytes next to the chosen PDF
 	// destination AND next to the temp .typ so the compile actually finds them.
 	await writeEmbeddedImages(path);
+	await writeSourcesYaml(path);
 	await compilePdf(documentStore.typ, path);
 }

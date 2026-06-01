@@ -166,8 +166,11 @@
         );
     });
 
+    const isReference = $derived(!!block.reference);
+    const isCitation = $derived(!!block.citation);
+    const isBibliography = $derived(!!block.bibliography);
     const isInline = $derived(
-        block.continuation || renderInline || !!block.footnoteMarker,
+        block.continuation || renderInline || !!block.footnoteMarker || isReference || isCitation,
     );
     const isList = $derived(!!block.list);
     const isEmbed = $derived(!!(block.image || block.line || block.rect));
@@ -177,6 +180,68 @@
     const isPageBreak = $derived(!!block.pageBreak);
     const isFootnoteMarker = $derived(!!block.footnoteMarker);
     const isFootnoteBody = $derived(!!block.footnote);
+
+    /** Whether the bibliography style is numeric (e.g. IEEE) vs author-date (e.g. APA). */
+    function styleIsNumeric(styleId: string): boolean {
+        return (
+            styleId === "ieee" ||
+            styleId === "alphanumeric" ||
+            styleId.includes("numeric") ||
+            styleId.includes("vancouver") ||
+            styleId === "american-physics-society" ||
+            styleId === "american-institute-of-physics" ||
+            styleId === "american-institute-of-aeronautics-and-astronautics"
+        );
+    }
+
+    /** Inline label for a citation chip — mirrors how Typst renders it. */
+    const citationInlineLabel = $derived.by(() => {
+        if (!block.citation) return "";
+        const bib = documentStore.bibliographySettings;
+        const styleId = bib.citationStyleId;
+        const sourceId = block.citation.sourceId;
+        if (styleIsNumeric(styleId)) {
+            // Number = 1-based order of first appearance
+            let n = 0;
+            const seen = new Set<string>();
+            for (const b of documentStore.model.blocks) {
+                if (!b.citation) continue;
+                if (!seen.has(b.citation.sourceId)) {
+                    seen.add(b.citation.sourceId);
+                    n++;
+                }
+                if (b.citation.sourceId === sourceId) break;
+            }
+            const sup = block.citation.supplement ? `, ${block.citation.supplement}` : "";
+            return `[${n}${sup}]`;
+        }
+        // Author-date styles
+        const source = bib.sources.find(s => s.id === sourceId);
+        const author = source?.authors?.split(/[,;]/)[0]?.trim() ?? sourceId;
+        const year = source?.date?.slice(0, 4) ?? "";
+        const sup = block.citation.supplement ? `, ${block.citation.supplement}` : "";
+        return year ? `(${author}, ${year}${sup})` : `(${author}${sup})`;
+    });
+
+    /** Inline label for a cross-reference chip — mirrors how Typst renders it. */
+    const referenceInlineLabel = $derived.by(() => {
+        if (!block.reference) return "";
+        if (block.reference.displayText) return block.reference.displayText;
+        if (block.reference.pageForm) return "p. ?";
+        const target = documentStore.findBlock(block.reference.targetBlockId);
+        if (!target) return "?";
+        if (target.heading) return target.text || "Heading";
+        if (target.image) {
+            // Count which figure this is
+            let n = 0;
+            for (const b of documentStore.model.blocks) {
+                if (b.image) n++;
+                if (b.id === target.id) break;
+            }
+            return `Figure ${n}`;
+        }
+        return "Reference";
+    });
     const footnoteMarkerNumber = $derived(
         isFootnoteMarker ? documentStore.footnoteNumber(block.id) : 0,
     );
@@ -186,12 +251,12 @@
 
     /** Empty tail segment after an inline embed — needs a hit target and caret. */
     const trailAfterInlineEmbed = $derived.by(() => {
-        if (!isInline || block.footnoteMarker || block.text !== "")
+        if (!isInline || block.footnoteMarker || block.reference || block.citation || block.text !== "")
             return false;
         const i = documentStore.blockIndex(block.id);
         if (i <= 0) return false;
         const prev = documentStore.model.blocks[i - 1];
-        return !!(prev?.footnoteMarker || prev?.hSpacing);
+        return !!(prev?.footnoteMarker || prev?.hSpacing || prev?.reference || prev?.citation);
     });
 
     // Outline body entries: walk all blocks, count outlined headings, and pick
@@ -362,7 +427,7 @@
             if (
                 window.getSelection()?.isCollapsed &&
                 getCaretOffset(el) === 0 &&
-                !block.continuation
+                (!block.continuation || block.text === "")
             ) {
                 event.preventDefault();
                 onmergeprev(block.id);
@@ -468,7 +533,7 @@
         onfocus={() => {
             onfocusblock(block.id);
             if (trailAfterInlineEmbed && el) {
-                requestAnimationFrame(() => setCaretOffset(el, 0));
+                requestAnimationFrame(() => setCaretOffset(el!, 0));
             }
         }}
         oninput={onInput}
@@ -934,6 +999,142 @@
             onfocusblock(block.id);
         }}>{footnoteMarkerNumber}</span
     >
+{:else if isReference || isCitation}
+    {@const awaitingDelete = documentStore.embedAwaitingDelete === block.id}
+    <!-- svelte-ignore a11y_no_static_element_interactions -->
+    <span
+        bind:this={outerEl}
+        data-block-id={block.id}
+        class="doc-block-reference relative inline cursor-pointer select-none"
+        style:font-family={`"${typography.fontFamily}", serif`}
+        style:font-size="{fontSizePx}px"
+        style:line-height={lineHeight}
+        style:color={typography.color}
+        role="button"
+        tabindex="0"
+        onclick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            documentStore.activateReference(block.id);
+            onfocusblock(block.id);
+        }}
+        onkeydown={(e) => {
+            if (e.key !== "Enter" && e.key !== " ") return;
+            e.preventDefault();
+            documentStore.activateReference(block.id);
+            onfocusblock(block.id);
+        }}
+    >{isReference ? referenceInlineLabel : citationInlineLabel}{#if awaitingDelete}<span
+            class="font-sans text-text-150 pointer-events-none absolute right-0 bottom-full select-none"
+            style:font-size="{10 * scale}px"
+            style:line-height="1"
+            style:padding-bottom="{8 * scale}px"
+        >Backspace to delete</span>{/if}</span
+    >
+{:else if isBibliography}
+    {@const awaitingDelete = documentStore.embedAwaitingDelete === block.id}
+    {@const bib = documentStore.bibliographySettings}
+    {@const spacing = bib.spacing ?? { above: 1.2, below: 0.35 }}
+    {@const isNumericStyle = (id: string) =>
+        id === "ieee" || id === "alphanumeric" || id.includes("numeric") ||
+        id.includes("vancouver") || id === "american-physics-society" ||
+        id === "american-institute-of-physics" ||
+        id === "american-institute-of-aeronautics-and-astronautics"}
+    {@const numeric = isNumericStyle(bib.citationStyleId)}
+    {@const titleOption = bib.titleOption}
+    <!-- svelte-ignore a11y_click_events_have_key_events -->
+    <!-- svelte-ignore a11y_no_static_element_interactions -->
+    <div
+        bind:this={outerEl}
+        class="relative w-full cursor-pointer"
+        data-block-id={block.id}
+        style:margin-top={suppressAbove ? "0" : `${spacing.above}em`}
+        style:margin-bottom="{spacing.below}em"
+        onclick={(e) => {
+            e.preventDefault();
+            documentStore.activateEmbed(block.id);
+            onfocusblock(block.id);
+            el?.focus();
+            if (el) setCaretOffset(el, el.textContent?.length ?? 0);
+        }}
+    >
+        {#if awaitingDelete}
+            <span
+                class="font-sans text-text-150 pointer-events-none absolute right-0 bottom-full select-none"
+                style:font-size="{10 * scale}px"
+                style:line-height="1"
+                style:padding-bottom="{8 * scale}px"
+            >
+                Backspace to delete
+            </span>
+        {/if}
+        <!-- Title: always render el so height reporting always has a node. When
+             titleOption is "none", render it as an invisible zero-height element. -->
+        <div
+            bind:this={el}
+            class="doc-block outline-none w-full"
+            contenteditable="true"
+            spellcheck="false"
+            role="textbox"
+            tabindex="0"
+            aria-multiline="false"
+            data-block-id={block.id}
+            data-placeholder={titleOption !== "none" ? (effectivePlaceholder ?? "Sources") : undefined}
+            style:display={titleOption === "none" ? "none" : undefined}
+            style:font-family={`"${typography.fontFamily}", serif`}
+            style:font-size="{fontSizePx * 1.4}px"
+            style:font-weight={700}
+            style:line-height={1.2}
+            style:color={typography.color}
+            style:margin-bottom="0.35em"
+            onfocus={() => onfocusblock(block.id)}
+            oninput={onInput}
+            onkeydown={onKeydown}
+            onpaste={onPaste}
+        ></div>
+        <!-- Bibliography entries preview -->
+        {#if bib.sources.length === 0}
+            <div
+                class="select-none opacity-30"
+                style:font-family={`"${typography.fontFamily}", serif`}
+                style:font-size="{fontSizePx}px"
+                style:line-height={1.5}
+                style:color={typography.color}
+            >No sources added yet.</div>
+        {:else}
+            <div
+                class="select-none"
+                style:font-family={`"${typography.fontFamily}", serif`}
+                style:font-size="{fontSizePx}px"
+                style:line-height={1.5}
+                style:color={typography.color}
+            >
+                {#each bib.sources as source, i (source.id)}
+                    {@const key = numeric ? `[${i + 1}]` : source.id}
+                    {@const author = source.authors || ""}
+                    {@const year = source.date?.slice(0, 4) || ""}
+                    {@const title = source.title || "Untitled"}
+                    {@const journal = source.journalName || ""}
+                    {@const vol = source.volume ? `, vol. ${source.volume}` : ""}
+                    {@const iss = source.issue ? `, no. ${source.issue}` : ""}
+                    {@const pages = source.pageRange ? `, pp. ${source.pageRange}` : ""}
+                    <div class="flex gap-[1em]" style:margin-bottom="0.25em">
+                        {#if numeric}
+                            <span class="shrink-0 opacity-70">{key}</span>
+                            <span>
+                                {#if author}{author}{year ? `, ${year}` : ""}{title ? `. "${title}."` : ""}{journal ? ` ${journal}` : ""}{vol}{iss}{pages}.{/if}
+                                {#if !author}"{title}."{year ? ` ${year}.` : ""}{/if}
+                            </span>
+                        {:else}
+                            <span>
+                                {#if author}{author}{year ? ` (${year})` : ""}. {/if}<em>{title}.</em>{journal ? ` ${journal}.` : ""}
+                            </span>
+                        {/if}
+                    </div>
+                {/each}
+            </div>
+        {/if}
+    </div>
 {:else}
     {@render editable()}
 {/if}

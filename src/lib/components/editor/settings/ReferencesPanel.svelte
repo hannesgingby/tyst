@@ -4,41 +4,39 @@
 	import Switch from "$lib/components/ui/Switch.svelte";
 	import BibliographySourceItem from "./BibliographySourceItem.svelte";
 	import {
-		createBibliographySource,
-		type BibliographySource,
-	} from "$lib/document/bibliographySource";
-	import {
 		CITATION_STYLES,
 		citationStyleLabel,
 		DEFAULT_CITATION_STYLE_ID,
 	} from "$lib/document/citationStyles";
+	import { documentStore } from "$lib/document/store.svelte";
 
 	const FIELD_BG = "bg-bg-input-on-pure-white";
 	const CITATION_STYLE_LABELS = CITATION_STYLES.map((s) => s.label);
 
-	const BIBLIOGRAPHY_TITLE_OPTIONS = ["Auto", "None"] as const;
+	const BIBLIOGRAPHY_TITLE_OPTIONS = ["Your choice", "None"] as const;
 	type BibliographyTitleOption = (typeof BIBLIOGRAPHY_TITLE_OPTIONS)[number];
 
-	let citationStyleId = $state(DEFAULT_CITATION_STYLE_ID);
-	let citationStyleLabelValue = $state(
-		citationStyleLabel(DEFAULT_CITATION_STYLE_ID),
+	const bib = $derived(documentStore.bibliographySettings);
+
+	const citationStyleLabelValue = $derived(citationStyleLabel(bib.citationStyleId));
+
+	const bibliographyTitle = $derived<BibliographyTitleOption>(
+		bib.titleOption === "none" ? "None" : "Your choice",
 	);
-	let sources = $state<BibliographySource[]>([]);
-	let bibliographyTitle = $state<BibliographyTitleOption>("Auto");
-	let bibliographyFull = $state(false);
-
-	function addSource(): void {
-		sources = [...sources, createBibliographySource()];
-	}
-
-	function removeSource(id: string): void {
-		sources = sources.filter((s) => s.id !== id);
-	}
 
 	function onCitationStyleLabelChange(label: string): void {
-		citationStyleLabelValue = label;
 		const style = CITATION_STYLES.find((s) => s.label === label);
-		if (style) citationStyleId = style.id;
+		if (style) documentStore.updateBibliographySettings({ citationStyleId: style.id });
+	}
+
+	function onTitleOptionChange(option: string): void {
+		documentStore.updateBibliographySettings({
+			titleOption: option === "None" ? "none" : "your-choice",
+		});
+	}
+
+	function onFullChange(full: boolean): void {
+		documentStore.updateBibliographySettings({ full });
 	}
 </script>
 
@@ -54,7 +52,7 @@
 		<DropdownMenu
 			class="w-[211px]"
 			bg={FIELD_BG}
-			bind:value={citationStyleLabelValue}
+			value={citationStyleLabelValue}
 			options={CITATION_STYLE_LABELS}
 			searchable
 			searchPlaceholder="Search styles…"
@@ -68,18 +66,19 @@
 <section class="mt-16">
 	<div class="mb-5 flex items-center justify-between gap-4 border-b border-bg-600 pb-3">
 		<span class="text-body-16 text-text-100">Sources</span>
-		<Button icon="plus" onclick={addSource}>Add source</Button>
+		<Button icon="plus" onclick={() => documentStore.addBibliographySource()}>Add source</Button>
 	</div>
 
-	{#if sources.length === 0}
+	{#if bib.sources.length === 0}
 		<p class="py-10 text-center text-body-14 text-text-250">No sources</p>
 	{:else}
 		<div class="flex flex-col gap-6">
-			{#each sources as source, index (source.id)}
+			{#each bib.sources as source, index (source.id)}
 				<BibliographySourceItem
-					bind:source={sources[index]}
+					source={bib.sources[index]}
 					label="Source {index + 1}"
-					onremove={() => removeSource(source.id)}
+					onchange={(patch) => documentStore.updateBibliographySource(source.id, patch)}
+					onremove={() => documentStore.removeBibliographySource(source.id)}
 				/>
 			{/each}
 		</div>
@@ -103,8 +102,9 @@
 			<DropdownMenu
 				class="w-[211px]"
 				bg={FIELD_BG}
-				bind:value={bibliographyTitle}
+				value={bibliographyTitle}
 				options={BIBLIOGRAPHY_TITLE_OPTIONS}
+				onchange={onTitleOptionChange}
 			/>
 		</div>
 
@@ -116,7 +116,7 @@
 					those that weren't cited in the document.
 				</span>
 			</div>
-			<Switch bind:checked={bibliographyFull} label="Full bibliography" />
+			<Switch checked={bib.full} label="Full bibliography" onchange={onFullChange} />
 		</div>
 	</div>
 </section>

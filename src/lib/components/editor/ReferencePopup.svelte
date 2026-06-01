@@ -1,21 +1,14 @@
 <script lang="ts">
+	import { documentStore } from "$lib/document/store.svelte";
 	import ReferenceContextGroup from "./ReferenceContextGroup.svelte";
-	import type { ReferenceSection } from "./referenceTypes";
-	import { MOCK_REFERENCE_SECTIONS } from "./referenceTypes";
 
-	interface Props {
-		/**
-		 * When false, only “Add sources to cite” is shown (no search bar).
-		 * Toggle for mock empty-document state until wired to the store.
-		 */
-		hasElements?: boolean;
-		sections?: ReferenceSection[];
+	function handleSelect(kind: "reference" | "citation", id: string): void {
+		if (kind === "reference") {
+			documentStore.insertReference(id);
+		} else {
+			documentStore.insertCitation(id);
+		}
 	}
-
-	let {
-		hasElements = true,
-		sections = MOCK_REFERENCE_SECTIONS,
-	}: Props = $props();
 </script>
 
-<ReferenceContextGroup {hasElements} {sections} />
+<ReferenceContextGroup onselect={handleSelect} />

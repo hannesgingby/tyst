@@ -1,6 +1,8 @@
 import type {
+	BibliographySettings,
 	Block,
 	BlockSpacing,
+	CitationSettings,
 	DocumentModel,
 	FontWeightName,
 	HeadingLevel,
@@ -15,6 +17,7 @@ import type {
 	PageSettings,
 	ParagraphSettings,
 	RectSettings,
+	ReferenceSettings,
 	StrokeSettings,
 	TypographySettings,
 } from "./types";
@@ -299,6 +302,69 @@ function imagesFolderFor(doc: DocumentModel): string {
 	return `${base}_files`;
 }
 
+/** Typst label identifier for a block, used for cross-references. */
+function labelFor(blockId: string): string {
+	return `ref-${blockId}`;
+}
+
+/** Serialize a reference chip block to Typst markup. */
+function serializeReference(ref: ReferenceSettings): string {
+	const label = labelFor(ref.targetBlockId);
+	if (ref.pageForm) {
+		const args: string[] = [`<${label}>`, `form: "page"`];
+		if (ref.displayText) args.splice(1, 0, `supplement: [${escapeText(ref.displayText)}]`);
+		return `#ref(${args.join(", ")})`;
+	}
+	if (ref.displayText) return `@${label}[${escapeText(ref.displayText)}]`;
+	return `@${label}`;
+}
+
+/** Serialize a citation chip block to Typst markup. */
+function serializeCitation(cit: CitationSettings): string {
+	if (cit.supplement) return `@${cit.sourceId}[${escapeText(cit.supplement)}]`;
+	return `@${cit.sourceId}`;
+}
+
+/** Serialize the bibliography block to a Typst `#bibliography(...)` call. */
+function serializeBibliography(doc: DocumentModel, block: Block, bib: BibliographySettings): string {
+	const folder = imagesFolderFor(doc);
+	const args: string[] = [`"${folder}/sources.yaml"`];
+	if (bib.titleOption === "none") {
+		args.push(`title: none`);
+	} else if (block.text.trim()) {
+		args.push(`title: "${escapeStringLiteral(block.text.trim())}"`);
+	}
+	args.push(`style: "${bib.citationStyleId}"`);
+	if (bib.full) args.push(`full: true`);
+	return `#bibliography(${args.join(", ")})`;
+}
+
+/**
+ * Generate a Hayagriva YAML string for all bibliography sources.
+ * Returns null if there are no sources.
+ */
+export function serializeSourcesYaml(doc: DocumentModel): string | null {
+	const sources = doc.bibliography?.sources;
+	if (!sources || sources.length === 0) return null;
+	const lines: string[] = [];
+	for (const s of sources) {
+		lines.push(`${s.id}:`);
+		lines.push(`  type: ${s.type.toLowerCase()}`);
+		if (s.title) lines.push(`  title: "${s.title.replace(/"/g, '\\"')}"`);
+		if (s.authors) lines.push(`  author: "${s.authors.replace(/"/g, '\\"')}"`);
+		if (s.date) lines.push(`  date: ${s.date}`);
+		if (s.journalName) {
+			lines.push(`  journal:`);
+			lines.push(`    name: "${s.journalName.replace(/"/g, '\\"')}"`);
+		}
+		if (s.volume) lines.push(`    volume: ${s.volume}`);
+		if (s.issue) lines.push(`    issue: ${s.issue}`);
+		if (s.pageRange) lines.push(`  page-range: "${s.pageRange}"`);
+		lines.push(``);
+	}
+	return lines.join("\n");
+}
+
 /** Relative path emitted for an image block in the serialized .typ. */
 export function imageRelativePath(
 	doc: DocumentModel,
@@ -325,14 +391,15 @@ function strokeArg(s: StrokeSettings): string {
 	return `stroke(${parts.join(", ")})`;
 }
 
-function serializeImage(doc: DocumentModel, block: Block, image: ImageSettings): string {
+function serializeImage(doc: DocumentModel, block: Block, image: ImageSettings, labeled = false): string {
 	const path = escapeStringLiteral(imageRelativePath(doc, block.id, image));
 	const args: string[] = [`"${path}"`];
 	if (image.width != null) args.push(`width: ${typstNumber(image.width)}pt`);
 	if (image.height != null) args.push(`height: ${typstNumber(image.height)}pt`);
 	if (image.alt) args.push(`alt: "${escapeStringLiteral(image.alt)}"`);
 	if (image.fit) args.push(`fit: "${image.fit}"`);
-	return `#figure(image(${args.join(", ")}))`;
+	const label = labeled ? ` <${labelFor(block.id)}>` : "";
+	return `#figure(image(${args.join(", ")}))${label}`;
 }
 
 function lineCallExpr(line: LineSettings): string {
@@ -387,8 +454,8 @@ function serializeOutline(doc: DocumentModel, block: Block, outline: OutlineSett
 	return args.length > 0 ? `#outline(${args.join(", ")})` : `#outline()`;
 }
 
-function serializeEmbed(doc: DocumentModel, block: Block): string | null {
-	if (block.image) return serializeImage(doc, block, block.image);
+function serializeEmbed(doc: DocumentModel, block: Block, labeled = false): string | null {
+	if (block.image) return serializeImage(doc, block, block.image, labeled);
 	if (block.line) return serializeLine(block.line);
 	if (block.rect) return serializeRect(block.rect);
 	if (block.outline) return serializeOutline(doc, block, block.outline);
@@ -402,7 +469,7 @@ function wrapAligned(content: string, alignment: HorizontalAlignment | undefined
 }
 
 /** Title (level 0) → styled #text; headings 1-4 → #heading(level: N, …). */
-function serializeHeading(block: Block, heading: HeadingSettings, doc: DocumentModel): string {
+function serializeHeading(block: Block, heading: HeadingSettings, doc: DocumentModel, labeled = false): string {
 	const text = escapeText(block.text);
 	if (heading.level === 0) {
 		// Title isn't a heading in Typst's model. Render as bold, oversized text.
@@ -426,7 +493,8 @@ function serializeHeading(block: Block, heading: HeadingSettings, doc: DocumentM
 		if (style.numbering) args.push(`numbering: "${style.numbering}"`);
 		if (style.outlined === false) args.push(`outlined: false`);
 	}
-	return `#heading(${args.join(", ")})[${text}]`;
+	const label = labeled ? ` <${labelFor(block.id)}>` : "";
+	return `#heading(${args.join(", ")})[${text}]${label}`;
 }
 
 /** Build the argument list shared by both `#list(…)` and `#enum(…)`. */
@@ -538,6 +606,13 @@ export function serializeDocument(
 ): string {
 	const preamble = serializePreamble(doc);
 
+	// Collect block IDs that are referenced so we can add Typst labels to them.
+	const referencedBlockIds = new Set(
+		doc.blocks
+			.filter(b => b.reference)
+			.map(b => b.reference!.targetBlockId),
+	);
+
 	const pageBreakSet = new Set(pageBreakBlockIds);
 	const defaultPage = doc.pages[0];
 
@@ -627,8 +702,8 @@ export function serializeDocument(
 		if (block.heading) {
 			if (hasContent) parts.push("");
 			for (let k = 0; k < pendingBlanks; k++) parts.push("#linebreak()");
-			const headingContent = serializeHeading(block, block.heading, doc);
-			const hLevel = block.heading.level;
+			const labeled = referencedBlockIds.has(block.id);
+			const headingContent = serializeHeading(block, block.heading, doc, labeled);
 			const headingSpacing = resolveBlockHeadingSpacing(doc, block);
 			parts.push(wrapAligned(headingSpacing ? wrapBlock(headingContent, headingSpacing) : headingContent, block.alignment));
 			pushBlockSeparator();
@@ -641,7 +716,7 @@ export function serializeDocument(
 		}
 
 		// ── Embed (image / line / rect) ─────────────────────────────────────────
-		const embed = serializeEmbed(doc, block);
+		const embed = serializeEmbed(doc, block, referencedBlockIds.has(block.id));
 		if (embed) {
 			if (hasContent) parts.push("");
 			for (let k = 0; k < pendingBlanks; k++) parts.push("#linebreak()");
@@ -699,6 +774,52 @@ export function serializeDocument(
 				hasContent = true;
 			}
 			pendingBlanks = 0;
+			i++;
+			continue;
+		}
+
+		// ── Inline reference chip ───────────────────────────────────────────────
+		if (block.reference) {
+			const serialized = serializeReference(block.reference);
+			if (hasContent && block.continuation) {
+				parts[parts.length - 1] += serialized;
+			} else {
+				if (hasContent) parts.push("");
+				parts.push(serialized);
+				hasContent = true;
+			}
+			pendingBlanks = 0;
+			i++;
+			continue;
+		}
+
+		// ── Inline citation chip ────────────────────────────────────────────────
+		if (block.citation) {
+			const serialized = serializeCitation(block.citation);
+			if (hasContent && block.continuation) {
+				parts[parts.length - 1] += serialized;
+			} else {
+				if (hasContent) parts.push("");
+				parts.push(serialized);
+				hasContent = true;
+			}
+			pendingBlanks = 0;
+			i++;
+			continue;
+		}
+
+		// ── Bibliography block ──────────────────────────────────────────────────
+		if (block.bibliography) {
+			const bib = doc.bibliography;
+			if (bib) {
+				if (hasContent) parts.push("");
+				for (let k = 0; k < pendingBlanks; k++) parts.push("#linebreak()");
+				parts.push(serializeBibliography(doc, block, bib));
+				hasContent = true;
+				afterList = false;
+				afterHeading = true;
+				pendingBlanks = 0;
+			}
 			i++;
 			continue;
 		}

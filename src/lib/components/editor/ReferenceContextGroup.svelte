@@ -5,23 +5,21 @@
 		HOVER_POPUP_PIN_KEY,
 		type HoverPopupPin,
 	} from "$lib/components/ui/hoverPopupContext";
+	import { documentStore } from "$lib/document/store.svelte";
 	import ContextGroup from "./ContextGroup.svelte";
 	import ReferenceDisplayTextMenu from "./ReferenceDisplayTextMenu.svelte";
-	import {
-		MOCK_REFERENCE_SECTIONS,
-		type ReferenceItem,
-		type ReferenceSection,
-	} from "./referenceTypes";
+	import type { ReferenceItem, ReferenceSection } from "./referenceTypes";
 
 	interface Props {
-		/** When false, only the “Add sources to cite” row is shown (no search). */
+		/** When false, only the "Add sources to cite" row is shown (no search). */
 		hasElements?: boolean;
-		sections?: ReferenceSection[];
+		/** Called when the user picks a reference or citation item. */
+		onselect?: (kind: "reference" | "citation", id: string) => void;
 	}
 
 	let {
 		hasElements = true,
-		sections = MOCK_REFERENCE_SECTIONS,
+		onselect,
 	}: Props = $props();
 
 	const LIST_WIDTH = 300;
@@ -34,22 +32,64 @@
 	let scrollEl = $state<HTMLElement | null>(null);
 	let showScrollFade = $state(false);
 	let displayText = $state("");
+	let pageForm = $state(false);
 	let searchFocused = $state(false);
 	let popupHovered = $state(false);
 
 	const hoverPin = getContext<HoverPopupPin | undefined>(HOVER_POPUP_PIN_KEY);
 	const isSearching = $derived(searchQuery.trim() !== "");
 
+	// Build sections from the real store data
+	const sections = $derived.by((): ReferenceSection[] => {
+		const { headings, figures } = documentStore.referenceSections;
+		const bib = documentStore.bibliographySettings;
+
+		const headingItems: ReferenceItem[] = headings.map(b => ({
+			id: b.id,
+			label: b.text || "Heading",
+			location: `Page ${documentStore.blockPageIndex(b.id) + 1}`,
+			displayText: b.text || "Heading",
+		}));
+
+		const figureItems: ReferenceItem[] = figures.map(b => ({
+			id: b.id,
+			label: b.image?.fileName || "Figure",
+			location: `Page ${documentStore.blockPageIndex(b.id) + 1}`,
+			displayText: b.image?.fileName || "Figure",
+		}));
+
+		const citationItems: ReferenceItem[] = bib.sources.map(s => {
+			const parts = [s.title, s.authors, s.date].filter(Boolean);
+			const label = parts.join(", ") || s.id;
+			return {
+				id: s.id,
+				label,
+				location: "",
+				displayText: s.title || s.id,
+			};
+		});
+
+		return [
+			{ title: "Citation", items: citationItems },
+			{ title: "Sections", items: headingItems },
+			{ title: "Figures", items: figureItems },
+		];
+	});
+
+	const hasCitations = $derived(sections.find(s => s.title === "Citation")?.items.length ?? 0 > 0);
+
 	const contentSections = $derived(
 		sections.filter((s) => s.title !== "Citation"),
 	);
 
-	const filteredItems = $derived.by((): ReferenceItem[] => {
+	const allFilterableSections = $derived(sections);
+
+	const filteredItems = $derived.by((): (ReferenceItem & { sectionTitle: string })[] => {
 		const q = searchQuery.trim().toLowerCase();
-		const out: ReferenceItem[] = [];
-		for (const section of contentSections) {
+		const out: (ReferenceItem & { sectionTitle: string })[] = [];
+		for (const section of allFilterableSections) {
 			for (const item of section.items) {
-				if (!q || item.label.toLowerCase().includes(q)) out.push(item);
+				if (!q || item.label.toLowerCase().includes(q)) out.push({ ...item, sectionTitle: section.title });
 			}
 		}
 		return out;
@@ -67,14 +107,23 @@
 			.filter((block) => block.items.length > 0);
 	});
 
+	const citationSectionItems = $derived.by((): ReferenceItem[] => {
+		const s = sections.find(s => s.title === "Citation");
+		if (!s) return [];
+		const q = searchQuery.trim().toLowerCase();
+		return q ? s.items.filter(i => i.label.toLowerCase().includes(q)) : s.items;
+	});
+
 	const activeItem = $derived(
 		activeItemIndex >= 0 ? filteredItems[activeItemIndex] : null,
 	);
 	const activeRowEl = $derived(rowEls[activeItemIndex] ?? null);
-	const showMenu = $derived(activeItemIndex >= 0);
+	// Only show display text menu for non-citation items
+	const showMenu = $derived(activeItemIndex >= 0 && activeItem?.sectionTitle !== "Citation");
 
 	$effect(() => {
 		displayText = activeItem?.displayText ?? activeItem?.label ?? "";
+		pageForm = false;
 	});
 
 	$effect(() => {
@@ -98,6 +147,14 @@
 
 	function selectItem(index: number): void {
 		activeItemIndex = index;
+	}
+
+	function handleItemClick(item: ReferenceItem & { sectionTitle: string }): void {
+		if (item.sectionTitle === "Citation") {
+			onselect?.("citation", item.id);
+		} else {
+			onselect?.("reference", item.id);
+		}
 	}
 
 	function updateScrollFade(): void {
@@ -202,21 +259,46 @@
 					{#if !isSearching}
 						<div class="pb-1">
 							<p class="pb-2 text-body-14 text-text-250">Citation</p>
-							<button
-								type="button"
-								class="flex h-8 w-full items-center justify-between rounded-md bg-[#EBE2DF] px-3 text-body-14-tight text-[#a85a45] transition-opacity duration-150 hover:opacity-80"
-								onmouseenter={() => (activeItemIndex = -1)}
-								onfocus={() => (activeItemIndex = -1)}
-							>
-								<span>Add sources to cite</span>
-								<Icon name="arrow-up-right" class="size-4 shrink-0" />
-							</button>
+							{#if citationSectionItems.length > 0}
+								<ul class="flex flex-col gap-0.5" role="list">
+									{#each citationSectionItems as item (item.id)}
+										{@const itemInFiltered = filteredItems.findIndex(f => f.id === item.id && f.sectionTitle === "Citation")}
+										<li role="presentation">
+											<button
+												type="button"
+												use:rowRef={itemInFiltered}
+												class={[
+													"flex h-8 w-full items-center justify-between gap-2 rounded-md px-3 text-body-14-tight text-text-100 transition-colors duration-150",
+													itemInFiltered === activeItemIndex
+														? "bg-bg-950"
+														: "hover:bg-bg-950",
+												]}
+												onmouseenter={() => selectItem(itemInFiltered)}
+												onfocus={() => selectItem(itemInFiltered)}
+												onclick={() => handleItemClick({ ...item, sectionTitle: "Citation" })}
+											>
+												<span class="min-w-0 truncate text-left">{item.label}</span>
+											</button>
+										</li>
+									{/each}
+								</ul>
+							{:else}
+								<button
+									type="button"
+									class="flex h-8 w-full items-center justify-between rounded-md bg-[#EBE2DF] px-3 text-body-14-tight text-[#a85a45] transition-opacity duration-150 hover:opacity-80"
+									onmouseenter={() => (activeItemIndex = -1)}
+									onfocus={() => (activeItemIndex = -1)}
+								>
+									<span>Add sources to cite</span>
+									<Icon name="arrow-up-right" class="size-4 shrink-0" />
+								</button>
+							{/if}
 						</div>
 					{/if}
 
 					{#if hasElements}
 						{#each sectionBlocks as block, blockIndex (block.title)}
-							{#if !isSearching || blockIndex > 0}
+							{#if !isSearching || blockIndex > 0 || citationSectionItems.length > 0}
 								<div
 									class="my-3 h-px w-full shrink-0 bg-bg-600"
 									aria-hidden="true"
@@ -227,7 +309,7 @@
 								<ul class="flex flex-col gap-0.5" role="list">
 									{#each block.items as item (item.id)}
 										{@const itemIndex = filteredItems.findIndex(
-											(f) => f.id === item.id,
+											(f) => f.id === item.id && f.sectionTitle === block.title,
 										)}
 										<li role="presentation">
 											<button
@@ -241,6 +323,7 @@
 												]}
 												onmouseenter={() => selectItem(itemIndex)}
 												onfocus={() => selectItem(itemIndex)}
+												onclick={() => handleItemClick({ ...item, sectionTitle: block.title })}
 											>
 												<span class="min-w-0 truncate text-left">{item.label}</span>
 												<span class="shrink-0 text-text-250">{item.location}</span>
@@ -263,7 +346,7 @@
 	{/snippet}
 	{#snippet menu()}
 		<div bind:this={menuEl} class="w-full">
-			<ReferenceDisplayTextMenu bind:value={displayText} />
+			<ReferenceDisplayTextMenu bind:value={displayText} bind:pageForm />
 		</div>
 	{/snippet}
 </ContextGroup>

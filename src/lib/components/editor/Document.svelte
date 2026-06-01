@@ -835,6 +835,15 @@
             return;
         }
 
+        // Backspacing into a reference or citation chip removes it.
+        if (idx > 0 && (blocks[idx - 1]?.reference || blocks[idx - 1]?.citation)) {
+            const result = documentStore.deleteEmbed(blocks[idx - 1].id);
+            if (result) {
+                documentStore.pendingFocusAction = { kind: "caret", blockId: result.id, offset: result.offset };
+            }
+            return;
+        }
+
         const result = documentStore.mergeWithPrevious(id);
         if (!result) return;
         // Update active block right away so the toolbar reflects the new target.

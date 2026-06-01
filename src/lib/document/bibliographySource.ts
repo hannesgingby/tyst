@@ -1,27 +1,7 @@
-export const SOURCE_TYPES = [
-	"Article",
-	"Book",
-	"Chapter",
-	"Conference",
-	"Report",
-	"Thesis",
-	"Web",
-] as const;
+export type { BibliographySource, SourceType } from "./types";
+export { SOURCE_TYPES } from "./types";
 
-export type SourceType = (typeof SOURCE_TYPES)[number];
-
-export interface BibliographySource {
-	id: string;
-	expanded: boolean;
-	type: SourceType;
-	title: string;
-	authors: string;
-	date: string;
-	journalName: string;
-	volume: string;
-	issue: string;
-	pageRange: string;
-}
+import type { BibliographySource } from "./types";
 
 let nextSourceId = 1;
 
