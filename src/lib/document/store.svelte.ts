@@ -410,6 +410,12 @@ class DocumentStore {
 			) {
 				this.model.blocks.splice(idx, 1);
 			}
+		} else if (b.vSpacing) {
+			this.model.blocks.splice(idx, 1);
+			const next = this.model.blocks[idx];
+			if (next && this.isEffectivelyEmptyBlock(next) && !next.continuation) {
+				this.model.blocks.splice(idx, 1);
+			}
 		} else {
 			this.model.blocks.splice(idx, 1);
 		}
@@ -956,6 +962,7 @@ class DocumentStore {
 		if (this.model.blocks.length === 1 && existing && !existing.continuation) {
 			existing.text = "";
 			delete existing.hSpacing;
+			delete existing.vSpacing;
 			return;
 		}
 		this.model.blocks = [{ id, text: "" }];
@@ -1095,7 +1102,52 @@ class DocumentStore {
 
 	/** Insert a vertical spacing block (`#v(…)`) after the active block. */
 	insertVSpacing(): void {
-		this.insertEmbed({ text: "", vSpacing: { amount: { value: 12, unit: "pt" } } });
+		this.normalizeInlineStructure();
+		const active = this.activeBlock;
+		let idx = this.blockIndex(active.id);
+
+		// Replace a trailing empty typing block's v-spacing instead of stacking another.
+		if (
+			active.text === "" &&
+			!active.continuation &&
+			!active.heading &&
+			!active.list &&
+			idx > 0 &&
+			this.model.blocks[idx - 1]?.vSpacing
+		) {
+			this.model.blocks.splice(idx - 1, 1);
+			idx = this.blockIndex(active.id);
+		}
+
+		const insertAfterId =
+			idx > 0 ? this.model.blocks[idx - 1].id : active.id;
+
+		const id = this.insertBlockObjectAfter(insertAfterId, {
+			text: "",
+			vSpacing: { amount: { value: 12, unit: "pt" } },
+		});
+		const nextIndex = this.blockIndex(id) + 1;
+		const next = this.model.blocks[nextIndex];
+		if (
+			!next ||
+			next.continuation ||
+			next.vSpacing ||
+			next.hSpacing ||
+			next.image ||
+			next.line ||
+			next.rect ||
+			next.outline ||
+			next.pageBreak
+		) {
+			this.insertBlockObjectAfter(id, { text: "" });
+		}
+		const tail = this.model.blocks[this.blockIndex(id) + 1];
+		if (tail) {
+			this.activeBlockId = tail.id;
+			this.pendingFocusAction = { kind: "caret", blockId: tail.id, offset: 0 };
+		} else {
+			this.activeBlockId = id;
+		}
 		this.popupDismissed = null;
 	}
 

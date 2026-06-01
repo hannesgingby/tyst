@@ -647,6 +647,14 @@
         return !!(prev?.hSpacing || prev?.footnoteMarker);
     }
 
+    /** Empty text block whose previous block is vertical spacing (two-step delete). */
+    function isEmptyBlockAfterVSpacing(idx: number): boolean {
+        const block = blocks[idx];
+        if (!block || block.text !== "" || block.continuation) return false;
+        const prev = idx > 0 ? blocks[idx - 1] : undefined;
+        return !!prev?.vSpacing;
+    }
+
     /** Clicks in the gap after an inline embed focus the empty tail segment. */
     function onInlineLineMouseDown(
         event: MouseEvent,
@@ -983,7 +991,10 @@
                     documentStore.setBlockText(id, newText);
                     syncBlockDom(active, newText);
                     if (newText === "") {
-                        if (isEmptyTailAfterInlineEmbed(idx)) {
+                        if (
+                            isEmptyTailAfterInlineEmbed(idx) ||
+                            isEmptyBlockAfterVSpacing(idx)
+                        ) {
                             syncBlockDom(active, "");
                             documentStore.pendingFocusAction = { kind: "caret", blockId: id, offset: 0 };
                         } else if (idx === 0 && blocks.length === 1) {
@@ -1043,7 +1054,10 @@
                     if (newText === "") {
                         documentStore.setBlockText(id, "");
                         syncBlockDom(active, "");
-                        if (isEmptyTailAfterInlineEmbed(idx)) {
+                        if (
+                            isEmptyTailAfterInlineEmbed(idx) ||
+                            isEmptyBlockAfterVSpacing(idx)
+                        ) {
                             documentStore.pendingFocusAction = {
                                 kind: "caret",
                                 blockId: id,

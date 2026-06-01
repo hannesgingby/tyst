@@ -53,7 +53,8 @@
     let lineWrapEl = $state<HTMLDivElement | null>(null);
     let outlineWrapEl = $state<HTMLDivElement | null>(null);
     let footnoteWrapEl = $state<HTMLDivElement | null>(null);
-    let spacingWrapEl = $state<HTMLDivElement | null>(null);
+    let hSpacingWrapEl = $state<HTMLDivElement | null>(null);
+    let vSpacingWrapEl = $state<HTMLDivElement | null>(null);
 
     function isInsideActiveEmbed(target: EventTarget | null): boolean {
         if (!(target instanceof HTMLElement)) return false;
@@ -91,7 +92,12 @@
         }
         if (spacingTied && !documentStore.popupDismissed) {
             const inPopup =
-                spacingWrapEl != null && target instanceof Node && spacingWrapEl.contains(target);
+                (hSpacingWrapEl != null &&
+                    target instanceof Node &&
+                    hSpacingWrapEl.contains(target)) ||
+                (vSpacingWrapEl != null &&
+                    target instanceof Node &&
+                    vSpacingWrapEl.contains(target));
             if (!inPopup && !isInsideActiveEmbed(target)) {
                 documentStore.popupDismissed = "spacing";
             }
@@ -492,7 +498,7 @@
                     </div>
                 {:else if groupIndex === 5}
                     <!-- Spacing group: h-spacing + v-spacing (tied popups) + page-break -->
-                    <div bind:this={spacingWrapEl} class="relative flex items-center gap-3">
+                    <div bind:this={hSpacingWrapEl} class="relative flex items-center">
                         {@render embedTrigger(
                             "horizontal-spacing",
                             "Horizontal spacing",
@@ -500,12 +506,26 @@
                             spacingOpen && !!documentStore.activeBlock.hSpacing,
                             () => {
                                 if (spacingTied && documentStore.activeBlock.hSpacing) {
-                                    documentStore.popupDismissed = documentStore.popupDismissed === "spacing" ? null : "spacing";
+                                    documentStore.popupDismissed =
+                                        documentStore.popupDismissed === "spacing"
+                                            ? null
+                                            : "spacing";
                                     return;
                                 }
                                 documentStore.insertHSpacing();
                             },
                         )}
+                        {#if spacingOpen && documentStore.activeBlock.hSpacing}
+                            <div
+                                class="absolute bottom-full -left-8 z-[60] pb-2.5"
+                                role="dialog"
+                                aria-label="Horizontal spacing"
+                            >
+                                <SpacingPopup />
+                            </div>
+                        {/if}
+                    </div>
+                    <div bind:this={vSpacingWrapEl} class="relative flex items-center">
                         {@render embedTrigger(
                             "vertical-spacing",
                             "Vertical spacing",
@@ -513,17 +533,20 @@
                             spacingOpen && !!documentStore.activeBlock.vSpacing,
                             () => {
                                 if (spacingTied && documentStore.activeBlock.vSpacing) {
-                                    documentStore.popupDismissed = documentStore.popupDismissed === "spacing" ? null : "spacing";
+                                    documentStore.popupDismissed =
+                                        documentStore.popupDismissed === "spacing"
+                                            ? null
+                                            : "spacing";
                                     return;
                                 }
                                 documentStore.insertVSpacing();
                             },
                         )}
-                        {#if spacingOpen}
+                        {#if spacingOpen && documentStore.activeBlock.vSpacing}
                             <div
-                                class="absolute bottom-full left-0 z-[60] pb-2.5"
+                                class="absolute bottom-full -left-8 z-[60] pb-2.5"
                                 role="dialog"
-                                aria-label="Spacing"
+                                aria-label="Vertical spacing"
                             >
                                 <SpacingPopup />
                             </div>
