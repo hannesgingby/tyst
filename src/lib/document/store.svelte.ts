@@ -128,6 +128,8 @@ function defaultModel(): DocumentModel {
 		rectSpacingShared: { above: 1.2, below: 0.35 },
 		outlineSpacingShared: { above: 1.2, below: 0.35 },
 		blocks: [{ id: newId(), text: "" }],
+		headerAscent: "30%",
+		footerDescent: "30%",
 	};
 }
 
@@ -2296,12 +2298,35 @@ class DocumentStore {
 		if (block?.pageCounter) block.pageCounter = { pattern };
 	}
 
-	get headerAscent(): string | undefined {
-		return this.model.headerAscent;
+	/** Page counter pattern for the active header/footer zone (zone popup). */
+	get popupZoneNumbering(): string {
+		const kind = this.activeZone;
+		if (!kind) return "";
+		return this.zoneCounterPattern(kind) ?? "";
+	}
+
+	set popupZoneNumbering(value: string) {
+		const kind = this.activeZone;
+		if (!kind || this.zoneCounterPattern(kind) === null) return;
+		const trimmed = value.trim();
+		if (!trimmed) return;
+		this.updateZoneCounterPattern(kind, trimmed as PageZoneCounterPattern);
+	}
+
+	get headerAscent(): string {
+		return this.model.headerAscent ?? "30%";
 	}
 
 	set headerAscent(value: string | undefined) {
-		this.model.headerAscent = value;
+		this.model.headerAscent = value ?? "30%";
+	}
+
+	get footerDescent(): string {
+		return this.model.footerDescent ?? "30%";
+	}
+
+	set footerDescent(value: string | undefined) {
+		this.model.footerDescent = value ?? "30%";
 	}
 
 	load(model: DocumentModel): void {

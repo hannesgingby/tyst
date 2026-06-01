@@ -9,6 +9,7 @@
     import { documentStore } from "$lib/document/store.svelte";
     import { formatItem, formatNumbering } from "$lib/document/numbering";
     import { parbreakGapEm } from "$lib/document/lineMetrics";
+    import { marginInsetPx } from "$lib/document/pageZoneInset";
     import { cmToPx, ptToPx } from "$lib/document/units";
     import {
         caretAtEnd,
@@ -1221,11 +1222,21 @@
             {@const renderItems = buildRenderItems(mainPageBlocks)}
             {@const contentHeightPx = pageHeightPx - mp.top - mp.bottom}
             {@const zoneWidth = pageWidthPx - mp.left - mp.right}
+            {@const headerInsetPx = marginInsetPx(
+                model.headerAscent,
+                mp.top,
+                RENDER_SCALE,
+            )}
+            {@const footerInsetPx = marginInsetPx(
+                model.footerDescent,
+                mp.bottom,
+                RENDER_SCALE,
+            )}
 
-            <!-- Header zone (inline rendering of zone blocks, centered vertically in top margin) -->
+            <!-- Header zone (bottom-aligned in top margin, offset by header-ascent) -->
             {#if headerBlocks.length > 0}
                 <div
-                    class="absolute flex items-center"
+                    class="absolute flex flex-col justify-end"
                     style:top="{pageTop}px"
                     style:left="{mp.left}px"
                     style:width="{zoneWidth}px"
@@ -1233,6 +1244,7 @@
                 >
                     <div
                         class={["w-full flex items-baseline", headerBlocks.some(b => b.hSpacing?.amount.unit === "fr") ? "flex" : ""]}
+                        style:margin-bottom="{headerInsetPx}px"
                         style:text-align="left"
                     >
                         {#each headerBlocks as block (block.id)}
@@ -1259,16 +1271,19 @@
                 </div>
             {/if}
 
-            <!-- Footer zone -->
+            <!-- Footer zone (top-aligned in bottom margin, offset by footer-descent) -->
             {#if footerBlocks.length > 0}
                 <div
-                    class="absolute flex items-center"
+                    class="absolute flex flex-col justify-start"
                     style:top="{pageTop + pageHeightPx - mp.bottom}px"
                     style:left="{mp.left}px"
                     style:width="{zoneWidth}px"
                     style:height="{mp.bottom}px"
                 >
-                    <div class="w-full flex items-baseline">
+                    <div
+                        class="w-full flex items-baseline"
+                        style:margin-top="{footerInsetPx}px"
+                    >
                         {#each footerBlocks as block (block.id)}
                             <Block
                                 {block}

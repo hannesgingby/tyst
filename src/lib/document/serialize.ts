@@ -108,7 +108,14 @@ function serializeZoneBlocks(blocks: Block[]): string {
 }
 
 /** Serialize a full #set page(...) call for a given PageSettings. */
-function serializePageSetFull(page: PageSettings, numbering?: string, headerContent?: string, footerContent?: string, headerAscent?: string): string {
+function serializePageSetFull(
+	page: PageSettings,
+	numbering?: string,
+	headerContent?: string,
+	footerContent?: string,
+	headerAscent?: string,
+	footerDescent?: string,
+): string {
 	const lines: string[] = [];
 	const paperName = TYPST_PAPER_NAME[page.preset];
 	if (paperName) {
@@ -123,10 +130,11 @@ function serializePageSetFull(page: PageSettings, numbering?: string, headerCont
 	if (numbering) lines.push(`  numbering: "${numbering}",`);
 	if (headerContent) {
 		lines.push(`  header: ${headerContent},`);
-		if (headerAscent) lines.push(`  header-ascent: ${headerAscent},`);
+		lines.push(`  header-ascent: ${headerAscent ?? "30%"},`);
 	}
 	if (footerContent) {
 		lines.push(`  footer: ${footerContent},`);
+		lines.push(`  footer-descent: ${footerDescent ?? "30%"},`);
 	}
 	return `#set page(\n${lines.join("\n")}\n)`;
 }
@@ -217,7 +225,18 @@ function serializePreamble(doc: DocumentModel, hasPageFormRef = false): string {
 	const footerBlocks = doc.blocks.filter((b) => b.zoneKind === "footer");
 	const headerContent = serializeZoneBlocks(headerBlocks) || undefined;
 	const footerContent = serializeZoneBlocks(footerBlocks) || undefined;
-	const parts = [serializePageSetFull(doc.pages[0], hasPageFormRef ? "1" : undefined, headerContent, footerContent, doc.headerAscent), textRule, parRule];
+	const parts = [
+		serializePageSetFull(
+			doc.pages[0],
+			hasPageFormRef ? "1" : undefined,
+			headerContent,
+			footerContent,
+			doc.headerAscent,
+			doc.footerDescent,
+		),
+		textRule,
+		parRule,
+	];
 	if (headingRule) parts.push(headingRule);
 	parts.push(...serializeFootnotePageRules(doc, 0, blockIndexById, []));
 

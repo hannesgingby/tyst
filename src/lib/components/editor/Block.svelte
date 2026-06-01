@@ -997,12 +997,12 @@
     <span
         bind:this={outerEl}
         data-block-id={block.id}
-        class="doc-block-page-counter inline select-none rounded px-1 opacity-60 outline outline-1 outline-dashed"
+        class="doc-block-page-counter inline select-none"
         style:font-family={`"${typography.fontFamily}", serif`}
         style:font-size="{fontSizePx}px"
+        style:font-weight={fontWeight}
         style:line-height={lineHeight}
         style:color={typography.color}
-        style:outline-color={typography.color}
         style:vertical-align="baseline"
         aria-label="Page number"
     >{pageCounterPreviewText}</span>

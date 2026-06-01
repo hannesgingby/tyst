@@ -457,6 +457,11 @@ export interface DocumentModel {
 	 * Controls how far the page header is raised into the top margin.
 	 */
 	headerAscent?: string;
+	/**
+	 * Typst `footer-descent` value (e.g. "30%" or "12pt").
+	 * Controls how far the page footer is lowered into the bottom margin.
+	 */
+	footerDescent?: string;
 	/** Bibliography settings (sources, style, etc.). Undefined until first citation is inserted. */
 	bibliography?: BibliographySettings;
 }

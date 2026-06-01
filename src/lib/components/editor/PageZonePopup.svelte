@@ -1,11 +1,16 @@
 <script lang="ts">
 	import Checkbox from "$lib/components/ui/Checkbox.svelte";
-	import FieldLabel from "$lib/components/ui/FieldLabel.svelte";
+	import Input from "$lib/components/ui/Input.svelte";
 	import Popup from "$lib/components/ui/Popup.svelte";
 	import PopupSectionHeader from "$lib/components/ui/PopupSectionHeader.svelte";
 	import Tag from "$lib/components/ui/Tag.svelte";
+	import {
+		formatZoneInset,
+		parseZoneInset,
+		ZONE_INSET_UNITS,
+		type ZoneInsetUnit,
+	} from "$lib/document/pageZoneInset";
 	import { documentStore } from "$lib/document/store.svelte";
-	import type { PageZoneCounterPattern } from "$lib/document/types";
 
 	interface Props {
 		kind: "header" | "footer";
@@ -15,16 +20,33 @@
 
 	const title = $derived(kind === "header" ? "Header" : "Footer");
 	const hasNumbering = $derived(documentStore.zoneCounterPattern(kind) !== null);
-	const currentPattern = $derived(documentStore.zoneCounterPattern(kind) ?? "1");
 
-	const PATTERNS: { value: PageZoneCounterPattern; label: string }[] = [
-		{ value: "1", label: "1, 2, 3" },
-		{ value: "1/1", label: "1 / 1" },
-		{ value: "I", label: "I, II, III" },
-		{ value: "i", label: "i, ii, iii" },
-		{ value: "A", label: "A, B, C" },
-		{ value: "a", label: "a, b, c" },
-	];
+	const insetRaw = $derived(
+		kind === "header" ? documentStore.headerAscent : documentStore.footerDescent,
+	);
+
+	let insetUnit = $state<ZoneInsetUnit>("%");
+
+	const insetValue = $derived(parseZoneInset(insetRaw).value);
+	const insetMax = $derived(insetUnit === "%" ? 100 : 500);
+	const insetDecimals = $derived(insetUnit === "%" ? 0 : 1);
+
+	$effect(() => {
+		insetUnit = parseZoneInset(insetRaw).unit;
+	});
+
+	function commitInset(value: number): void {
+		const formatted = formatZoneInset(value, insetUnit);
+		if (kind === "header") documentStore.headerAscent = formatted;
+		else documentStore.footerDescent = formatted;
+	}
+
+	function onInsetUnitChange(unit: string): void {
+		insetUnit = unit as ZoneInsetUnit;
+		const formatted = formatZoneInset(insetValue, insetUnit);
+		if (kind === "header") documentStore.headerAscent = formatted;
+		else documentStore.footerDescent = formatted;
+	}
 
 	function toggleNumbering(checked: boolean): void {
 		if (checked) {
@@ -33,61 +55,53 @@
 			documentStore.disableZoneNumbering(kind);
 		}
 	}
-
-	function setPattern(e: Event): void {
-		const val = (e.currentTarget as HTMLSelectElement).value as PageZoneCounterPattern;
-		documentStore.updateZoneCounterPattern(kind, val);
-	}
 </script>
 
-<Popup padding={12} class="w-[260px]">
+<Popup padding={12} class="w-[330px]">
 	<PopupSectionHeader {title}>
 		<Tag label={kind} variant="blue" linked />
 	</PopupSectionHeader>
 
-	{#if kind === "header"}
-		<!-- Header ascent -->
-		<div class="mt-[13px]">
-			<FieldLabel label="Ascent">
-				<label class="field-shell flex w-full items-center bg-bg-950 pl-4 pr-4">
-					<input
-						type="text"
-						class="h-full w-full border-none bg-transparent text-body-14-tight text-text-100 outline-none placeholder:text-text-250"
-						placeholder="30%"
-						value={documentStore.headerAscent ?? ""}
-						oninput={(e) => {
-							const v = e.currentTarget.value.trim();
-							documentStore.headerAscent = v || undefined;
-						}}
-						spellcheck="false"
-						autocomplete="off"
-					/>
-				</label>
-			</FieldLabel>
-		</div>
-	{/if}
-
-	<!-- Page numbering -->
 	<div class="mt-[13px]">
-		<Checkbox label="Page numbering" checked={hasNumbering} onchange={toggleNumbering} />
+		<Input
+			value={insetValue}
+			unit={insetUnit}
+			units={ZONE_INSET_UNITS}
+			min={0}
+			max={insetMax}
+			step={1}
+			decimals={insetDecimals}
+			onchange={commitInset}
+			onunitchange={onInsetUnitChange}
+		/>
+	</div>
+
+	<div class="mt-[13px]">
+		<Checkbox
+			label="Page numbering"
+			class="pl-1.5"
+			checked={hasNumbering}
+			onchange={toggleNumbering}
+		/>
 	</div>
 
 	{#if hasNumbering}
-		<!-- Numbering pattern -->
 		<div class="mt-[13px]">
-			<FieldLabel label="Numbering">
-				<label class="field-shell flex w-full items-center bg-bg-950 pl-4 pr-4">
-					<select
-						class="h-full w-full border-none bg-transparent text-body-14-tight text-text-100 outline-none appearance-none"
-						value={currentPattern}
-						onchange={setPattern}
-					>
-						{#each PATTERNS as p (p.value)}
-							<option value={p.value}>{p.label}</option>
-						{/each}
-					</select>
-				</label>
-			</FieldLabel>
+			<PopupSectionHeader title="Numbering" />
+
+			<label
+				class="field-shell mt-[13px] flex w-full items-center justify-between bg-bg-950 pl-4 pr-4"
+			>
+				<input
+					type="text"
+					class="h-full flex-1 border-none bg-transparent text-body-14-tight text-text-100 outline-none placeholder:text-text-250"
+					placeholder="None"
+					bind:value={documentStore.popupZoneNumbering}
+					spellcheck="false"
+					autocomplete="off"
+				/>
+				<span class="ml-3 shrink-0 text-text-250">ex. 1/5</span>
+			</label>
 		</div>
 	{/if}
 </Popup>
