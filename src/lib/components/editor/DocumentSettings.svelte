@@ -1,5 +1,6 @@
 <script lang="ts">
     import Icon from "$lib/components/Icon.svelte";
+    import MetadataPanel from "./settings/MetadataPanel.svelte";
     import PagePanel from "./settings/PagePanel.svelte";
     import ReferencesPanel from "./settings/ReferencesPanel.svelte";
 
@@ -129,7 +130,9 @@
                 </button>
 
                 <div class="mx-auto max-w-[702px]">
-                    {#if active === "page"}
+                    {#if active === "metadata"}
+                        <MetadataPanel />
+                    {:else if active === "page"}
                         <PagePanel />
                     {:else if active === "references"}
                         <ReferencesPanel />

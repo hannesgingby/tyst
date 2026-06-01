@@ -4,6 +4,7 @@ import type {
 	Block,
 	BlockSpacing,
 	CitationSettings,
+	DocumentMetadata,
 	DocumentModel,
 	EmbedKind,
 	HeadingLevel,
@@ -31,6 +32,7 @@ import type {
 	TypographySettings,
 } from "./types";
 import { createBibliographySource } from "./bibliographySource";
+import { DEFAULT_DOCUMENT_METADATA, normalizeDocumentMetadata } from "./metadata";
 import { resolveHeadingSpacing, resolveListSpacing } from "./blockSpacing";
 import {
 	hasBlockHeadingNumberingOverride,
@@ -91,6 +93,7 @@ function defaultPage(): PageSettings {
 function defaultModel(): DocumentModel {
 	return {
 		name: "Document name",
+		metadata: { ...DEFAULT_DOCUMENT_METADATA },
 		pages: [defaultPage()],
 		activePageIndex: 0,
 		typography: {
@@ -2438,8 +2441,15 @@ class DocumentStore {
 		this.model.footerDescent = value ?? "30%";
 	}
 
+	updateMetadata(patch: Partial<DocumentMetadata>): void {
+		this.model.metadata = { ...this.model.metadata, ...patch };
+	}
+
 	load(model: DocumentModel): void {
-		this.model = model;
+		this.model = {
+			...model,
+			metadata: normalizeDocumentMetadata(model.metadata),
+		};
 	}
 }
 

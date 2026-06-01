@@ -3,6 +3,7 @@ import type {
 	Block,
 	BlockSpacing,
 	CitationSettings,
+	DocumentMetadata,
 	DocumentModel,
 	FontWeightName,
 	HeadingLevel,
@@ -29,6 +30,7 @@ import {
 } from "./blockLevelStyle";
 import { isHeadingLevelLinked, resolveHeadingLevelStyle } from "./headingStyle";
 import { TYPST_PAPER_NAME } from "./paperSizes";
+import { parseDocumentDate } from "./metadata";
 import { normalizeUrl } from "./url";
 import { typstNumber } from "./units";
 
@@ -201,6 +203,41 @@ function serializePageTransition(
 	return pageArgs.length > 0 ? [`#set page(${pageArgs.join(", ")})`] : [];
 }
 
+/** Serialize `#set document(...)` when any metadata field is set. */
+function serializeDocumentMetadata(meta: DocumentMetadata): string | null {
+	const args: string[] = [];
+
+	const title = meta.title.trim();
+	if (title) args.push(`title: [${escapeText(title)}]`);
+
+	const authors = meta.authors.map((a) => a.trim()).filter(Boolean);
+	if (authors.length) {
+		const quoted = authors.map((a) => `"${escapeStringLiteral(a)}"`).join(", ");
+		args.push(`author: (${quoted})`);
+	}
+
+	const description = meta.description.trim();
+	if (description) args.push(`description: [${escapeText(description)}]`);
+
+	const keywords = meta.keywords.map((k) => k.trim()).filter(Boolean);
+	if (keywords.length) {
+		const quoted = keywords.map((k) => `"${escapeStringLiteral(k)}"`).join(", ");
+		args.push(`keywords: (${quoted})`);
+	}
+
+	if (meta.dateMode === "custom") {
+		const parts = parseDocumentDate(meta.date);
+		if (parts) {
+			args.push(
+				`date: datetime(year: ${parts.year}, month: ${parts.month}, day: ${parts.day})`,
+			);
+		}
+	}
+
+	if (args.length === 0) return null;
+	return `#set document(\n${args.map((l) => `  ${l},`).join("\n")}\n)`;
+}
+
 /** The document preamble: page, default text and default paragraph set rules. */
 function serializePreamble(doc: DocumentModel, hasPageFormRef = false): string {
 	const textRule = `#set text(\n${textArgs(doc.typography)
@@ -227,7 +264,10 @@ function serializePreamble(doc: DocumentModel, hasPageFormRef = false): string {
 	const footerBlocks = doc.blocks.filter((b) => b.zoneKind === "footer");
 	const headerContent = serializeZoneBlocks(headerBlocks) || undefined;
 	const footerContent = serializeZoneBlocks(footerBlocks) || undefined;
-	const parts = [
+	const parts: string[] = [];
+	const documentRule = serializeDocumentMetadata(doc.metadata);
+	if (documentRule) parts.push(documentRule);
+	parts.push(
 		serializePageSetFull(
 			doc.pages[0],
 			hasPageFormRef ? "1" : undefined,
@@ -238,7 +278,7 @@ function serializePreamble(doc: DocumentModel, hasPageFormRef = false): string {
 		),
 		textRule,
 		parRule,
-	];
+	);
 	if (headingRule) parts.push(headingRule);
 	parts.push("#show link: underline");
 	parts.push(...serializeFootnotePageRules(doc, 0, blockIndexById, []));

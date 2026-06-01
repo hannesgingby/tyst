@@ -395,6 +395,21 @@ export interface CitationSettings {
 	supplement?: string;
 }
 
+/** How document creation date is embedded in PDF metadata. */
+export type DocumentMetadataDateMode = "auto" | "custom";
+
+export interface DocumentMetadata {
+	/** Empty string serializes as `title: none`. */
+	title: string;
+	authors: string[];
+	/** Empty string serializes as `description: none`. */
+	description: string;
+	keywords: string[];
+	dateMode: DocumentMetadataDateMode;
+	/** `yyyy`, `yyyy-mm`, or `yyyy-mm-dd` when `dateMode` is `custom`. */
+	date: string;
+}
+
 export interface BibliographySettings {
 	sources: BibliographySource[];
 	citationStyleId: string;
@@ -408,6 +423,8 @@ export type EmbedKind = "image" | "line" | "rect" | "outline" | "footnote" | "sp
 
 export interface DocumentModel {
 	name: string;
+	/** PDF / document metadata (`#set document(...)`). */
+	metadata: DocumentMetadata;
 	/** Page definitions. Index 0 is the document's default page. */
 	pages: PageSettings[];
 	/** Which page is currently being configured in the settings modal. */
