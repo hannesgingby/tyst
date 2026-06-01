@@ -362,10 +362,23 @@ function serializeRect(rect: RectSettings): string {
 	return `#rect(${args.join(", ")})`;
 }
 
-function serializeOutline(block: Block, outline: OutlineSettings): string {
+function serializeOutline(doc: DocumentModel, block: Block, outline: OutlineSettings): string {
 	const args: string[] = [];
 	const title = block.text.trim();
-	if (title) args.push(`title: [${escapeText(block.text)}]`);
+	if (title) {
+		const scale = doc.outlineTitleScale;
+		const { size: _s, underline: _u, leading: _l, ...ctxTypo } = doc.outlineTitleTypography ?? {};
+		const { size: blockSizePt, underline: _bu, leading: _bl, ...blockOther } = block.typography ?? {};
+		const styleArgs: string[] = [];
+		if (blockSizePt !== undefined) styleArgs.push(`size: ${typstNumber(blockSizePt)}pt`);
+		else if (scale !== undefined) styleArgs.push(`size: ${typstNumber(scale)}em`);
+		styleArgs.push(...textArgs({ ...ctxTypo, ...blockOther }));
+		if (styleArgs.length > 0) {
+			args.push(`title: [#set text(${styleArgs.join(", ")})\n  ${escapeText(block.text)}]`);
+		} else {
+			args.push(`title: [${escapeText(block.text)}]`);
+		}
+	}
 	if (outline.target && outline.target.trim() && outline.target.trim() !== "heading") {
 		args.push(`target: ${outline.target.trim()}`);
 	}
@@ -378,7 +391,7 @@ function serializeEmbed(doc: DocumentModel, block: Block): string | null {
 	if (block.image) return serializeImage(doc, block, block.image);
 	if (block.line) return serializeLine(block.line);
 	if (block.rect) return serializeRect(block.rect);
-	if (block.outline) return serializeOutline(block, block.outline);
+	if (block.outline) return serializeOutline(doc, block, block.outline);
 	return null;
 }
 
@@ -392,8 +405,15 @@ function wrapAligned(content: string, alignment: HorizontalAlignment | undefined
 function serializeHeading(block: Block, heading: HeadingSettings, doc: DocumentModel): string {
 	const text = escapeText(block.text);
 	if (heading.level === 0) {
-		// Title isn't a heading in Typst's model. Render as a bold, oversized line.
-		return `#text(size: 2em, weight: "bold")[${text}]`;
+		// Title isn't a heading in Typst's model. Render as bold, oversized text.
+		const scale = doc.titleScale ?? 2.0;
+		const { size: _s, underline: _u, leading: _l, ...ctxTypo } = doc.titleTypography ?? {};
+		const { size: blockSizePt, underline: _bu, leading: _bl, ...blockOther } = block.typography ?? {};
+		const sizeArg = blockSizePt !== undefined
+			? `size: ${typstNumber(blockSizePt)}pt`
+			: `size: ${typstNumber(scale)}em`;
+		const args = [sizeArg, `weight: "bold"`, ...textArgs({ ...ctxTypo, ...blockOther })];
+		return `#text(${args.join(", ")})[${text}]`;
 	}
 	const level = heading.level as HeadingLevel;
 	const blockOverride = hasBlockHeadingNumberingOverride(block);

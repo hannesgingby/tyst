@@ -353,6 +353,14 @@ export interface DocumentModel {
 	 * Falls back to `TYPST_HEADING_SCALE` defaults when unset.
 	 */
 	headingScale?: Partial<Record<HeadingLevel, number>>;
+	/** Non-size typography overrides for the document title (heading level 0). */
+	titleTypography?: Partial<TypographySettings>;
+	/** Title size as an em multiplier relative to body. Defaults to 2.0. */
+	titleScale?: number;
+	/** Non-size typography overrides for outline (TOC) block titles. */
+	outlineTitleTypography?: Partial<TypographySettings>;
+	/** Outline title size as an em multiplier relative to body. Defaults to 1.4. */
+	outlineTitleScale?: number;
 	/** Typography overrides for footnote body text. Applied via `#show footnote.entry: set text(…)`. */
 	footnoteTypography?: Partial<TypographySettings>;
 	/** Document body as an ordered list of paragraph blocks. */

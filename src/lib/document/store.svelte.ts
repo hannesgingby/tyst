@@ -58,6 +58,8 @@ export type EditorSelection =
 
 /** Typst's built-in heading size multipliers relative to the body font size. */
 const TYPST_HEADING_SCALE: Record<HeadingLevel, number> = { 1: 1.4, 2: 1.2, 3: 1.06, 4: 1.0 };
+const TYPST_TITLE_SCALE = 2.0;
+const TYPST_OUTLINE_TITLE_SCALE = 1.4;
 
 export function defaultFootnotePageSettings(): FootnotePageSettings {
 	return { numbering: "1", clearance: 1, gap: 0.5, indent: 1 };
@@ -1360,8 +1362,11 @@ class DocumentStore {
 
 	readonly typographyContext = $derived.by((): string => {
 		const block = this.activeBlock;
-		if (block.heading && block.heading.level > 0) return `heading-${block.heading.level}`;
+		if (block.heading) {
+			return block.heading.level === 0 ? "title" : `heading-${block.heading.level}`;
+		}
 		if (block.footnote) return "footnote";
+		if (block.outline) return "outline-title";
 		return "body";
 	});
 
@@ -1370,12 +1375,18 @@ class DocumentStore {
 		const base = { ...this.model.typography };
 		if (context.startsWith("heading-")) {
 			const level = parseInt(context.slice(8)) as HeadingLevel;
-			// Size is always em-relative: use headingScale if set, else the Typst default.
 			const scale = this.model.headingScale?.[level] ?? TYPST_HEADING_SCALE[level] ?? 1;
 			base.size = base.size * scale;
-			// Apply other per-level overrides (never size — that lives in headingScale).
-			const { size: _s, ...restOverride } = this.model.headingTypography?.[level] ?? {};
-			Object.assign(base, restOverride);
+			const { size: _s, ...rest } = this.model.headingTypography?.[level] ?? {};
+			Object.assign(base, rest);
+		} else if (context === "title") {
+			base.size = base.size * (this.model.titleScale ?? TYPST_TITLE_SCALE);
+			const { size: _s, ...rest } = this.model.titleTypography ?? {};
+			Object.assign(base, rest);
+		} else if (context === "outline-title") {
+			base.size = base.size * (this.model.outlineTitleScale ?? TYPST_OUTLINE_TITLE_SCALE);
+			const { size: _s, ...rest } = this.model.outlineTitleTypography ?? {};
+			Object.assign(base, rest);
 		} else if (context === "footnote") {
 			Object.assign(base, this.model.footnoteTypography ?? {});
 		}
@@ -1384,14 +1395,24 @@ class DocumentStore {
 
 	resolveTypography(block: Block): TypographySettings {
 		const base = { ...this.model.typography };
-		if (block.heading && block.heading.level > 0) {
-			const level = block.heading.level as HeadingLevel;
-			const scale = this.model.headingScale?.[level] ?? TYPST_HEADING_SCALE[level] ?? 1;
-			base.size = base.size * scale;
-			const { size: _s, ...restOverride } = this.model.headingTypography?.[level] ?? {};
-			Object.assign(base, restOverride);
+		if (block.heading) {
+			if (block.heading.level === 0) {
+				base.size = base.size * (this.model.titleScale ?? TYPST_TITLE_SCALE);
+				const { size: _s, ...rest } = this.model.titleTypography ?? {};
+				Object.assign(base, rest);
+			} else {
+				const level = block.heading.level as HeadingLevel;
+				const scale = this.model.headingScale?.[level] ?? TYPST_HEADING_SCALE[level] ?? 1;
+				base.size = base.size * scale;
+				const { size: _s, ...rest } = this.model.headingTypography?.[level] ?? {};
+				Object.assign(base, rest);
+			}
 		} else if (block.footnote) {
 			Object.assign(base, this.model.footnoteTypography ?? {});
+		} else if (block.outline) {
+			base.size = base.size * (this.model.outlineTitleScale ?? TYPST_OUTLINE_TITLE_SCALE);
+			const { size: _s, ...rest } = this.model.outlineTitleTypography ?? {};
+			Object.assign(base, rest);
 		}
 		return { ...base, ...(block.typography ?? {}) };
 	}
@@ -1433,6 +1454,18 @@ class DocumentStore {
 				} else {
 					if (!this.model.headingTypography) this.model.headingTypography = {};
 					(this.model.headingTypography[level] ??= {})[key] = value;
+				}
+			} else if (context === "title") {
+				if (key === "size") {
+					this.model.titleScale = (value as number) / this.model.typography.size;
+				} else {
+					(this.model.titleTypography ??= {})[key] = value;
+				}
+			} else if (context === "outline-title") {
+				if (key === "size") {
+					this.model.outlineTitleScale = (value as number) / this.model.typography.size;
+				} else {
+					(this.model.outlineTitleTypography ??= {})[key] = value;
 				}
 			} else if (context === "footnote") {
 				(this.model.footnoteTypography ??= {})[key] = value;

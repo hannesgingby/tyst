@@ -76,15 +76,9 @@
 		onpastelines,
 	}: Props = $props();
 
-	// Default heading font-size multipliers, chosen to approximate Typst's
-	// out-of-the-box heading scale. `0` is the document title.
-	const HEADING_SCALE: Record<number, number> = {
-		0: 2.0,
-		1: 1.4,
-		2: 1.2,
-		3: 1.06,
-		4: 1.0,
-	};
+	// resolveTypography now applies heading/title/outline-title scale, so no
+	// separate multiplier is needed here. HEADING_TOP_MARGIN_EM_FALLBACK is kept
+	// only for the heading spacing fallback (not font size).
 	const HEADING_TOP_MARGIN_EM_FALLBACK: Record<number, number> = {
 		0: 1.4,
 		1: 1.2,
@@ -96,10 +90,7 @@
 	const typography = $derived(documentStore.resolveTypography(block));
 	const paragraph = $derived(documentStore.resolveParagraph(block));
 
-	const headingScale = $derived(
-		block.heading ? (HEADING_SCALE[block.heading.level] ?? 1) : 1,
-	);
-	const fontSizePx = $derived(ptToPx(typography.size) * scale * headingScale);
+	const fontSizePx = $derived(ptToPx(typography.size) * scale);
 	/** Typst footnote listing body size (`footnote.entry`). */
 	const footnoteFontSizePx = $derived(fontSizePx * 0.85);
 	const lineHeight = $derived(
@@ -569,7 +560,6 @@
 	{@const spacing = documentStore.resolveEmbedSpacing(block)}
 	{@const docTypo = documentStore.model.typography}
 	{@const baseFontPx = ptToPx(docTypo.size) * scale}
-	{@const titleFontPx = baseFontPx * 1.4}
 	{@const indentEm = outline.indent != null ? outline.indent / docTypo.size : 1.5}
 	{@const awaitingDelete = documentStore.embedAwaitingDelete === block.id}
 	<div
@@ -598,11 +588,11 @@
 			aria-multiline="false"
 			data-block-id={block.id}
 			data-placeholder={effectivePlaceholder ?? "Title"}
-			style:font-family={`"${docTypo.fontFamily}", serif`}
-			style:font-size="{titleFontPx}px"
+			style:font-family={`"${typography.fontFamily}", serif`}
+			style:font-size="{fontSizePx}px"
 			style:font-weight={700}
 			style:line-height={1.2}
-			style:color={docTypo.color}
+			style:color={typography.color}
 			onfocus={() => onfocusblock(block.id)}
 			oninput={onInput}
 			onkeydown={onKeydown}
