@@ -13,6 +13,13 @@
 
 	const activeBlock = $derived(documentStore.activeBlock);
 
+	/** Link chip created or edited in this popup session (for clear when URL is emptied). */
+	let linkChipBlockId = $state<string | null>(null);
+
+	$effect(() => {
+		if (activeBlock.link) linkChipBlockId = activeBlock.id;
+	});
+
 	function handleSelect(kind: "reference" | "citation", id: string): void {
 		// If there's already an active reference/citation block, update it in place.
 		if (activeBlock.reference && kind === "reference") {
@@ -38,14 +45,33 @@
 		});
 	}
 
+	function removeLinkChip(): void {
+		const id =
+			activeBlock.link ? activeBlock.id : linkChipBlockId;
+		if (!id) return;
+		const block = documentStore.findBlock(id);
+		if (!block?.link) return;
+		documentStore.deleteEmbed(id);
+		linkChipBlockId = null;
+	}
+
 	function handleLinkChange(url: string, displayText: string): void {
-		if (!url.trim()) return;
+		if (!url.trim()) {
+			removeLinkChip();
+			return;
+		}
 		const dt = displayText.trim() || undefined;
 		if (activeBlock.link) {
 			documentStore.updateLink(activeBlock.id, { url, displayText: dt });
+			linkChipBlockId = activeBlock.id;
 		} else {
 			documentStore.insertLink(url, dt, { focusTail: false });
+			linkChipBlockId = documentStore.activeBlockId;
 		}
+	}
+
+	function handleLinkClear(): void {
+		removeLinkChip();
 	}
 </script>
 
@@ -55,4 +81,5 @@
 	onselect={handleSelect}
 	onmenuchange={handleMenuChange}
 	onlinkchange={handleLinkChange}
+	onlinkclear={handleLinkClear}
 />

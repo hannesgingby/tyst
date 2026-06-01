@@ -24,6 +24,8 @@
 		onmenuchange?: (displayText: string, pageForm: boolean) => void;
 		/** Called when the link URL or display text changes. */
 		onlinkchange?: (url: string, displayText: string) => void;
+		/** Called when the link URL field is cleared. */
+		onlinkclear?: () => void;
 	}
 
 	let {
@@ -33,6 +35,7 @@
 		isCitationActive = false,
 		onmenuchange,
 		onlinkchange,
+		onlinkclear,
 	}: Props = $props();
 
 	const LIST_WIDTH = 300;
@@ -51,6 +54,7 @@
 	let linkUrl = $state("");
 	let linkDisplayText = $state("");
 	let linkRowEl = $state<HTMLElement | null>(null);
+	let hadLinkUrl = $state(false);
 
 	const hoverPin = getContext<HoverPopupPin | undefined>(HOVER_POPUP_PIN_KEY);
 
@@ -188,6 +192,7 @@
 		linkSyncedBlockId = block.id;
 		linkUrl = block.link.url;
 		linkDisplayText = block.link.displayText ?? "";
+		hadLinkUrl = linkUrl.trim() !== "";
 		activeItemIndex = -1;
 	});
 
@@ -195,7 +200,12 @@
 		const url = linkUrl;
 		const dt = linkDisplayText;
 		untrack(() => {
-			if (!url.trim()) return;
+			if (!url.trim()) {
+				if (hadLinkUrl) onlinkclear?.();
+				hadLinkUrl = false;
+				return;
+			}
+			hadLinkUrl = true;
 			onlinkchange?.(url, dt);
 		});
 	});
