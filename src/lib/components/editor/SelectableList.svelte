@@ -16,6 +16,8 @@
 		onrows?: (rows: HTMLElement[]) => void;
 		/** Called when the user clicks a row. */
 		onselect?: (index: number) => void;
+		/** Called on mouseenter/leave with the hovered index (null on leave). */
+		onhover?: (index: number | null) => void;
 	}
 
 	let {
@@ -26,6 +28,7 @@
 		shell = true,
 		onrows,
 		onselect,
+		onhover,
 	}: Props = $props();
 
 	let rowEls = $state<HTMLElement[]>([]);
@@ -61,7 +64,8 @@
 					]}
 					role="option"
 					aria-selected={i === activeIndex}
-					onmouseenter={() => (activeIndex = i)}
+					onmouseenter={() => { activeIndex = i; onhover?.(i); }}
+					onmouseleave={() => onhover?.(null)}
 					onclick={() => onselect?.(i)}
 				>
 					<span>{item.label}</span>

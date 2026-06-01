@@ -22,6 +22,19 @@
     const alignmentActive = $derived(
         activeBlock.alignment != null && activeBlock.alignment !== "left",
     );
+
+    // Default icons that reflect current document state (used when not hovering).
+    const alignDefaultIcon = $derived(
+        activeBlock.alignment === "right" ? "align-right"
+        : activeBlock.alignment === "center" ? "align-center"
+        : "align-center"
+    );
+    const listDefaultIcon = $derived(
+        activeBlock.list?.kind === "numbered" ? "numbered-list" : "list"
+    );
+    const lineDefaultIcon = $derived(
+        documentStore.tiedPopup === "rect" ? "rectangle" : "line"
+    );
     const boldActive = $derived(documentStore.isBold);
     const italicActive = $derived(documentStore.isItalic);
     const underlineActive = $derived(documentStore.isUnderline);
@@ -41,6 +54,11 @@
     // Hover-to-open for the Line tool (matches Headings/List behaviour). When
     // a shape is active the popup is "tied" open regardless of hover.
     let lineHoverOpen = $state(false);
+
+    // Hover-preview icons for the align, list and line/rect tools.
+    let alignHoverIcon = $state<string | null>(null);
+    let listHoverIcon  = $state<string | null>(null);
+    let lineHoverIcon  = $state<string | null>(null);
 
     // Click-outside-to-close. When the user clicks somewhere that's neither
     // the open popup nor the matching embed block in the document, dismiss
@@ -450,7 +468,7 @@
                         onmouseleave={() => (lineHoverOpen = false)}
                     >
                         {@render embedTrigger(
-                            "line",
+                            lineHoverIcon ?? lineDefaultIcon,
                             "Line",
                             lineTied,
                             lineOpen,
@@ -469,7 +487,7 @@
                                 role="dialog"
                                 aria-label="Line"
                             >
-                                <LinePopup />
+                                <LinePopup onhover={(icon) => (lineHoverIcon = icon)} />
                             </div>
                         {/if}
                     </div>
@@ -662,22 +680,22 @@
                         {:else if tool.kind === "expandable" && tool.popup === "list"}
                             <HoverPopup
                                 label={tool.label}
-                                icon={tool.name}
+                                icon={listHoverIcon ?? listDefaultIcon}
                                 iconClass={tool.iconClass}
                                 shortcut={tool.shortcut}
                                 active={listActive}
                             >
-                                {#snippet popup()}<ListPopup />{/snippet}
+                                {#snippet popup()}<ListPopup onhover={(icon) => (listHoverIcon = icon)} />{/snippet}
                             </HoverPopup>
                         {:else if tool.kind === "expandable" && tool.popup === "alignment"}
                             <HoverPopup
                                 label={tool.label}
-                                icon={tool.name}
+                                icon={alignHoverIcon ?? alignDefaultIcon}
                                 iconClass={tool.iconClass}
                                 shortcut={tool.shortcut}
                                 active={alignmentActive}
                             >
-                                {#snippet popup()}<AlignmentPopup />{/snippet}
+                                {#snippet popup()}<AlignmentPopup onhover={(icon) => (alignHoverIcon = icon)} />{/snippet}
                             </HoverPopup>
                         {:else if tool.kind === "expandable"}
                             <HoverPopup

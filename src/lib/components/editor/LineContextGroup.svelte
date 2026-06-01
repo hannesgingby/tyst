@@ -16,6 +16,12 @@
 	import SelectableList from "./SelectableList.svelte";
 	import TwoPanelMenu from "./TwoPanelMenu.svelte";
 
+	interface Props {
+		onhover?: (icon: string | null) => void;
+	}
+	const SHAPE_ICONS = ["line", "rectangle"];
+	let { onhover }: Props = $props();
+
 	// Stable defaults for the preview panels when no shape is active yet
 	// (i.e. when the user opens the Line popup from the toolbar but hasn't
 	// inserted anything yet). These are not written back anywhere.
@@ -72,6 +78,7 @@
 			shell={false}
 			onrows={(rows) => (rowEls = rows)}
 			onselect={handleSelect}
+			onhover={(i) => onhover?.(i !== null ? SHAPE_ICONS[i] : null)}
 		/>
 	{/snippet}
 	{#snippet menu()}

@@ -3,6 +3,11 @@
 	import { documentStore } from "$lib/document/store.svelte";
 	import ListContextGroup from "./ListContextGroup.svelte";
 
+	interface Props {
+		onhover?: (icon: string | null) => void;
+	}
+	let { onhover }: Props = $props();
+
 	function handleSelect(settings: ListSettings): void {
 		documentStore.insertOrTransformActive({
 			text: "",
@@ -12,4 +17,4 @@
 	}
 </script>
 
-<ListContextGroup onselect={handleSelect} />
+<ListContextGroup onselect={handleSelect} {onhover} />

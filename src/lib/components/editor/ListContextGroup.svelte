@@ -19,9 +19,12 @@
 
 	interface Props {
 		onselect?: (settings: ListSettings) => void;
+		onhover?: (icon: string | null) => void;
 	}
 
-	let { onselect }: Props = $props();
+	const LIST_ICONS = ["list", "numbered-list"];
+
+	let { onselect, onhover }: Props = $props();
 
 	let activeIndex = $state(0);
 	let rowEls = $state<HTMLElement[]>([]);
@@ -182,6 +185,7 @@
 			shell={false}
 			onrows={(rows) => (rowEls = rows)}
 			onselect={handleSelect}
+			onhover={(i) => onhover?.(i !== null ? LIST_ICONS[i] : null)}
 		/>
 	{/snippet}
 	{#snippet menu()}
