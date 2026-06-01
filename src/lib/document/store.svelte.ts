@@ -444,12 +444,67 @@ class DocumentStore {
 		}
 	}
 
+	/**
+	 * All block IDs that belong to the same paragraph as the given block.
+	 * A paragraph group is the maximal run of consecutive non-blank, non-block-level
+	 * blocks (headings, lists, embeds) surrounding `blockId`. Continuation blocks
+	 * are included because they are inline parts of the same paragraph.
+	 */
+	private paragraphGroupBlockIds(blockId: string): string[] {
+		const idx = this.blockIndex(blockId);
+		if (idx < 0) return [blockId];
+		const blocks = this.model.blocks;
+
+		const isTerminator = (b: Block): boolean =>
+			(!b.continuation && b.text === "") ||
+			b.heading !== undefined ||
+			b.list !== undefined ||
+			b.image !== undefined ||
+			b.line !== undefined ||
+			b.rect !== undefined ||
+			b.outline !== undefined;
+
+		let groupStart = idx;
+		for (let j = idx - 1; j >= 0; j--) {
+			const b = blocks[j];
+			if (b.footnote || b.footnoteSeparator) continue;
+			if (isTerminator(b)) break;
+			groupStart = j;
+		}
+
+		let groupEnd = idx;
+		for (let j = idx + 1; j < blocks.length; j++) {
+			const b = blocks[j];
+			if (b.footnote || b.footnoteSeparator) continue;
+			if (isTerminator(b)) break;
+			groupEnd = j;
+		}
+
+		const ids: string[] = [];
+		for (let j = groupStart; j <= groupEnd; j++) {
+			const b = blocks[j];
+			if (!b.footnote && !b.footnoteSeparator) ids.push(b.id);
+		}
+		return ids;
+	}
+
+	/**
+	 * Block IDs to target for paragraph operations. For a multi-block selection,
+	 * all selected blocks. For a single block, the whole paragraph group so that
+	 * unlinking and editing propagate to every line of the paragraph.
+	 */
+	private get paragraphTargetBlockIds(): string[] {
+		const sel = this.selection;
+		if (sel?.kind === "multiBlock") return sel.blockIds;
+		return this.paragraphGroupBlockIds(this.activeBlock.id);
+	}
+
 	get paragraphLinked(): boolean {
-		return this.targetBlockIds.every((id) => this.isOverrideEmpty("paragraph", id));
+		return this.paragraphTargetBlockIds.every((id) => this.isOverrideEmpty("paragraph", id));
 	}
 
 	set paragraphLinked(value: boolean) {
-		for (const id of this.targetBlockIds) {
+		for (const id of this.paragraphTargetBlockIds) {
 			const b = this.findBlock(id);
 			if (!b) continue;
 			b.paragraph = value ? undefined : { ...this.resolveParagraph(b) };
@@ -1347,7 +1402,7 @@ class DocumentStore {
 
 	readonly popupParagraph = $derived.by(() => {
 		if (this.paragraphLinked) return this.model.paragraph;
-		const b = this.findBlock(this.targetBlockIds[0]) ?? this.activeBlock;
+		const b = this.findBlock(this.paragraphTargetBlockIds[0]) ?? this.activeBlock;
 		return this.resolveParagraph(b);
 	});
 
@@ -1385,7 +1440,7 @@ class DocumentStore {
 			this.model.paragraph[key] = value;
 			return;
 		}
-		for (const id of this.targetBlockIds) {
+		for (const id of this.paragraphTargetBlockIds) {
 			const b = this.findBlock(id);
 			if (!b) continue;
 			(b.paragraph ??= {})[key] = value;
@@ -1421,7 +1476,7 @@ class DocumentStore {
 			else delete this.model.paragraph.spacingFollowsLeading;
 			return;
 		}
-		for (const id of this.targetBlockIds) {
+		for (const id of this.paragraphTargetBlockIds) {
 			const b = this.findBlock(id);
 			if (!b) continue;
 			const p = (b.paragraph ??= {});

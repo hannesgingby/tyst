@@ -25,6 +25,9 @@
 	// otherwise the active block's resolved settings.
 	const typography = $derived(documentStore.popupTypography);
 	const paragraph = $derived(documentStore.popupParagraph);
+	// Weight and leading are not meaningful to edit for heading/title blocks —
+	// headings have their own bold and spacing controlled by Typst's heading styles.
+	const isHeadingBlock = $derived(documentStore.isEditingHeadingBlock);
 	const spacingFollowsLeading = $derived(paragraph.spacingFollowsLeading === true);
 
 	// Size is stored in points; the input may display pt/px/mm. The unit is a
@@ -132,6 +135,7 @@
 				<DropdownMenu
 					value={typography.weight}
 					options={weightOptions}
+					disabled={isHeadingBlock}
 					onchange={(v) => documentStore.setTypography("weight", v)}
 				/>
 				<Input
@@ -156,6 +160,7 @@
 					max={3}
 					step={0.05}
 					decimals={2}
+					disabled={isHeadingBlock}
 					onchange={(v) => documentStore.setTypography("leading", v)}
 				/>
 				<Input
