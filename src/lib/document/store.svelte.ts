@@ -1257,7 +1257,9 @@ class DocumentStore {
 		if (!emptyTail) {
 			const nextIndex = this.blockIndex(id) + 1;
 			const next = this.model.blocks[nextIndex];
-			if (!next || next.reference || next.citation) {
+			// Need a text tail if: nothing follows, or the next block is another chip,
+			// or the next block is not a continuation (e.g. a heading or image).
+			if (!next || next.reference || next.citation || !next.continuation) {
 				this.insertBlockObjectAfter(id, { text: "", continuation: true });
 			}
 		}
@@ -1291,7 +1293,7 @@ class DocumentStore {
 		if (!emptyTail) {
 			const nextIndex = this.blockIndex(id) + 1;
 			const next = this.model.blocks[nextIndex];
-			if (!next || next.reference || next.citation) {
+			if (!next || next.reference || next.citation || !next.continuation) {
 				this.insertBlockObjectAfter(id, { text: "", continuation: true });
 			}
 		}

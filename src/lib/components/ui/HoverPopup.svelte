@@ -18,6 +18,8 @@
 		popupClass?: string;
 		/** Highlights the trigger when the cursor is on a matching block type. */
 		active?: boolean;
+		/** When true, forces the popup open regardless of hover state. */
+		forceOpen?: boolean;
 		popup?: Snippet;
 	}
 
@@ -29,6 +31,7 @@
 		shortcut,
 		popupClass = "-left-8",
 		active = false,
+		forceOpen = false,
 		popup,
 	}: Props = $props();
 
@@ -90,7 +93,7 @@
 		</button>
 	</Tooltip>
 
-	{#if open && popup}
+	{#if (open || forceOpen) && popup}
 		<div
 			class={["absolute bottom-full z-[60] pb-2.5", popupClass]}
 			role="dialog"

@@ -1008,6 +1008,7 @@
         class="doc-block-reference relative inline cursor-pointer select-none"
         style:font-family={`"${typography.fontFamily}", serif`}
         style:font-size="{fontSizePx}px"
+        style:font-weight={fontWeight}
         style:line-height={lineHeight}
         style:color={typography.color}
         role="button"
@@ -1098,6 +1099,7 @@
                 class="select-none opacity-30"
                 style:font-family={`"${typography.fontFamily}", serif`}
                 style:font-size="{fontSizePx}px"
+                style:font-weight={fontWeight}
                 style:line-height={1.5}
                 style:color={typography.color}
             >No sources added yet.</div>
@@ -1106,6 +1108,7 @@
                 class="select-none"
                 style:font-family={`"${typography.fontFamily}", serif`}
                 style:font-size="{fontSizePx}px"
+                style:font-weight={fontWeight}
                 style:line-height={1.5}
                 style:color={typography.color}
             >
@@ -1120,7 +1123,7 @@
                     {@const pages = source.pageRange ? `, pp. ${source.pageRange}` : ""}
                     <div class="flex gap-[1em]" style:margin-bottom="0.25em">
                         {#if numeric}
-                            <span class="shrink-0 opacity-70">{key}</span>
+                            <span class="shrink-0">{key}</span>
                             <span>
                                 {#if author}{author}{year ? `, ${year}` : ""}{title ? `. "${title}."` : ""}{journal ? ` ${journal}` : ""}{vol}{iss}{pages}.{/if}
                                 {#if !author}"{title}."{year ? ` ${year}.` : ""}{/if}

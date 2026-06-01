@@ -15,11 +15,17 @@
 		hasElements?: boolean;
 		/** Called when the user picks a reference or citation item. */
 		onselect?: (kind: "reference" | "citation", id: string) => void;
+		/** Block ID or source ID of the currently active reference/citation — pre-selects the matching row. */
+		activeTargetId?: string | null;
+		/** True when the active block is a citation (vs cross-reference). */
+		isCitationActive?: boolean;
 	}
 
 	let {
 		hasElements = true,
 		onselect,
+		activeTargetId = null,
+		isCitationActive = false,
 	}: Props = $props();
 
 	const LIST_WIDTH = 300;
@@ -124,6 +130,17 @@
 	$effect(() => {
 		displayText = activeItem?.displayText ?? activeItem?.label ?? "";
 		pageForm = false;
+	});
+
+	// Pre-select the row matching the active block's target when the popup opens.
+	$effect(() => {
+		if (!activeTargetId) return;
+		const idx = filteredItems.findIndex(
+			(f) =>
+				f.id === activeTargetId &&
+				(isCitationActive ? f.sectionTitle === "Citation" : f.sectionTitle !== "Citation"),
+		);
+		if (idx >= 0) activeItemIndex = idx;
 	});
 
 	$effect(() => {

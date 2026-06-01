@@ -639,12 +639,12 @@
         documentStore.activeBlockId = id;
     }
 
-    /** Empty continuation segment whose previous block is an inline embed (h-spacing, footnote marker). */
+    /** Empty continuation segment whose previous block is an inline embed (h-spacing, footnote marker, reference, citation). */
     function isEmptyTailAfterInlineEmbed(idx: number): boolean {
         const block = blocks[idx];
         if (!block?.continuation || block.text !== "") return false;
         const prev = idx > 0 ? blocks[idx - 1] : undefined;
-        return !!(prev?.hSpacing || prev?.footnoteMarker);
+        return !!(prev?.hSpacing || prev?.footnoteMarker || prev?.reference || prev?.citation);
     }
 
     /** Empty text block whose previous block is vertical spacing (two-step delete). */
@@ -666,8 +666,8 @@
         for (let i = 0; i < items.length - 1; i++) {
             const anchor = items[i];
             const tail = items[i + 1];
-            if (!tail?.continuation || tail.text !== "" || tail.footnoteMarker) continue;
-            if (!anchor.footnoteMarker && !anchor.hSpacing) continue;
+            if (!tail?.continuation || tail.text !== "" || tail.footnoteMarker || tail.reference || tail.citation) continue;
+            if (!anchor.footnoteMarker && !anchor.hSpacing && !anchor.reference && !anchor.citation) continue;
 
             const anchorEl = lineEl.querySelector(
                 `[data-block-id="${anchor.id}"]`,
@@ -1090,9 +1090,9 @@
                 if (!caretAtEnd(active, blocks[idx].text.length)) return;
                 event.preventDefault();
                 event.stopPropagation();
-                // Skip non-editable inline segments (footnote markers have no contenteditable).
+                // Skip non-editable inline segments (footnote markers, reference chips, citation chips).
                 let nextIdx = idx + 1;
-                while (nextIdx < blocks.length && blocks[nextIdx].footnoteMarker) nextIdx++;
+                while (nextIdx < blocks.length && (blocks[nextIdx].footnoteMarker || blocks[nextIdx].reference || blocks[nextIdx].citation)) nextIdx++;
                 if (nextIdx >= blocks.length || !blocks[nextIdx].continuation) return;
                 const next = blocks[nextIdx];
                 const nextEl = blockEls.get(next.id);
@@ -1106,9 +1106,9 @@
                 if (!caretAtStart(active)) return;
                 event.preventDefault();
                 event.stopPropagation();
-                // Skip non-editable inline segments (footnote markers).
+                // Skip non-editable inline segments (footnote markers, reference chips, citation chips).
                 let prevIdx = idx - 1;
-                while (prevIdx >= 0 && blocks[prevIdx].footnoteMarker) prevIdx--;
+                while (prevIdx >= 0 && (blocks[prevIdx].footnoteMarker || blocks[prevIdx].reference || blocks[prevIdx].citation)) prevIdx--;
                 if (prevIdx < 0) return;
                 const prev = blocks[prevIdx];
                 const prevEl = blockEls.get(prev.id);
