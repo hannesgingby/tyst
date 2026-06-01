@@ -251,12 +251,6 @@
                 },
                 {
                     kind: "icon",
-                    name: "paragraph-break",
-                    label: "Paragraph break",
-                    iconClass: "size-7",
-                },
-                {
-                    kind: "icon",
                     name: "page-break",
                     label: "Page break",
                     iconClass: "size-7.5",
@@ -278,7 +272,6 @@
                     iconClass: "size-5.5",
                 },
                 { kind: "icon", name: "padding", label: "Padding" },
-                { kind: "icon", name: "block", label: "Block" },
             ],
         },
     ];
