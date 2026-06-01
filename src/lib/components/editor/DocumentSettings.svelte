@@ -1,6 +1,7 @@
 <script lang="ts">
     import Icon from "$lib/components/Icon.svelte";
     import PagePanel from "./settings/PagePanel.svelte";
+    import ReferencesPanel from "./settings/ReferencesPanel.svelte";
 
     interface Props {
         open?: boolean;
@@ -125,6 +126,8 @@
                 <div class="mx-auto max-w-[702px]">
                     {#if active === "page"}
                         <PagePanel />
+                    {:else if active === "references"}
+                        <ReferencesPanel />
                     {:else}
                         <div
                             class="flex h-64 items-center justify-center text-body-14 text-text-200"
