@@ -8,8 +8,10 @@
 		/** When true, the side menu is rendered next to the list. */
 		showMenu?: boolean;
 		menuWidth?: number;
-		/** Currently active row element; the menu aligns its bottom to this row. */
+		/** Currently active row element; positions the side menu relative to this row. */
 		activeRowEl?: HTMLElement | null;
+		/** Vertical alignment of the side menu against the active row. */
+		menuAlign?: "bottom" | "center";
 		/** Element whose height drives the clip (may differ from visible panel while shrinking). */
 		menuEl?: HTMLElement | null;
 		/** Fired when the clip height transition finishes. */
@@ -23,6 +25,7 @@
 		menuWidth = 324,
 		activeRowEl = null,
 		menuEl = null,
+		menuAlign = "bottom",
 		onClipHeightTransitionEnd,
 		list,
 		menu,
@@ -45,8 +48,17 @@
 
 		const trackTop = trackEl.getBoundingClientRect().top;
 		const rowRect = activeRowEl.getBoundingClientRect();
-		const rowBottom = rowRect.top - trackTop + rowRect.height;
-		menuBottom = rowBottom - menuHeight < 0 ? 0 : trackHeight - rowBottom;
+		const rowTop = rowRect.top - trackTop;
+		const rowBottom = rowTop + rowRect.height;
+
+		if (menuAlign === "center") {
+			const rowCenter = rowTop + rowRect.height / 2;
+			let bottom = trackHeight - (rowCenter + menuHeight / 2);
+			bottom = Math.max(0, Math.min(bottom, trackHeight - menuHeight));
+			menuBottom = bottom;
+		} else {
+			menuBottom = rowBottom - menuHeight < 0 ? 0 : trackHeight - rowBottom;
+		}
 	}
 
 	function handleClipTransitionEnd(event: TransitionEvent): void {
@@ -58,6 +70,7 @@
 		showMenu;
 		activeRowEl;
 		menuEl;
+		menuAlign;
 		trackEl;
 		listShellEl;
 		tick().then(updateLayout);

@@ -39,6 +39,10 @@
 		setPinned: (value) => {
 			pinned = value;
 		},
+		dismiss: () => {
+			pinned = false;
+			open = false;
+		},
 	});
 
 	function onMouseLeave(event: MouseEvent): void {

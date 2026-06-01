@@ -12,6 +12,7 @@
     import ListPopup from "./ListPopup.svelte";
     import FootnotePopup from "./FootnotePopup.svelte";
     import OutlinePopup from "./OutlinePopup.svelte";
+    import ReferencePopup from "./ReferencePopup.svelte";
     import SpacingPopup from "./SpacingPopup.svelte";
     import TypographyPopup from "./TypographyPopup.svelte";
 
@@ -249,13 +250,7 @@
         },
         {
             tools: [
-                // outline rendered inline below (bespoke wiring)
-                {
-                    kind: "icon",
-                    name: "at-sign",
-                    label: "Reference",
-                    iconClass: "size-5",
-                },
+                // outline + footnote + reference rendered inline below (bespoke wiring)
             ],
         },
         {
@@ -606,6 +601,13 @@
                             </div>
                         {/if}
                     </div>
+                    <HoverPopup
+                        label="Reference"
+                        icon="at-sign"
+                        iconClass="size-5"
+                    >
+                        {#snippet popup()}<ReferencePopup />{/snippet}
+                    </HoverPopup>
                     {#each group.tools as tool, toolIndex (toolIndex)}
                         {#if tool.kind === "icon"}
                             {@render toolIcon(
