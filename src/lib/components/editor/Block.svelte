@@ -174,6 +174,7 @@
     const isOutline = $derived(!!block.outline);
     const isVSpacing = $derived(!!block.vSpacing);
     const isHSpacing = $derived(!!block.hSpacing);
+    const isPageBreak = $derived(!!block.pageBreak);
     const isFootnoteMarker = $derived(!!block.footnoteMarker);
     const isFootnoteBody = $derived(!!block.footnote);
     const footnoteMarkerNumber = $derived(
@@ -261,7 +262,7 @@
     // skip all contenteditable wiring. Click activates the block so the toolbar
     // can tie the matching popup.
     $effect(() => {
-        if (!isEmbed && !isVSpacing) return;
+        if (!isEmbed && !isVSpacing && !isPageBreak) return;
         const node = embedEl;
         if (!node) return;
         const observer = new ResizeObserver(() => reportHeight());
@@ -782,6 +783,43 @@
                 fontSizePx * 0.35}px"
         ></span>
     </span>
+{:else if isPageBreak}
+    {@const awaitingDelete = documentStore.embedAwaitingDelete === block.id}
+    <!-- svelte-ignore a11y_click_events_have_key_events -->
+    <!-- svelte-ignore a11y_no_static_element_interactions -->
+    <div
+        bind:this={outerEl}
+        class="doc-embed relative flex w-full cursor-pointer items-center gap-2 py-1"
+        data-block-id={block.id}
+        tabindex="-1"
+        onclick={(e) => {
+            e.preventDefault();
+            documentStore.activateEmbed(block.id);
+            onfocusblock(block.id);
+            outerEl?.focus({ preventScroll: true });
+        }}
+    >
+        {#if awaitingDelete}
+            <span
+                class="text-text-150 pointer-events-none absolute right-0 bottom-full select-none"
+                style:font-size="{10 * scale}px"
+                style:line-height="1"
+                style:padding-bottom="{8 * scale}px"
+            >
+                Backspace to delete
+            </span>
+        {/if}
+        <div class="h-px flex-1 border-t border-dashed opacity-25" style:border-color={typography.color}></div>
+        <span
+            class="shrink-0 select-none opacity-30"
+            style:font-family={`"${typography.fontFamily}", serif`}
+            style:font-size="{9 * scale}px"
+            style:letter-spacing="0.08em"
+            style:text-transform="uppercase"
+            style:color={typography.color}
+        >Page break</span>
+        <div class="h-px flex-1 border-t border-dashed opacity-25" style:border-color={typography.color}></div>
+    </div>
 {:else if isOutline}
     {@render outlineView()}
 {:else if isEmbed}

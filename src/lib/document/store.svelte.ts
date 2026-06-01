@@ -303,7 +303,7 @@ class DocumentStore {
 		if (active.footnote && active.text === "") return active.id;
 		if (active.footnoteSeparator && active.line) return active.id;
 		if (active.outline && active.text === "") return active.id;
-		if (active.vSpacing || active.hSpacing) return active.id;
+		if (active.vSpacing || active.hSpacing || active.pageBreak) return active.id;
 
 		if (
 			active.text !== "" ||
@@ -338,7 +338,8 @@ class DocumentStore {
 				b.footnote ||
 				b.footnoteSeparator ||
 				b.vSpacing ||
-				b.hSpacing
+				b.hSpacing ||
+				b.pageBreak
 			)
 		)
 			return null;
@@ -474,7 +475,8 @@ class DocumentStore {
 			b.line !== undefined ||
 			b.rect !== undefined ||
 			b.outline !== undefined ||
-			b.vSpacing !== undefined;
+			b.vSpacing !== undefined ||
+			b.pageBreak !== undefined;
 
 		let groupStart = idx;
 		for (let j = idx - 1; j >= 0; j--) {
@@ -936,7 +938,7 @@ class DocumentStore {
 		// Always ensure there's a writable text block after the embed.
 		const nextIndex = this.blockIndex(id) + 1;
 		const next = this.model.blocks[nextIndex];
-		if (!next || next.continuation || next.image || next.line || next.rect || next.outline || next.vSpacing) {
+		if (!next || next.continuation || next.image || next.line || next.rect || next.outline || next.vSpacing || next.pageBreak) {
 			this.insertBlockObjectAfter(id, { text: "" });
 		}
 		this.activeBlockId = id;
@@ -992,6 +994,11 @@ class DocumentStore {
 			inset: 5,
 			stroke: this.defaultStroke(),
 		};
+	}
+
+	/** Insert a page break block after the active block. */
+	insertPageBreak(): void {
+		this.insertEmbed({ text: "", pageBreak: true });
 	}
 
 	/** Insert a vertical spacing block (`#v(…)`) after the active block. */

@@ -589,7 +589,7 @@ export function serializeDocument(
 
 		handlePageBreak(block);
 
-		if (block.footnote || block.footnoteSeparator) {
+		if (block.footnote || block.footnoteSeparator || block.pageBreak) {
 			i++;
 			continue;
 		}

@@ -314,6 +314,8 @@ export interface Block {
 	vSpacing?: SpacingSettings;
 	/** Embed: horizontal inline spacing (`#h(…)`). Continuation block. */
 	hSpacing?: SpacingSettings;
+	/** Forces a page break before the next block. Serializes as `#pagebreak()`. */
+	pageBreak?: boolean;
 }
 
 /** Embed block kinds. */

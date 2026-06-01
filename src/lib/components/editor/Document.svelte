@@ -386,6 +386,12 @@
                     items.set(b.id, { page: pageIndex });
                     continue;
                 }
+                if (b.pageBreak) {
+                    items.set(b.id, { page: pageIndex });
+                    pageIndex += 1;
+                    y = 0;
+                    continue;
+                }
                 const h = heights[b.id] ?? 0;
                 const mp = resolveMarginsPx(pageIndex);
                 const chPx =
@@ -890,7 +896,8 @@
                         activeBlock.footnote ||
                         activeBlock.footnoteSeparator ||
                         activeBlock.vSpacing ||
-                        activeBlock.hSpacing)
+                        activeBlock.hSpacing ||
+                        activeBlock.pageBreak)
                 ) {
                     event.preventDefault();
                     event.stopPropagation();

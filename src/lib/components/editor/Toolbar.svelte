@@ -530,7 +530,17 @@
                         {/if}
                     </div>
                     {#each group.tools as tool, toolIndex (toolIndex)}
-                        {#if tool.kind === "icon" && tool.name !== "horizontal-spacing" && tool.name !== "vertical-spacing"}
+                        {#if tool.kind === "icon" && tool.name === "page-break"}
+                            <Tooltip label={tool.label} position="bottom">
+                                <button
+                                    type="button"
+                                    class="relative flex h-6 items-center justify-center rounded-md transition-opacity duration-150 hover:opacity-50"
+                                    onclick={() => documentStore.insertPageBreak()}
+                                >
+                                    <Icon name="page-break" class="{tool.iconClass ?? 'size-6'} text-icon" />
+                                </button>
+                            </Tooltip>
+                        {:else if tool.kind === "icon" && tool.name !== "horizontal-spacing" && tool.name !== "vertical-spacing"}
                             {@render toolIcon(tool.name, tool.label, tool.iconClass, tool.shortcut)}
                         {/if}
                     {/each}
