@@ -15,9 +15,7 @@
 	import { documentStore } from "$lib/document/store.svelte";
 	import { fontStore } from "$lib/system/fonts.svelte";
 	import { FONT_SIZE_UNITS, fontSizeUnit, ptToUnit, unitToPt } from "$lib/document/units";
-	import type { FontWeightName } from "$lib/document/types";
 
-	const weightOptions: FontWeightName[] = ["Regular", "Medium", "Bold"];
 	// "em" is added as a context-relative unit; handled separately since its
 	// conversion factor depends on the body font size, not a fixed pt ratio.
 	const sizeUnitOptions = [...FONT_SIZE_UNITS.map((u) => u.unit), "em"];
@@ -26,6 +24,7 @@
 	// Values shown reflect the current scope: the shared default when linked,
 	// otherwise the active block's resolved settings.
 	const typography = $derived(documentStore.popupTypography);
+	const weightOptions = $derived(fontStore.availableWeights(typography.fontFamily));
 	const paragraph = $derived(documentStore.popupParagraph);
 	// Weight and leading are not meaningful to edit for heading/title blocks —
 	// headings have their own bold and spacing controlled by Typst's heading styles.

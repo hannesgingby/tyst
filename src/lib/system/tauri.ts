@@ -6,11 +6,17 @@ import { invoke, isTauri } from "@tauri-apps/api/core";
 
 export { isTauri };
 
+export interface FontFamilyInfo {
+	name: string;
+	/** Available weight values, e.g. [400, 700]. Sorted ascending. */
+	weights: number[];
+}
+
 /** Enumerate the font families installed on the user's system (Tauri only). */
-export async function listSystemFonts(): Promise<string[]> {
+export async function listSystemFonts(): Promise<FontFamilyInfo[]> {
 	if (!isTauri()) return [];
 	try {
-		return await invoke<string[]>("list_system_fonts");
+		return await invoke<FontFamilyInfo[]>("list_system_fonts");
 	} catch (error) {
 		console.error("Failed to list system fonts:", error);
 		return [];

@@ -1,4 +1,4 @@
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -6,15 +6,32 @@ use base64::{engine::general_purpose::STANDARD as B64, Engine as _};
 use tauri::menu::{MenuBuilder, MenuItemBuilder, SubmenuBuilder};
 use tauri::Emitter;
 
-/// Enumerate the font families installed on the system, sorted alphabetically.
+/// Font family with the set of numeric weights (100–900) available on the system.
+#[derive(serde::Serialize)]
+struct FontFamilyInfo {
+    name: String,
+    /// Sorted list of available weight values, e.g. [400, 700].
+    weights: Vec<u16>,
+}
+
+/// Enumerate the font families installed on the system, sorted alphabetically,
+/// along with the weights each family actually has.
 #[tauri::command]
-fn list_system_fonts() -> Vec<String> {
+fn list_system_fonts() -> Vec<FontFamilyInfo> {
     let mut db = fontdb::Database::new();
     db.load_system_fonts();
-    db.faces()
-        .filter_map(|face| face.families.first().map(|(name, _)| name.clone()))
-        .collect::<BTreeSet<_>>()
+    let mut by_family: BTreeMap<String, BTreeSet<u16>> = BTreeMap::new();
+    for face in db.faces() {
+        if let Some((name, _)) = face.families.first() {
+            by_family.entry(name.clone()).or_default().insert(face.weight.0);
+        }
+    }
+    by_family
         .into_iter()
+        .map(|(name, weights)| FontFamilyInfo {
+            name,
+            weights: weights.into_iter().collect(),
+        })
         .collect()
 }
 
