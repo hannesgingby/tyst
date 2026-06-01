@@ -698,6 +698,16 @@
         return out;
     }
 
+    // Stable per-item key for the render loop. Keying by block id (rather than
+    // position index) is essential: when blocks are spliced out, an index key
+    // would make Svelte reuse a slot's DOM/component for a *different* block,
+    // and Block.svelte skips DOM text sync for the focused block — leaving the
+    // reused element showing the previous block's stale (often empty) text.
+    function renderItemKey(item: RenderItem): string {
+        if (item.kind === "block") return item.block.id;
+        return item.items[0].id;
+    }
+
     const totalHeightPx = $derived(
         layout.pageCount * pageHeightPx + (layout.pageCount - 1) * PAGE_GAP_PX,
     );
@@ -1444,7 +1454,7 @@
                 style:min-height="{contentHeightPx}px"
             >
                 <div class="flex min-h-0 flex-1 flex-col">
-                {#each renderItems as item, ri (ri)}
+                {#each renderItems as item (renderItemKey(item))}
                     {#if item.kind === "listGroup"}
                         {@const justifyClass =
                             item.alignment === "center"

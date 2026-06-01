@@ -465,7 +465,6 @@
     // nearest preceding content block.
     function onParbreakMouseDown(event: MouseEvent): void {
         if (role !== "parbreak") return;
-        event.preventDefault();
         const idx = documentStore.blockIndex(block.id);
         for (let j = idx - 1; j >= 0; j--) {
             const prev = documentStore.model.blocks[j];
@@ -480,6 +479,9 @@
                 !prev.rect &&
                 !prev.outline;
             if (isBlankText) continue;
+            // Found a content block above: the parbreak gap belongs to it, so
+            // steal the click and redirect the caret there.
+            event.preventDefault();
             if (prev.image || prev.line || prev.rect || prev.outline) {
                 documentStore.activateEmbed(prev.id);
             } else {
@@ -490,6 +492,17 @@
             }
             return;
         }
+        // No content block above this gap (e.g. blank lines at the very top of
+        // the document). The native click on this spacer-height block doesn't
+        // reliably show the caret, so place it explicitly via the standard
+        // focus path (same mechanism used after splits/merges).
+        event.preventDefault();
+        documentStore.activeBlockId = block.id;
+        documentStore.pendingFocusAction = {
+            kind: "caret",
+            blockId: block.id,
+            offset: 0,
+        };
     }
 
     function canAutoLinkPaste(): boolean {
