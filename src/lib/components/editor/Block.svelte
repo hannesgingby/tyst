@@ -13,16 +13,6 @@
 	import { imageCache } from "$lib/system/imageCache.svelte";
 	import { getCaretOffset, setCaretOffset } from "./caret";
 
-	function applyPendingCaret(node: HTMLElement, blockId: string): void {
-		const pc = documentStore.pendingCaret;
-		if (!pc || pc.blockId !== blockId) return;
-		documentStore.pendingCaret = null;
-		queueMicrotask(() => {
-			node.focus();
-			setCaretOffset(node, pc.offset);
-		});
-	}
-
 	const WEIGHT_CSS: Record<string, number> = { Regular: 400, Medium: 500, Bold: 700 };
 
 	/**
@@ -294,11 +284,10 @@
 		if (!node) return;
 		registerel(block.id, node);
 		const text = untrack(() => block.text);
-		if (node.textContent !== text && document.activeElement !== node) {
+		if (node.textContent !== text && documentStore.activeBlockId !== block.id) {
 			node.textContent = text;
 		}
 		ensureTrailingBr();
-		applyPendingCaret(node, block.id);
 		const target = outerEl ?? node;
 		const observer = new ResizeObserver(() => reportHeight());
 		observer.observe(target);
@@ -320,7 +309,7 @@
 	$effect(() => {
 		const text = block.text;
 		if (!el) return;
-		if (el.textContent !== text && document.activeElement !== el) {
+		if (el.textContent !== text && documentStore.activeBlockId !== block.id) {
 			el.textContent = text;
 		}
 		// Reconcile trailing <br> on every text change, even when the element
@@ -385,7 +374,7 @@
 			if (prev.image || prev.line || prev.rect || prev.outline) {
 				documentStore.activateEmbed(prev.id);
 			} else {
-				documentStore.pendingFocus = prev.id;
+				documentStore.pendingFocusAction = { kind: "focus", blockId: prev.id };
 			}
 			return;
 		}

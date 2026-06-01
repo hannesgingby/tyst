@@ -132,7 +132,7 @@
             outline: documentStore.defaultOutlineSettings(),
             placeholder: "Title",
         });
-        documentStore.pendingFocus = documentStore.activeBlockId;
+        documentStore.pendingFocusAction = { kind: "focus", blockId: documentStore.activeBlockId ?? "" };
     }
 
     type PopupKind = "typography" | "headings" | "list" | "alignment";

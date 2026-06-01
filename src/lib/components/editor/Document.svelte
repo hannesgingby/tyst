@@ -581,8 +581,7 @@
         function onSelectionChange(): void {
             const sel = window.getSelection();
             if (!sel || sel.isCollapsed || sel.rangeCount === 0) {
-                documentStore.selectionBlockIds = [];
-                documentStore.intraBlockSelection = null;
+                documentStore.selection = null;
                 return;
             }
             const range = sel.getRangeAt(0);
@@ -594,67 +593,40 @@
                 .map((b) => b.id);
 
             if (covered.length > 1) {
-                documentStore.selectionBlockIds = covered;
-                documentStore.intraBlockSelection = null;
+                documentStore.selection = { kind: "multiBlock", blockIds: covered };
             } else if (covered.length === 1) {
-                documentStore.selectionBlockIds = [];
-                // Track the partial selection within this single block.
                 const el = blockEls.get(covered[0]);
                 if (
                     el &&
                     el.contains(range.startContainer) &&
                     el.contains(range.endContainer)
                 ) {
-                    const start = measureOffset(
-                        el,
-                        range.startContainer,
-                        range.startOffset,
-                    );
-                    const end = measureOffset(
-                        el,
-                        range.endContainer,
-                        range.endOffset,
-                    );
-                    documentStore.intraBlockSelection =
-                        start < end
-                            ? { blockId: covered[0], start, end }
-                            : null;
+                    const start = measureOffset(el, range.startContainer, range.startOffset);
+                    const end = measureOffset(el, range.endContainer, range.endOffset);
+                    documentStore.selection = start < end
+                        ? { kind: "intraBlock", blockId: covered[0], start, end }
+                        : null;
                 } else {
-                    documentStore.intraBlockSelection = null;
+                    documentStore.selection = null;
                 }
             } else {
-                documentStore.selectionBlockIds = [];
-                documentStore.intraBlockSelection = null;
+                documentStore.selection = null;
             }
         }
 
         document.addEventListener("selectionchange", onSelectionChange);
         return () => {
             document.removeEventListener("selectionchange", onSelectionChange);
-            documentStore.selectionBlockIds = [];
-            documentStore.intraBlockSelection = null;
+            documentStore.selection = null;
         };
     });
 
-    // --- Block element registry + caret handling -----------------------------
+    // --- Block element registry + focus management --------------------------
     const blockEls = new Map<string, HTMLElement>();
-    let pendingCaret: { id: string; offset: number } | null = null;
 
     function registerEl(id: string, el: HTMLElement | null): void {
         if (el) blockEls.set(id, el);
         else blockEls.delete(id);
-    }
-
-    async function focusPending(): Promise<void> {
-        const pending = pendingCaret;
-        pendingCaret = null;
-        if (!pending) return;
-        await tick();
-        const el = blockEls.get(pending.id);
-        if (el) {
-            el.focus();
-            setCaretOffset(el, pending.offset);
-        }
     }
 
     function onFocusBlock(id: string): void {
@@ -704,8 +676,7 @@
             block.placeholder = undefined;
             const el = blockEls.get(id);
             if (el) syncBlockDom(el, "");
-            pendingCaret = { id, offset: 0 };
-            focusPending();
+            documentStore.pendingFocusAction = { kind: "caret", blockId: id, offset: 0 };
             return;
         }
         if (text === "" && block.heading) {
@@ -713,8 +684,7 @@
             block.placeholder = undefined;
             const el = blockEls.get(id);
             if (el) syncBlockDom(el, "");
-            pendingCaret = { id, offset: 0 };
-            focusPending();
+            documentStore.pendingFocusAction = { kind: "caret", blockId: id, offset: 0 };
             return;
         }
 
@@ -723,8 +693,7 @@
         // untouched, caret pinned where it was.
         if (caretOffset === 0 && (block.heading || block.list)) {
             documentStore.insertBlockBefore(id, "");
-            pendingCaret = { id, offset: 0 };
-            focusPending();
+            documentStore.pendingFocusAction = { kind: "caret", blockId: id, offset: 0 };
             return;
         }
 
@@ -747,8 +716,7 @@
         } else {
             newId = documentStore.insertBlockAfter(id, after);
         }
-        pendingCaret = { id: newId, offset: 0 };
-        focusPending();
+        documentStore.pendingFocusAction = { kind: "caret", blockId: newId, offset: 0 };
     }
 
     function onPasteLines(id: string, lines: string[]): void {
@@ -757,8 +725,7 @@
         for (const line of lines)
             prevId = documentStore.insertBlockAfter(prevId, line);
         const lastLine = lines[lines.length - 1] ?? "";
-        pendingCaret = { id: prevId, offset: lastLine.length };
-        focusPending();
+        documentStore.pendingFocusAction = { kind: "caret", blockId: prevId, offset: lastLine.length };
     }
 
     function syncBlockDom(el: HTMLElement, text: string): void {
@@ -788,8 +755,7 @@
             block.placeholder = undefined;
             const el = blockEls.get(id);
             if (el) syncBlockDom(el, "");
-            pendingCaret = { id, offset: 0 };
-            focusPending();
+            documentStore.pendingFocusAction = { kind: "caret", blockId: id, offset: 0 };
             return;
         }
 
@@ -809,8 +775,7 @@
             ) {
                 const result = documentStore.deleteEmbed(prev.id);
                 if (result) {
-                    pendingCaret = result;
-                    focusPending();
+                    documentStore.pendingFocusAction = { kind: "caret", blockId: result.id, offset: result.offset };
                 }
                 return;
             }
@@ -827,8 +792,7 @@
             if (bodyBlock) {
                 const result = documentStore.deleteEmbed(bodyBlock.id);
                 if (result) {
-                    pendingCaret = result;
-                    focusPending();
+                    documentStore.pendingFocusAction = { kind: "caret", blockId: result.id, offset: result.offset };
                 }
             }
             return;
@@ -836,11 +800,9 @@
 
         const result = documentStore.mergeWithPrevious(id);
         if (!result) return;
-        // Update active block right away so the toolbar reflects the new target,
-        // even when the focus target is an embed with no editable element.
+        // Update active block right away so the toolbar reflects the new target.
         documentStore.activeBlockId = result.id;
-        pendingCaret = result;
-        focusPending();
+        documentStore.pendingFocusAction = { kind: "caret", blockId: result.id, offset: result.offset };
     }
 
     /** Offset after crossing into a sibling inline segment (skips a dead keypress at 0 / length). */
@@ -932,8 +894,7 @@
                     event.stopPropagation();
                     const result = documentStore.deleteEmbed(awaiting);
                     if (result) {
-                        pendingCaret = result;
-                        focusPending();
+                        documentStore.pendingFocusAction = { kind: "caret", blockId: result.id, offset: result.offset };
                     }
                     return;
                 }
@@ -984,10 +945,8 @@
                     if (newText === "") {
                         if (idx === 0 && blocks.length === 1) {
                             // First and only block — nothing to merge into.
-                            // Refocus via the pending-caret cycle so the DOM
-                            // settles cleanly and the placeholder shows.
-                            pendingCaret = { id, offset: 0 };
-                            focusPending();
+                            // Refocus so the DOM settles and the placeholder shows.
+                            documentStore.pendingFocusAction = { kind: "caret", blockId: id, offset: 0 };
                         } else {
                             onMergePrev(id);
                         }
@@ -1007,9 +966,8 @@
                     syncBlockDom(active, newText);
                     if (newText === "") {
                         // setBlockText("") may strip heading/list metadata causing a remount;
-                        // pendingCaret handles focus on the new element after Svelte's update.
-                        pendingCaret = { id, offset: 0 };
-                        focusPending();
+                        // pending focus handles focus on the new element after Svelte's update.
+                        documentStore.pendingFocusAction = { kind: "caret", blockId: id, offset: 0 };
                     } else {
                         setCaretOffset(active, 0);
                     }
@@ -1093,31 +1051,24 @@
             window.removeEventListener("keydown", onKeydownCapture, true);
     });
 
-    // Focus at end of block after insert (outline title, etc.). Footnotes set
-    // `documentStore.pendingCaret` in Block.svelte for the footnote body.
+    // Single unified focus-after-mutation handler. All store operations that
+    // need to move focus set pendingFocusAction; this effect applies it after
+    // Svelte has committed the resulting DOM changes.
     $effect(() => {
-        const id = documentStore.pendingFocus;
-        if (!id) return;
-        documentStore.pendingFocus = null;
+        const action = documentStore.pendingFocusAction;
+        if (!action) return;
+        documentStore.pendingFocusAction = null;
         tick().then(() => {
-            const el = blockEls.get(id);
+            const el = blockEls.get(action.blockId);
             if (!el) return;
             el.focus();
-            setCaretOffset(el, el.textContent?.length ?? 0);
-        });
-    });
-
-    // Restore selection after a block split (e.g. inline unlink).
-    $effect(() => {
-        const ps = documentStore.pendingSelection;
-        if (!ps) return;
-        documentStore.pendingSelection = null;
-        const { blockId, start, end } = ps;
-        tick().then(() => {
-            const el = blockEls.get(blockId);
-            if (!el) return;
-            el.focus();
-            setCaretRange(el, start, end);
+            if (action.kind === "caret") {
+                setCaretOffset(el, action.offset);
+            } else if (action.kind === "selection") {
+                setCaretRange(el, action.start, action.end);
+            } else {
+                setCaretOffset(el, el.textContent?.length ?? 0);
+            }
         });
     });
 

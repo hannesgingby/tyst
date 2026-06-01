@@ -39,6 +39,23 @@ function newId(): string {
 	return crypto.randomUUID();
 }
 
+/**
+ * Where to move focus after a store mutation that creates or modifies blocks.
+ * Document.svelte watches this and applies it after the next DOM commit.
+ */
+export type FocusAction =
+	| { kind: "caret"; blockId: string; offset: number }
+	| { kind: "focus"; blockId: string }
+	| { kind: "selection"; blockId: string; start: number; end: number };
+
+/**
+ * The editor's current text selection, discriminated by scope.
+ * Exactly one of these can be active at a time; null means no selection.
+ */
+export type EditorSelection =
+	| { kind: "intraBlock"; blockId: string; start: number; end: number }
+	| { kind: "multiBlock"; blockIds: string[] };
+
 export function defaultFootnotePageSettings(): FootnotePageSettings {
 	return { numbering: "1", clearance: 1, gap: 0.5, indent: 1 };
 }
@@ -120,31 +137,20 @@ class DocumentStore {
 	activeBlockId = $state<string | null>(null);
 
 	/**
-	 * Block IDs currently covered by the user's text selection (may span
-	 * multiple blocks). Empty means only the active block is the target.
+	 * The editor's current text selection. Null means no selection (or only a
+	 * collapsed caret, which is not tracked here).
 	 */
-	selectionBlockIds = $state<string[]>([]);
-
-	/**
-	 * A partial (intra-block) text selection: start and end character offsets
-	 * within a single block. Used for inline-range formatting (splitting a
-	 * block at the selection boundary to apply overrides to just that range).
-	 * Null when there is no partial selection, or the selection spans multiple
-	 * blocks (which is handled via selectionBlockIds instead).
-	 */
-	intraBlockSelection = $state<{ blockId: string; start: number; end: number } | null>(null);
+	selection = $state<EditorSelection | null>(null);
 
 	/** Block IDs that start a new page (derived from layout, set by Document). */
 	pageBreakBlockIds = $state<string[]>([]);
 
-	/** Pending text-range selection to restore after a DOM update (e.g. after split). */
-	pendingSelection = $state<{ blockId: string; start: number; end: number } | null>(null);
-
-	/** Block to focus after a DOM update (e.g. after inserting from a toolbar popup). */
-	pendingFocus = $state<string | null>(null);
-
-	/** Caret position to restore after the target block's contenteditable mounts. */
-	pendingCaret = $state<{ blockId: string; offset: number } | null>(null);
+	/**
+	 * Where to move focus after a store mutation. Document.svelte applies this
+	 * in a single unified effect after the next DOM commit. Only the latest
+	 * action wins if multiple mutations fire before the effect runs.
+	 */
+	pendingFocusAction = $state<FocusAction | null>(null);
 
 	/** Heading level currently shown in the headings popup (1–4). */
 	headingMenuLevel = $state<HeadingLevel>(1);
@@ -397,9 +403,9 @@ class DocumentStore {
 
 	/** IDs of the blocks to consider when reading/writing linked state. */
 	private get targetBlockIds(): string[] {
-		return this.selectionBlockIds.length > 0
-			? this.selectionBlockIds
-			: [this.activeBlock.id];
+		const sel = this.selection;
+		if (sel?.kind === "multiBlock") return sel.blockIds;
+		return [this.activeBlock.id];
 	}
 
 	findBlock(id: string): Block | undefined {
@@ -418,14 +424,15 @@ class DocumentStore {
 	set typographyLinked(value: boolean) {
 		// Unlinking a partial selection splits the block first so only the
 		// selected range gets the override.
-		if (!value && this.intraBlockSelection) {
-			const { blockId, start, end } = this.intraBlockSelection;
+		const sel = this.selection;
+		if (!value && sel?.kind === "intraBlock") {
+			const { blockId, start, end } = sel;
 			const midId = this.splitBlockAtSelection(blockId, start, end);
 			if (midId) {
 				const mid = this.findBlock(midId);
 				if (mid) {
 					mid.typography = { ...this.resolveTypography(mid) };
-					this.pendingSelection = { blockId: midId, start: 0, end: mid.text.length };
+					this.pendingFocusAction = { kind: "selection", blockId: midId, start: 0, end: mid.text.length };
 				}
 				return;
 			}
@@ -1001,9 +1008,9 @@ class DocumentStore {
 		};
 
 		if (canMark) {
-			const sel = this.intraBlockSelection;
-			const caret =
-				sel && sel.blockId === active.id ? sel.end : active.text.length;
+			const intra = this.selection?.kind === "intraBlock" && this.selection.blockId === active.id
+				? this.selection : null;
+			const caret = intra ? intra.end : active.text.length;
 			const text = active.text;
 			if (caret > 0 && caret < text.length) {
 				const before = text.slice(0, caret);
@@ -1046,7 +1053,7 @@ class DocumentStore {
 
 		this.popupDismissed = null;
 		this.activeBlockId = bodyId;
-		this.pendingCaret = { blockId: bodyId, offset: 0 };
+		this.pendingFocusAction = { kind: "caret", blockId: bodyId, offset: 0 };
 		return bodyId;
 	}
 
@@ -1185,7 +1192,7 @@ class DocumentStore {
 			id = this.insertBlockObjectAfter(active.id, block);
 		}
 		this.activeBlockId = id;
-		this.pendingFocus = id;
+		this.pendingFocusAction = { kind: "focus", blockId: id };
 		return id;
 	}
 
@@ -1399,15 +1406,16 @@ class DocumentStore {
 		const currentOn = getter(this.resolveTypography(block));
 		const newValue = !currentOn;
 
-		if (this.intraBlockSelection) {
-			const { blockId, start, end } = this.intraBlockSelection;
-			this.intraBlockSelection = null; // consume immediately to prevent stale reuse
+		const sel = this.selection;
+		if (sel?.kind === "intraBlock") {
+			const { blockId, start, end } = sel;
+			this.selection = null; // consume immediately — prevents stale reuse on rapid toggles
 			const selBlock = this.findBlock(blockId);
 			if (selBlock && start === 0 && end === selBlock.text.length) {
 				// Entire block selected — apply directly, no split needed
 				selBlock.typography = { ...this.resolveTypography(selBlock) };
 				setter(selBlock.typography, newValue);
-				this.pendingSelection = { blockId: selBlock.id, start: 0, end: selBlock.text.length };
+				this.pendingFocusAction = { kind: "selection", blockId: selBlock.id, start: 0, end: selBlock.text.length };
 				return;
 			}
 			const midId = this.splitBlockAtSelection(blockId, start, end);
@@ -1415,13 +1423,13 @@ class DocumentStore {
 				const mid = this.findBlock(midId)!;
 				mid.typography = { ...this.resolveTypography(mid) };
 				setter(mid.typography, newValue);
-				this.pendingSelection = { blockId: midId, start: 0, end: mid.text.length };
+				this.pendingFocusAction = { kind: "selection", blockId: midId, start: 0, end: mid.text.length };
 				return;
 			}
 		}
 
-		// When the block already has text, don't change existing text's format.
-		// Split at the caret so only future typing gets the new format.
+		// When the block already has text, preserve existing formatting by splitting
+		// at the caret — only future-typed text gets the new format.
 		if (
 			block.text !== "" &&
 			caretOffset > 0 &&
@@ -1432,26 +1440,27 @@ class DocumentStore {
 				? { ...block.typography }
 				: {};
 			setter(newTypo, newValue);
+			const typoOrUndef = Object.keys(newTypo).length > 0 ? newTypo : undefined;
 
 			if (caretOffset >= block.text.length) {
 				// Caret at end: append new empty continuation — no text change needed
 				const newId = this.insertBlockObjectAfter(block.id, {
 					text: "",
 					continuation: true,
-					typography: Object.keys(newTypo).length > 0 ? newTypo : undefined,
+					typography: typoOrUndef,
 				});
 				this.activeBlockId = newId;
-				this.pendingCaret = { blockId: newId, offset: 0 };
+				this.pendingFocusAction = { kind: "caret", blockId: newId, offset: 0 };
 			} else {
-				// Caret in middle: split text, remaining text moves to new continuation
+				// Caret in middle: truncate current block, carry remainder into new continuation
 				const newId = this.insertBlockObjectAfter(block.id, {
 					text: block.text.slice(caretOffset),
 					continuation: true,
-					typography: Object.keys(newTypo).length > 0 ? newTypo : undefined,
+					typography: typoOrUndef,
 				});
 				block.text = block.text.slice(0, caretOffset);
 				this.activeBlockId = newId;
-				this.pendingCaret = { blockId: newId, offset: 0 };
+				this.pendingFocusAction = { kind: "caret", blockId: newId, offset: 0 };
 			}
 			return;
 		}
