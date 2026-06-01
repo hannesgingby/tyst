@@ -66,9 +66,23 @@
             }
         }
 
-        window.addEventListener("keydown", onKeydown);
+        function onWheel(e: WheelEvent) {
+            const mod = e.ctrlKey || e.metaKey;
+            if (!mod) return;
+            e.preventDefault();
+            // deltaMode 0 = pixels (trackpad pinch), 1 = lines (mouse scroll)
+            const sensitivity = e.deltaMode === 0 ? 0.002 : 0.05;
+            zoomStore.set(zoomStore.value - e.deltaY * sensitivity);
+            showBadge();
+        }
 
-        if (!isTauri()) return () => window.removeEventListener("keydown", onKeydown);
+        window.addEventListener("keydown", onKeydown);
+        window.addEventListener("wheel", onWheel, { passive: false });
+
+        if (!isTauri()) return () => {
+            window.removeEventListener("keydown", onKeydown);
+            window.removeEventListener("wheel", onWheel);
+        };
 
         // Bridge native File-menu actions (emitted from Rust) to the frontend.
         const unlisteners: Array<() => void> = [];
@@ -80,6 +94,7 @@
 
         return () => {
             window.removeEventListener("keydown", onKeydown);
+            window.removeEventListener("wheel", onWheel);
             unlisteners.forEach((off) => off());
         };
     });
@@ -123,7 +138,7 @@
         position: fixed;
         top: 24px;
         right: 32px;
-        padding: 3px 12px;
+        padding: 3px 10px;
         font-size: 14px;
         letter-spacing: -0.005em;
         border-radius: 6px;

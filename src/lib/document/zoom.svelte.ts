@@ -17,6 +17,9 @@ export const zoomStore = {
     stepDown() {
         zoom = Math.max(MIN, Math.round((zoom - STEP) * 10) / 10);
     },
+    set(value: number) {
+        zoom = Math.min(MAX, Math.max(MIN, value));
+    },
     reset() {
         zoom = 1;
     },
