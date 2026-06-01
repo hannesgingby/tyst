@@ -679,7 +679,7 @@ export function serializeDocument(
 			parts.push(`#v(${args.join(", ")})`);
 			hasContent = true;
 			afterList = false;
-			afterHeading = false;
+			afterHeading = true;
 			pendingBlanks = 0;
 			i++;
 			continue;
