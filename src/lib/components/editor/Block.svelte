@@ -14,6 +14,7 @@
     import { ptToPx } from "$lib/document/units";
     import type { Block, StrokeDash } from "$lib/document/types";
     import { imageCache } from "$lib/system/imageCache.svelte";
+    import { isUrl, normalizeUrl } from "$lib/document/url";
     import { getCaretOffset, setCaretOffset } from "./caret";
 
     const WEIGHT_CSS: Record<string, number> = {
@@ -168,10 +169,11 @@
 
     const isReference = $derived(!!block.reference);
     const isCitation = $derived(!!block.citation);
+    const isLink = $derived(!!block.link);
     const isBibliography = $derived(!!block.bibliography);
     const isPageCounter = $derived(!!block.pageCounter);
     const isInline = $derived(
-        block.continuation || renderInline || !!block.footnoteMarker || isReference || isCitation || isPageCounter,
+        block.continuation || renderInline || !!block.footnoteMarker || isReference || isCitation || isLink || isPageCounter,
     );
     const isList = $derived(!!block.list);
     const isEmbed = $derived(!!(block.image || block.line || block.rect));
@@ -246,6 +248,14 @@
         }
         return "Reference";
     });
+
+    /** Inline label for a link chip — custom text or the URL. */
+    const linkInlineLabel = $derived.by(() => {
+        if (!block.link) return "";
+        if (block.link.displayText?.trim()) return block.link.displayText.trim();
+        return block.link.url;
+    });
+
     const footnoteMarkerNumber = $derived(
         isFootnoteMarker ? documentStore.footnoteNumber(block.id) : 0,
     );
@@ -265,12 +275,12 @@
 
     /** Empty tail segment after an inline embed — needs a hit target and caret. */
     const trailAfterInlineEmbed = $derived.by(() => {
-        if (!isInline || block.footnoteMarker || block.reference || block.citation || block.pageCounter || block.text !== "")
+        if (!isInline || block.footnoteMarker || block.reference || block.citation || block.link || block.pageCounter || block.text !== "")
             return false;
         const i = documentStore.blockIndex(block.id);
         if (i <= 0) return false;
         const prev = documentStore.model.blocks[i - 1];
-        return !!(prev?.footnoteMarker || prev?.hSpacing || prev?.reference || prev?.citation || prev?.pageCounter);
+        return !!(prev?.footnoteMarker || prev?.hSpacing || prev?.reference || prev?.citation || prev?.link || prev?.pageCounter);
     });
 
     // Outline body entries: walk all blocks, count outlined headings, and pick
@@ -482,10 +492,46 @@
         }
     }
 
+    function canAutoLinkPaste(): boolean {
+        return (
+            !block.zoneKind &&
+            !block.heading &&
+            !block.list &&
+            !block.image &&
+            !block.line &&
+            !block.rect &&
+            !block.outline &&
+            !block.reference &&
+            !block.citation &&
+            !block.link &&
+            !block.footnoteMarker &&
+            !!el
+        );
+    }
+
     function onPaste(event: ClipboardEvent): void {
-        event.preventDefault();
         const raw = event.clipboardData?.getData("text/plain") ?? "";
         const lines = raw.replace(/\r\n/g, "\n").split("\n");
+        if (lines.length <= 1 && canAutoLinkPaste()) {
+            const trimmed = (lines[0] ?? "").trim();
+            if (isUrl(trimmed)) {
+                event.preventDefault();
+                const sel = window.getSelection();
+                if (sel && sel.rangeCount > 0) {
+                    sel.getRangeAt(0).deleteContents();
+                }
+                onInput();
+                const offset = getCaretOffset(el!);
+                documentStore.insertLinkAtPosition(
+                    block.id,
+                    offset,
+                    normalizeUrl(trimmed),
+                );
+                return;
+            }
+        }
+
+        event.preventDefault();
         const sel = window.getSelection();
         if (!sel || sel.rangeCount === 0) return;
         const range = sel.getRangeAt(0);
@@ -1006,17 +1052,21 @@
         style:vertical-align="baseline"
         aria-label="Page number"
     >{pageCounterPreviewText}</span>
-{:else if isReference || isCitation}
+{:else if isReference || isCitation || isLink}
     <!-- svelte-ignore a11y_no_static_element_interactions -->
     <span
         bind:this={outerEl}
         data-block-id={block.id}
-        class="doc-block-reference relative inline cursor-pointer select-none"
+        class={[
+            "doc-block-reference relative inline cursor-pointer select-none",
+            isLink && "underline",
+        ]}
         style:font-family={`"${typography.fontFamily}", serif`}
         style:font-size="{fontSizePx}px"
         style:font-weight={fontWeight}
         style:line-height={lineHeight}
         style:color={typography.color}
+        style:text-decoration-thickness="from-font"
         role="button"
         tabindex="0"
         onclick={(e) => {
@@ -1031,7 +1081,7 @@
             documentStore.activateReference(block.id);
             onfocusblock(block.id);
         }}
-    >{isReference ? referenceInlineLabel : citationInlineLabel}</span
+    >{isLink ? linkInlineLabel : isReference ? referenceInlineLabel : citationInlineLabel}</span
     >
 {:else if isBibliography}
     {@const awaitingDelete = documentStore.embedAwaitingDelete === block.id}

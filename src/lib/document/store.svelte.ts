@@ -12,6 +12,7 @@ import type {
 	HorizontalAlignment,
 	ImageSettings,
 	LineSettings,
+	LinkSettings,
 	ListKind,
 	ListSettings,
 	FootnotePageSettings,
@@ -43,6 +44,7 @@ import { listGroupBlockIds, listGroupFirstBlock } from "./listGroup";
 import { isHeadingLevelLinked, resolveHeadingLevelStyle } from "./headingStyle";
 import { PAPER_SIZES, matchPreset } from "./paperSizes";
 import { serializeDocument } from "./serialize";
+import { normalizeUrl } from "./url";
 
 function newId(): string {
 	return crypto.randomUUID();
@@ -195,7 +197,7 @@ class DocumentStore {
 		if (b.outline) return "outline";
 		if (b.footnote || b.footnoteMarker) return "footnote";
 		if (b.vSpacing || b.hSpacing) return "spacing";
-		if (b.reference || b.citation) return "reference";
+		if (b.reference || b.citation || b.link) return "reference";
 		return null;
 	});
 
@@ -329,7 +331,7 @@ class DocumentStore {
 		if (active.footnoteSeparator && active.line) return active.id;
 		if (active.outline && active.text === "") return active.id;
 		if (active.vSpacing || active.hSpacing || active.pageBreak) return active.id;
-		if (active.reference || active.citation) return active.id;
+		if (active.reference || active.citation || active.link) return active.id;
 		if (active.bibliography && active.text === "") return active.id;
 
 		if (active.text !== "" || active.heading || active.list) return null;
@@ -349,7 +351,8 @@ class DocumentStore {
 			prev.pageBreak ||
 			prev.footnoteMarker ||
 			prev.reference ||
-			prev.citation
+			prev.citation ||
+			prev.link
 		)
 			return prev.id;
 
@@ -383,6 +386,7 @@ class DocumentStore {
 				b.pageBreak ||
 				b.reference ||
 				b.citation ||
+				b.link ||
 				b.bibliography
 			)
 		)
@@ -450,7 +454,7 @@ class DocumentStore {
 			if (next && this.isEffectivelyEmptyBlock(next) && !next.continuation) {
 				this.model.blocks.splice(idx, 1);
 			}
-		} else if (b.reference || b.citation) {
+		} else if (b.reference || b.citation || b.link) {
 			this.model.blocks.splice(idx, 1);
 			// Clean up the trailing empty continuation if it exists
 			const next = this.model.blocks[idx];
@@ -459,6 +463,7 @@ class DocumentStore {
 				next.text === "" &&
 				!next.reference &&
 				!next.citation &&
+				!next.link &&
 				!next.hSpacing &&
 				!next.footnoteMarker
 			) {
@@ -1270,6 +1275,7 @@ class DocumentStore {
 			active.text === "" &&
 			!active.reference &&
 			!active.citation &&
+			!active.link &&
 			idx > 0;
 		const insertAfterId = emptyTail ? this.model.blocks[idx - 1].id : active.id;
 		const id = this.insertBlockObjectAfter(insertAfterId, {
@@ -1282,7 +1288,7 @@ class DocumentStore {
 			const next = this.model.blocks[nextIndex];
 			// Need a text tail if: nothing follows, or the next block is another chip,
 			// or the next block is not a continuation (e.g. a heading or image).
-			if (!next || next.reference || next.citation || !next.continuation) {
+			if (!next || next.reference || next.citation || next.link || !next.continuation) {
 				this.insertBlockObjectAfter(id, { text: "", continuation: true });
 			}
 		}
@@ -1306,6 +1312,7 @@ class DocumentStore {
 			active.text === "" &&
 			!active.reference &&
 			!active.citation &&
+			!active.link &&
 			idx > 0;
 		const insertAfterId = emptyTail ? this.model.blocks[idx - 1].id : active.id;
 		const id = this.insertBlockObjectAfter(insertAfterId, {
@@ -1316,7 +1323,7 @@ class DocumentStore {
 		if (!emptyTail) {
 			const nextIndex = this.blockIndex(id) + 1;
 			const next = this.model.blocks[nextIndex];
-			if (!next || next.reference || next.citation || !next.continuation) {
+			if (!next || next.reference || next.citation || next.link || !next.continuation) {
 				this.insertBlockObjectAfter(id, { text: "", continuation: true });
 			}
 		}
@@ -1346,6 +1353,100 @@ class DocumentStore {
 	activateReference(blockId: string): void {
 		this.popupDismissed = null;
 		this.activeBlockId = blockId;
+	}
+
+	/** Insert an inline link chip after the active block (or at a text offset). */
+	insertLink(url: string, displayText?: string, options?: { focusTail?: boolean }): void {
+		const normalized = normalizeUrl(url);
+		if (!normalized) return;
+		this.normalizeInlineStructure();
+		const active = this.activeBlock;
+		const idx = this.blockIndex(active.id);
+		const emptyTail =
+			active.continuation &&
+			active.text === "" &&
+			!active.reference &&
+			!active.citation &&
+			!active.link &&
+			idx > 0;
+		const insertAfterId = emptyTail ? this.model.blocks[idx - 1].id : active.id;
+		const id = this.insertBlockObjectAfter(insertAfterId, {
+			text: "",
+			continuation: true,
+			link: { url: normalized, displayText },
+		});
+		if (!emptyTail) {
+			const nextIndex = this.blockIndex(id) + 1;
+			const next = this.model.blocks[nextIndex];
+			if (!next || next.reference || next.citation || next.link || !next.continuation) {
+				this.insertBlockObjectAfter(id, { text: "", continuation: true });
+			}
+		}
+		const tail = this.model.blocks[this.blockIndex(id) + 1];
+		const focusTail = options?.focusTail !== false;
+		if (focusTail && tail) {
+			this.activeBlockId = tail.id;
+			this.pendingFocusAction = { kind: "caret", blockId: tail.id, offset: 0 };
+		} else {
+			this.activeBlockId = id;
+		}
+		this.popupDismissed = null;
+	}
+
+	/** Insert a link at a caret offset inside a text block (e.g. paste). */
+	insertLinkAtPosition(blockId: string, offset: number, url: string): void {
+		const normalized = normalizeUrl(url);
+		if (!normalized) return;
+		this.normalizeInlineStructure();
+		const index = this.blockIndex(blockId);
+		if (index < 0) return;
+		const block = this.model.blocks[index];
+		if (
+			block.zoneKind ||
+			block.heading ||
+			block.list ||
+			block.image ||
+			block.line ||
+			block.rect ||
+			block.outline ||
+			block.reference ||
+			block.citation ||
+			block.link ||
+			block.footnoteMarker
+		) {
+			return;
+		}
+
+		const text = block.text;
+		const safeOffset = Math.max(0, Math.min(offset, text.length));
+		const before = text.slice(0, safeOffset);
+		const after = text.slice(safeOffset);
+		block.text = before;
+
+		const linkId = newId();
+		const linkBlock: Block = {
+			id: linkId,
+			text: "",
+			continuation: true,
+			link: { url: normalized },
+		};
+		const afterId = newId();
+		const afterBlock: Block = { id: afterId, text: after, continuation: true };
+		this.model.blocks.splice(index + 1, 0, linkBlock, afterBlock);
+
+		this.activeBlockId = afterId;
+		this.pendingFocusAction = { kind: "caret", blockId: afterId, offset: 0 };
+		this.popupDismissed = null;
+	}
+
+	updateLink(blockId: string, patch: Partial<LinkSettings>): void {
+		const b = this.findBlock(blockId);
+		if (!b?.link) return;
+		b.link = {
+			...b.link,
+			...patch,
+			...(patch.url !== undefined ? { url: normalizeUrl(patch.url) } : {}),
+		};
 	}
 
 	/** Ensure a bibliography block exists at the end of the document. */

@@ -16,7 +16,11 @@
 	function handleSelect(kind: "reference" | "citation", id: string): void {
 		// If there's already an active reference/citation block, update it in place.
 		if (activeBlock.reference && kind === "reference") {
-			documentStore.updateReference(activeBlock.id, { targetBlockId: id, displayText: undefined, pageForm: undefined });
+			documentStore.updateReference(activeBlock.id, {
+				targetBlockId: id,
+				displayText: undefined,
+				pageForm: undefined,
+			});
 		} else if (activeBlock.citation && kind === "citation") {
 			documentStore.updateCitation(activeBlock.id, { sourceId: id });
 		} else if (kind === "reference") {
@@ -33,6 +37,22 @@
 			pageForm: pf || undefined,
 		});
 	}
+
+	function handleLinkChange(url: string, displayText: string): void {
+		if (!url.trim()) return;
+		const dt = displayText.trim() || undefined;
+		if (activeBlock.link) {
+			documentStore.updateLink(activeBlock.id, { url, displayText: dt });
+		} else {
+			documentStore.insertLink(url, dt, { focusTail: false });
+		}
+	}
 </script>
 
-<ReferenceContextGroup {activeTargetId} {isCitationActive} onselect={handleSelect} onmenuchange={handleMenuChange} />
+<ReferenceContextGroup
+	{activeTargetId}
+	{isCitationActive}
+	onselect={handleSelect}
+	onmenuchange={handleMenuChange}
+	onlinkchange={handleLinkChange}
+/>

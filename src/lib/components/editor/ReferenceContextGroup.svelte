@@ -7,6 +7,7 @@
 	} from "$lib/components/ui/hoverPopupContext";
 	import { documentStore } from "$lib/document/store.svelte";
 	import ContextGroup from "./ContextGroup.svelte";
+	import LinkDisplayTextMenu from "./LinkDisplayTextMenu.svelte";
 	import ReferenceDisplayTextMenu from "./ReferenceDisplayTextMenu.svelte";
 	import type { ReferenceItem, ReferenceSection } from "./referenceTypes";
 
@@ -21,6 +22,8 @@
 		isCitationActive?: boolean;
 		/** Called when display text or page form changes for the selected item. */
 		onmenuchange?: (displayText: string, pageForm: boolean) => void;
+		/** Called when the link URL or display text changes. */
+		onlinkchange?: (url: string, displayText: string) => void;
 	}
 
 	let {
@@ -29,6 +32,7 @@
 		activeTargetId = null,
 		isCitationActive = false,
 		onmenuchange,
+		onlinkchange,
 	}: Props = $props();
 
 	const LIST_WIDTH = 300;
@@ -44,6 +48,9 @@
 	let pageForm = $state(false);
 	let searchFocused = $state(false);
 	let popupHovered = $state(false);
+	let linkUrl = $state("");
+	let linkDisplayText = $state("");
+	let linkRowEl = $state<HTMLElement | null>(null);
 
 	const hoverPin = getContext<HoverPopupPin | undefined>(HOVER_POPUP_PIN_KEY);
 	const isSearching = $derived(searchQuery.trim() !== "");
@@ -126,9 +133,14 @@
 	const activeItem = $derived(
 		activeItemIndex >= 0 ? filteredItems[activeItemIndex] : null,
 	);
-	const activeRowEl = $derived(rowEls[activeItemIndex] ?? null);
-	// Only show display text menu for non-citation items
-	const showMenu = $derived(activeItemIndex >= 0 && activeItem?.sectionTitle !== "Citation");
+	const showLinkMenu = $derived(linkUrl.trim() !== "");
+	const showReferenceMenu = $derived(
+		activeItemIndex >= 0 && activeItem?.sectionTitle !== "Citation",
+	);
+	const showMenu = $derived(showLinkMenu || showReferenceMenu);
+	const activeRowEl = $derived(
+		showLinkMenu ? linkRowEl : (rowEls[activeItemIndex] ?? null),
+	);
 
 	// Initialize menu values when the selected item changes.
 	// If the active block already has a reference pointing to this item, restore its settings.
@@ -154,6 +166,31 @@
 			const item = filteredItems[activeItemIndex];
 			if (!item || item.sectionTitle === "Citation") return;
 			onmenuchange?.(dt, pf);
+		});
+	});
+
+	let linkSyncedBlockId = $state<string | null>(null);
+
+	// Restore link fields when the active link chip changes.
+	$effect(() => {
+		const block = documentStore.activeBlock;
+		if (!block.link) {
+			linkSyncedBlockId = null;
+			return;
+		}
+		if (linkSyncedBlockId === block.id) return;
+		linkSyncedBlockId = block.id;
+		linkUrl = block.link.url;
+		linkDisplayText = block.link.displayText ?? "";
+		activeItemIndex = -1;
+	});
+
+	$effect(() => {
+		const url = linkUrl;
+		const dt = linkDisplayText;
+		untrack(() => {
+			if (!url.trim()) return;
+			onlinkchange?.(url, dt);
 		});
 	});
 
@@ -377,6 +414,30 @@
 							</div>
 						{/each}
 					{/if}
+
+					{#if hasElements}
+						<div
+							class="my-3 h-px w-full shrink-0 bg-bg-600"
+							aria-hidden="true"
+						></div>
+						<div>
+							<p class="pb-2 text-body-14 text-text-250">Link</p>
+							<div
+								bind:this={linkRowEl}
+								class="field-shell flex h-9 w-full items-center bg-bg-950 pl-4 pr-4"
+							>
+								<input
+									type="url"
+									class="h-full w-full border-none bg-transparent text-body-14-tight text-text-100 outline-none placeholder:text-text-250"
+									placeholder="https://example.com"
+									bind:value={linkUrl}
+									onfocus={() => (activeItemIndex = -1)}
+									spellcheck="false"
+									autocomplete="off"
+								/>
+							</div>
+						</div>
+					{/if}
 				</div>
 			</div>
 			{#if showScrollFade}
@@ -389,7 +450,11 @@
 	{/snippet}
 	{#snippet menu()}
 		<div bind:this={menuEl} class="w-full">
-			<ReferenceDisplayTextMenu bind:value={displayText} bind:pageForm />
+			{#if showLinkMenu}
+				<LinkDisplayTextMenu bind:value={linkDisplayText} />
+			{:else}
+				<ReferenceDisplayTextMenu bind:value={displayText} bind:pageForm />
+			{/if}
 		</div>
 	{/snippet}
 </ContextGroup>

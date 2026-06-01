@@ -327,6 +327,8 @@ export interface Block {
 	reference?: ReferenceSettings;
 	/** Inline citation chip (continuation). Points to a BibliographySource. */
 	citation?: CitationSettings;
+	/** Inline link chip (continuation). Serializes as `#link(url)[body]`. */
+	link?: LinkSettings;
 	/** Bibliography block (like outline). `text` holds the editable title. */
 	bibliography?: true;
 	/**
@@ -369,6 +371,13 @@ export interface ReferenceSettings {
 	displayText?: string;
 	/** When true, renders `#ref(<label>, form: "page")`. */
 	pageForm?: boolean;
+}
+
+/** Inline link chip — external URL with optional custom label. */
+export interface LinkSettings {
+	url: string;
+	/** Custom link text; empty means Typst shows the URL. */
+	displayText?: string;
 }
 
 /** Inline citation chip — points to a BibliographySource. */

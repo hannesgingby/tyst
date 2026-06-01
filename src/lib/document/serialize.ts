@@ -17,6 +17,7 @@ import type {
 	PageSettings,
 	ParagraphSettings,
 	RectSettings,
+	LinkSettings,
 	ReferenceSettings,
 	StrokeSettings,
 	TypographySettings,
@@ -28,6 +29,7 @@ import {
 } from "./blockLevelStyle";
 import { isHeadingLevelLinked, resolveHeadingLevelStyle } from "./headingStyle";
 import { TYPST_PAPER_NAME } from "./paperSizes";
+import { normalizeUrl } from "./url";
 import { typstNumber } from "./units";
 
 const WEIGHT_KEYWORD: Record<FontWeightName, string> = {
@@ -238,6 +240,7 @@ function serializePreamble(doc: DocumentModel, hasPageFormRef = false): string {
 		parRule,
 	];
 	if (headingRule) parts.push(headingRule);
+	parts.push("#show link: underline");
 	parts.push(...serializeFootnotePageRules(doc, 0, blockIndexById, []));
 
 	// Per-level heading typography: #show heading.where(level: N): set text(…)
@@ -372,6 +375,15 @@ function serializeReference(ref: ReferenceSettings): string {
 	}
 	if (ref.displayText) return `@${label}[${escapeText(ref.displayText)}]`;
 	return `@${label}`;
+}
+
+/** Serialize a link chip block to Typst markup. */
+function serializeLink(link: LinkSettings): string {
+	const url = escapeStringLiteral(normalizeUrl(link.url));
+	if (link.displayText?.trim()) {
+		return `#link("${url}")[${escapeText(link.displayText.trim())}]`;
+	}
+	return `#link("${url}")`;
 }
 
 /** Serialize a citation chip block to Typst markup. */
@@ -837,6 +849,21 @@ export function serializeDocument(
 		// ── Inline reference chip ───────────────────────────────────────────────
 		if (block.reference) {
 			const serialized = serializeReference(block.reference);
+			if (hasContent && block.continuation) {
+				parts[parts.length - 1] += serialized;
+			} else {
+				if (hasContent) parts.push("");
+				parts.push(serialized);
+				hasContent = true;
+			}
+			pendingBlanks = 0;
+			i++;
+			continue;
+		}
+
+		// ── Inline link chip ────────────────────────────────────────────────────
+		if (block.link) {
+			const serialized = serializeLink(block.link);
 			if (hasContent && block.continuation) {
 				parts[parts.length - 1] += serialized;
 			} else {
