@@ -311,7 +311,7 @@ class DocumentStore {
 		if (active.outline && active.text === "") return active.id;
 		if (active.vSpacing || active.hSpacing || active.pageBreak) return active.id;
 		if (active.reference || active.citation) return active.id;
-		if (active.bibliography) return active.id;
+		if (active.bibliography && active.text === "") return active.id;
 
 		if (active.text !== "" || active.heading || active.list) return null;
 
