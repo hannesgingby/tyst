@@ -315,7 +315,17 @@ class DocumentStore {
 		const idx = this.blockIndex(active.id);
 		if (idx <= 0) return null;
 		const prev = this.model.blocks[idx - 1];
-		if (prev.image || prev.line || prev.rect || prev.outline || prev.footnote)
+		if (
+			prev.image ||
+			prev.line ||
+			prev.rect ||
+			prev.outline ||
+			prev.footnote ||
+			prev.footnoteSeparator ||
+			prev.vSpacing ||
+			prev.hSpacing ||
+			prev.pageBreak
+		)
 			return prev.id;
 		return null;
 	});
@@ -998,7 +1008,12 @@ class DocumentStore {
 
 	/** Insert a page break block after the active block. */
 	insertPageBreak(): void {
-		this.insertEmbed({ text: "", pageBreak: true });
+		const id = this.insertEmbed({ text: "", pageBreak: true });
+		const next = this.model.blocks[this.blockIndex(id) + 1];
+		if (next) {
+			this.activeBlockId = next.id;
+			this.pendingFocusAction = { kind: "caret", blockId: next.id, offset: 0 };
+		}
 	}
 
 	/** Insert a vertical spacing block (`#v(…)`) after the active block. */

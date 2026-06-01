@@ -777,7 +777,10 @@
                     prev.rect ||
                     prev.outline ||
                     prev.footnote ||
-                    prev.footnoteSeparator)
+                    prev.footnoteSeparator ||
+                    prev.vSpacing ||
+                    prev.hSpacing ||
+                    prev.pageBreak)
             ) {
                 const result = documentStore.deleteEmbed(prev.id);
                 if (result) {

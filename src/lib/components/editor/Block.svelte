@@ -716,7 +716,7 @@
     >
         {#if awaitingDelete}
             <span
-                class="text-text-150 pointer-events-none absolute right-0 bottom-full select-none"
+                class="font-sans text-text-150 pointer-events-none absolute right-0 bottom-full select-none"
                 style:font-size="{10 * scale}px"
                 style:line-height="1"
                 style:padding-bottom="{8 * scale}px"
@@ -729,8 +729,7 @@
             style:border-color={typography.color}
         ></div>
         <span
-            class="shrink-0 select-none tabular-nums opacity-40"
-            style:font-family={`"${typography.fontFamily}", serif`}
+            class="font-sans shrink-0 select-none tabular-nums opacity-40"
             style:font-size="{10 * scale}px"
             style:color={typography.color}
             >{vsp.amount.value}{vsp.amount.unit}{vsp.weak ? " weak" : ""}</span
@@ -788,7 +787,7 @@
     <!-- svelte-ignore a11y_click_events_have_key_events -->
     <!-- svelte-ignore a11y_no_static_element_interactions -->
     <div
-        bind:this={outerEl}
+        bind:this={embedEl}
         class="doc-embed relative flex w-full cursor-pointer items-center gap-2 py-1"
         data-block-id={block.id}
         tabindex="-1"
@@ -796,12 +795,12 @@
             e.preventDefault();
             documentStore.activateEmbed(block.id);
             onfocusblock(block.id);
-            outerEl?.focus({ preventScroll: true });
+            embedEl?.focus({ preventScroll: true });
         }}
     >
         {#if awaitingDelete}
             <span
-                class="text-text-150 pointer-events-none absolute right-0 bottom-full select-none"
+                class="font-sans text-text-150 pointer-events-none absolute right-0 bottom-full select-none"
                 style:font-size="{10 * scale}px"
                 style:line-height="1"
                 style:padding-bottom="{8 * scale}px"
@@ -811,11 +810,8 @@
         {/if}
         <div class="h-px flex-1 border-t border-dashed opacity-25" style:border-color={typography.color}></div>
         <span
-            class="shrink-0 select-none opacity-30"
-            style:font-family={`"${typography.fontFamily}", serif`}
+            class="font-sans shrink-0 select-none opacity-30"
             style:font-size="{9 * scale}px"
-            style:letter-spacing="0.08em"
-            style:text-transform="uppercase"
             style:color={typography.color}
         >Page break</span>
         <div class="h-px flex-1 border-t border-dashed opacity-25" style:border-color={typography.color}></div>
