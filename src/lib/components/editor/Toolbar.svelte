@@ -111,7 +111,11 @@
             }
         }
         if (spacingTied && !documentStore.popupDismissed) {
+            const inZoneSettingsPopup =
+                target instanceof Element &&
+                target.closest("[data-zone-settings-popup]") != null;
             const inPopup =
+                inZoneSettingsPopup ||
                 (hSpacingWrapEl != null &&
                     target instanceof Node &&
                     hSpacingWrapEl.contains(target)) ||

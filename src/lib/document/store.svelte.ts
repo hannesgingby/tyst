@@ -205,6 +205,13 @@ class DocumentStore {
 	 * matching embed (which calls `activateEmbed` to clear this).
 	 */
 	popupDismissed = $state<EmbedKind | null>(null);
+
+	/**
+	 * Header/footer whose zone settings popup is open. Set when focus enters a
+	 * zone block; cleared on click outside the zone and popup (see Document.svelte).
+	 */
+	zoneSettingsKind = $state<"header" | "footer" | null>(null);
+
 	/** Set by openSettings(); Editor.svelte watches this to open the modal. */
 	settingsNav = $state<string | null>(null);
 
@@ -2261,6 +2268,7 @@ class DocumentStore {
 	removeZone(kind: "header" | "footer"): void {
 		this.model.blocks = this.model.blocks.filter((b) => b.zoneKind !== kind);
 		if (this.activeZone === kind) this.activeBlockId = null;
+		if (this.zoneSettingsKind === kind) this.zoneSettingsKind = null;
 	}
 
 	/** Add a page counter (and preceding #h(1fr)) to the zone. */
@@ -2300,13 +2308,13 @@ class DocumentStore {
 
 	/** Page counter pattern for the active header/footer zone (zone popup). */
 	get popupZoneNumbering(): string {
-		const kind = this.activeZone;
+		const kind = this.zoneSettingsKind ?? this.activeZone;
 		if (!kind) return "";
 		return this.zoneCounterPattern(kind) ?? "";
 	}
 
 	set popupZoneNumbering(value: string) {
-		const kind = this.activeZone;
+		const kind = this.zoneSettingsKind ?? this.activeZone;
 		if (!kind || this.zoneCounterPattern(kind) === null) return;
 		const trimmed = value.trim();
 		if (!trimmed) return;

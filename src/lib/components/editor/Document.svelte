@@ -62,6 +62,7 @@
     let viewportWidth = $state(0);
     let headerZoneAnchorEl = $state<HTMLElement | null>(null);
     let footerZoneAnchorEl = $state<HTMLElement | null>(null);
+    let zonePopupEl = $state<HTMLDivElement | null>(null);
     let zonePopupStyle = $state<{
         left: string;
         top: string;
@@ -111,7 +112,12 @@
     const scale = $derived(viewportWidth > 0 ? viewportWidth / pageWidthPx : 1);
 
     $effect(() => {
-        const kind = documentStore.activeZone;
+        const zone = documentStore.activeZone;
+        if (zone) documentStore.zoneSettingsKind = zone;
+    });
+
+    $effect(() => {
+        const kind = documentStore.zoneSettingsKind;
         model.headerAscent;
         model.footerDescent;
         scale;
@@ -125,10 +131,7 @@
 
         const update = (): void => {
             const el = kind === "header" ? headerZoneAnchorEl : footerZoneAnchorEl;
-            if (!el) {
-                zonePopupStyle = null;
-                return;
-            }
+            if (!el) return;
             const rect = el.getBoundingClientRect();
             const centerX = rect.left + rect.width / 2;
             if (kind === "header") {
@@ -160,6 +163,22 @@
             window.removeEventListener("resize", update);
             ro.disconnect();
         };
+    });
+
+    function onZoneSettingsPointerDown(event: PointerEvent): void {
+        if (!documentStore.zoneSettingsKind) return;
+        const target = event.target;
+        if (!(target instanceof Node)) return;
+        if (zonePopupEl?.contains(target)) return;
+        if (target instanceof Element && target.closest("[data-page-zone]")) return;
+        documentStore.zoneSettingsKind = null;
+    }
+
+    $effect(() => {
+        if (!documentStore.zoneSettingsKind) return;
+        document.addEventListener("pointerdown", onZoneSettingsPointerDown, true);
+        return () =>
+            document.removeEventListener("pointerdown", onZoneSettingsPointerDown, true);
     });
 
     // List marker text per block (computed across contiguous groups).
@@ -1327,6 +1346,7 @@
             {#if headerBlocks.length > 0}
                 <div
                     class="absolute flex flex-col justify-end"
+                    data-page-zone="header"
                     style:top="{pageTop}px"
                     style:left="{mp.left}px"
                     style:width="{zoneWidth}px"
@@ -1366,6 +1386,7 @@
             {#if footerBlocks.length > 0}
                 <div
                     class="absolute flex flex-col justify-start"
+                    data-page-zone="footer"
                     style:top="{pageTop + pageHeightPx - mp.bottom}px"
                     style:left="{mp.left}px"
                     style:width="{zoneWidth}px"
@@ -1644,15 +1665,17 @@
 </div>
 
 <!-- Fixed to viewport so scroll does not carry it over the toolbar (z-50) -->
-{#if documentStore.activeZone !== null && zonePopupStyle}
+{#if documentStore.zoneSettingsKind !== null && zonePopupStyle}
     <div
+        bind:this={zonePopupEl}
         class="pointer-events-none fixed z-40"
+        data-zone-settings-popup
         style:left={zonePopupStyle.left}
         style:top={zonePopupStyle.top}
         style:transform={zonePopupStyle.transform}
     >
         <div class="pointer-events-auto">
-            <PageZonePopup kind={documentStore.activeZone} />
+            <PageZonePopup kind={documentStore.zoneSettingsKind} />
         </div>
     </div>
 {/if}
