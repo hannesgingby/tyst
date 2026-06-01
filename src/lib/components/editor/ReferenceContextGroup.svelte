@@ -30,12 +30,12 @@
 	let activeItemIndex = $state(-1);
 	let rowEls = $state<HTMLElement[]>([]);
 	let menuEl = $state<HTMLElement | null>(null);
-	let listShellEl = $state<HTMLElement | null>(null);
+	let popupRegionEl = $state<HTMLElement | null>(null);
 	let scrollEl = $state<HTMLElement | null>(null);
 	let showScrollFade = $state(false);
 	let displayText = $state("");
 	let searchFocused = $state(false);
-	let listHovered = $state(false);
+	let popupHovered = $state(false);
 
 	const hoverPin = getContext<HoverPopupPin | undefined>(HOVER_POPUP_PIN_KEY);
 	const isSearching = $derived(searchQuery.trim() !== "");
@@ -128,9 +128,9 @@
 		};
 	});
 
-	// Pin while searching (caret in search, pointer may leave) or using the list / row menu.
+	// Pin while searching (caret in search, pointer may leave) or pointer is over the popup.
 	$effect(() => {
-		const pinned = searchFocused || listHovered || showMenu;
+		const pinned = searchFocused || popupHovered;
 		hoverPin?.setPinned(pinned);
 		return () => hoverPin?.setPinned(false);
 	});
@@ -139,9 +139,9 @@
 		function onDocumentPointerDown(event: PointerEvent): void {
 			const target = event.target;
 			if (!(target instanceof Node)) return;
-			if (listShellEl?.contains(target) || menuEl?.contains(target)) return;
+			if (popupRegionEl?.contains(target)) return;
 			searchFocused = false;
-			listHovered = false;
+			popupHovered = false;
 			hoverPin?.dismiss();
 		}
 		document.addEventListener("pointerdown", onDocumentPointerDown, true);
@@ -150,27 +150,29 @@
 	});
 </script>
 
+<!-- svelte-ignore a11y_no_static_element_interactions -->
+<div
+	bind:this={popupRegionEl}
+	onmouseenter={() => (popupHovered = true)}
+	onmouseleave={() => (popupHovered = false)}
+	onfocusin={() => (popupHovered = true)}
+	onfocusout={(e) => {
+		const next = e.relatedTarget;
+		if (
+			next instanceof Node &&
+			e.currentTarget instanceof Node &&
+			e.currentTarget.contains(next)
+		) {
+			return;
+		}
+		popupHovered = false;
+	}}
+>
 <ContextGroup showMenu={showMenu} {activeRowEl} {menuEl} menuAlign="center">
 	{#snippet list()}
-		<!-- svelte-ignore a11y_no_static_element_interactions -->
 		<div
-			bind:this={listShellEl}
 			class="shell reference-list-shell relative shrink-0 overflow-hidden rounded-lg"
 			style:width="{LIST_WIDTH}px"
-			onmouseenter={() => (listHovered = true)}
-			onmouseleave={() => (listHovered = false)}
-			onfocusin={() => (listHovered = true)}
-			onfocusout={(e) => {
-				const next = e.relatedTarget;
-				if (
-					next instanceof Node &&
-					e.currentTarget instanceof Node &&
-					e.currentTarget.contains(next)
-				) {
-					return;
-				}
-				listHovered = false;
-			}}
 		>
 			<div
 				bind:this={scrollEl}
@@ -265,6 +267,7 @@
 		</div>
 	{/snippet}
 </ContextGroup>
+</div>
 
 <style>
 	/* Safari may still decorate type="text" search roles — hide any clear control. */
