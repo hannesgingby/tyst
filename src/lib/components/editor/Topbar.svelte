@@ -49,6 +49,14 @@
 			cancelEdit();
 		}
 	}
+
+	function toggleZone(kind: "header" | "footer"): void {
+		if (documentStore.isZoneEnabled(kind)) {
+			documentStore.removeZone(kind);
+		} else {
+			documentStore.addZone(kind);
+		}
+	}
 </script>
 
 {#snippet action(label: string, icon?: string)}
@@ -89,17 +97,29 @@
 		<button
 			type="button"
 			class={[actionClass, "gap-1.5"]}
-			onclick={() => documentStore.addZone("header")}
+			aria-label={documentStore.isZoneEnabled("header")
+				? "Remove header"
+				: "Add header"}
+			onclick={() => toggleZone("header")}
 		>
-			<Icon name={documentStore.isZoneEnabled("header") ? "check" : "plus"} class="size-4 shrink-0" />
+			<Icon
+				name={documentStore.isZoneEnabled("header") ? "xmark" : "plus"}
+				class="size-4 shrink-0"
+			/>
 			Header
 		</button>
 		<button
 			type="button"
 			class={[actionClass, "gap-1.5"]}
-			onclick={() => documentStore.addZone("footer")}
+			aria-label={documentStore.isZoneEnabled("footer")
+				? "Remove footer"
+				: "Add footer"}
+			onclick={() => toggleZone("footer")}
 		>
-			<Icon name={documentStore.isZoneEnabled("footer") ? "check" : "plus"} class="size-4 shrink-0" />
+			<Icon
+				name={documentStore.isZoneEnabled("footer") ? "xmark" : "plus"}
+				class="size-4 shrink-0"
+			/>
 			Footer
 		</button>
 		<DropdownMenu

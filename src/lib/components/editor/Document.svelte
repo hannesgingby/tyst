@@ -60,6 +60,44 @@
 
     let viewportEl = $state<HTMLDivElement | null>(null);
     let viewportWidth = $state(0);
+    let headerZoneAnchorEl = $state<HTMLElement | null>(null);
+    let footerZoneAnchorEl = $state<HTMLElement | null>(null);
+    let zonePopupStyle = $state<{
+        left: string;
+        top: string;
+        transform: string;
+    } | null>(null);
+
+    /** Extra downward offset so the header popup sits closer to the page body. */
+    const HEADER_ZONE_POPUP_OFFSET = 120;
+    /** Offset above the footer margin edge (popup anchor). */
+    const FOOTER_ZONE_POPUP_OFFSET = -40;
+
+    function headerZoneAnchor(
+        node: HTMLElement,
+        active: boolean,
+    ): { destroy: () => void } | void {
+        if (!active) return;
+        headerZoneAnchorEl = node;
+        return {
+            destroy: () => {
+                if (headerZoneAnchorEl === node) headerZoneAnchorEl = null;
+            },
+        };
+    }
+
+    function footerZoneAnchor(
+        node: HTMLElement,
+        active: boolean,
+    ): { destroy: () => void } | void {
+        if (!active) return;
+        footerZoneAnchorEl = node;
+        return {
+            destroy: () => {
+                if (footerZoneAnchorEl === node) footerZoneAnchorEl = null;
+            },
+        };
+    }
 
     $effect(() => {
         if (!viewportEl) return;
@@ -71,6 +109,58 @@
     });
 
     const scale = $derived(viewportWidth > 0 ? viewportWidth / pageWidthPx : 1);
+
+    $effect(() => {
+        const kind = documentStore.activeZone;
+        model.headerAscent;
+        model.footerDescent;
+        scale;
+        headerZoneAnchorEl;
+        footerZoneAnchorEl;
+
+        if (!kind) {
+            zonePopupStyle = null;
+            return;
+        }
+
+        const update = (): void => {
+            const el = kind === "header" ? headerZoneAnchorEl : footerZoneAnchorEl;
+            if (!el) {
+                zonePopupStyle = null;
+                return;
+            }
+            const rect = el.getBoundingClientRect();
+            const centerX = rect.left + rect.width / 2;
+            if (kind === "header") {
+                zonePopupStyle = {
+                    left: `${centerX}px`,
+                    top: `${rect.bottom + HEADER_ZONE_POPUP_OFFSET}px`,
+                    transform: "translate(-50%, -100%)",
+                };
+            } else {
+                zonePopupStyle = {
+                    left: `${centerX}px`,
+                    top: `${rect.top - FOOTER_ZONE_POPUP_OFFSET}px`,
+                    transform: "translate(-50%, -100%)",
+                };
+            }
+        };
+
+        update();
+        const scroller = viewportEl?.closest("main");
+        scroller?.addEventListener("scroll", update, { passive: true });
+        window.addEventListener("resize", update);
+
+        const ro = new ResizeObserver(update);
+        if (headerZoneAnchorEl) ro.observe(headerZoneAnchorEl);
+        if (footerZoneAnchorEl) ro.observe(footerZoneAnchorEl);
+
+        return () => {
+            scroller?.removeEventListener("scroll", update);
+            window.removeEventListener("resize", update);
+            ro.disconnect();
+        };
+    });
 
     // List marker text per block (computed across contiguous groups).
     const listMarkers = $derived.by(() => {
@@ -1241,6 +1331,7 @@
                     style:left="{mp.left}px"
                     style:width="{zoneWidth}px"
                     style:height="{mp.top}px"
+                    use:headerZoneAnchor={pageIdx === 0}
                 >
                     <div
                         class={["w-full flex items-baseline", headerBlocks.some(b => b.hSpacing?.amount.unit === "fr") ? "flex" : ""]}
@@ -1279,6 +1370,7 @@
                     style:left="{mp.left}px"
                     style:width="{zoneWidth}px"
                     style:height="{mp.bottom}px"
+                    use:footerZoneAnchor={pageIdx === 0}
                 >
                     <div
                         class="w-full flex items-baseline"
@@ -1549,26 +1641,18 @@
             </div>
         {/each}
     </div>
-
-    <!-- Zone popup: rendered outside the scaled div so it appears at toolbar scale -->
-    {#if documentStore.activeZone !== null}
-        {@const kind = documentStore.activeZone}
-        {@const mp0 = resolveMarginsPx(0)}
-        {#if kind === "header"}
-            <div
-                class="absolute left-1/2 z-[200] -translate-x-1/2 pointer-events-auto"
-                style:top="{mp0.top * scale}px"
-            >
-                <PageZonePopup {kind} />
-            </div>
-        {:else}
-            <div
-                class="absolute left-1/2 z-[200] -translate-x-1/2 pointer-events-auto"
-                style:top="{(pageHeightPx - mp0.bottom) * scale}px"
-                style:transform="translate(-50%, -100%)"
-            >
-                <PageZonePopup {kind} />
-            </div>
-        {/if}
-    {/if}
 </div>
+
+<!-- Fixed to viewport so scroll does not carry it over the toolbar (z-50) -->
+{#if documentStore.activeZone !== null && zonePopupStyle}
+    <div
+        class="pointer-events-none fixed z-40"
+        style:left={zonePopupStyle.left}
+        style:top={zonePopupStyle.top}
+        style:transform={zonePopupStyle.transform}
+    >
+        <div class="pointer-events-auto">
+            <PageZonePopup kind={documentStore.activeZone} />
+        </div>
+    </div>
+{/if}
