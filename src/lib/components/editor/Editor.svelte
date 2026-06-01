@@ -46,7 +46,12 @@
             class="flex w-full max-w-[1240px] flex-col"
             style="padding-top: clamp(2rem, 9vh, 5.625rem);"
         >
-            <Topbar onMore={() => (settingsOpen = true)} />
+            <Topbar
+                onMore={() => {
+                    settingsSection = "page";
+                    settingsOpen = true;
+                }}
+            />
             <Document />
         </div>
     </main>
