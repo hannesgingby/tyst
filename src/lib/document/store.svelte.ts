@@ -201,6 +201,12 @@ class DocumentStore {
 	 * matching embed (which calls `activateEmbed` to clear this).
 	 */
 	popupDismissed = $state<EmbedKind | null>(null);
+	/** Set by openSettings(); Editor.svelte watches this to open the modal. */
+	settingsNav = $state<string | null>(null);
+
+	openSettings(section: string): void {
+		this.settingsNav = section;
+	}
 
 	/** Make `id` the active block and clear any popup dismissal for it. */
 	activateEmbed(id: string): void {

@@ -7,8 +7,19 @@
     import { fontStore } from "$lib/system/fonts.svelte";
     import { exportPdf, saveTypFile } from "$lib/system/files";
     import { isTauri } from "$lib/system/tauri";
+    import { documentStore } from "$lib/document/store.svelte";
+    import type { SectionId } from "./DocumentSettings.svelte";
 
     let settingsOpen = $state(false);
+    let settingsSection = $state<SectionId | undefined>(undefined);
+
+    $effect(() => {
+        const nav = documentStore.settingsNav;
+        if (!nav) return;
+        documentStore.settingsNav = null;
+        settingsSection = nav as SectionId;
+        settingsOpen = true;
+    });
 
     onMount(() => {
         fontStore.ensureLoaded();
@@ -40,5 +51,5 @@
         </div>
     </main>
     <Toolbar />
-    <DocumentSettings bind:open={settingsOpen} />
+    <DocumentSettings bind:open={settingsOpen} bind:section={settingsSection} />
 </div>

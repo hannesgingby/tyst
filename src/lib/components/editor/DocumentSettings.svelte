@@ -5,12 +5,13 @@
 
     interface Props {
         open?: boolean;
+        section?: SectionId;
         onclose?: () => void;
     }
 
-    let { open = $bindable(false), onclose }: Props = $props();
+    let { open = $bindable(false), section = $bindable(undefined), onclose }: Props = $props();
 
-    type SectionId =
+    export type SectionId =
         | "metadata"
         | "page"
         | "references"
@@ -50,6 +51,10 @@
     ];
 
     let active = $state<SectionId>("page");
+
+    $effect(() => {
+        if (section) { active = section; section = undefined; }
+    });
 
     function close(): void {
         open = false;

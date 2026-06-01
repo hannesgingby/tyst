@@ -330,6 +330,7 @@
 									class="flex h-8 w-full items-center justify-between rounded-md bg-[#EBE2DF] px-3 text-body-14-tight text-[#a85a45] transition-opacity duration-150 hover:opacity-80"
 									onmouseenter={() => (activeItemIndex = -1)}
 									onfocus={() => (activeItemIndex = -1)}
+									onclick={() => documentStore.openSettings("references")}
 								>
 									<span>Add sources to cite</span>
 									<Icon name="arrow-up-right" class="size-4 shrink-0" />
