@@ -276,6 +276,9 @@
 
 	function ensureTrailingBr(): void {
 		if (!el) return;
+		// Inline spans (continuation blocks) must never get a sentinel <br> —
+		// a <br> inside an inline element creates a visible line break.
+		if (isInline) return;
 		const isEmpty = (el.textContent ?? "") === "";
 		const hasTrailingBr = el.lastChild?.nodeName === "BR";
 		if (isEmpty && !effectivePlaceholder && !hasTrailingBr && !collapsedParbreak) {
@@ -436,6 +439,8 @@
 		style:font-family={`"${typography.fontFamily}", serif`}
 		style:font-size="{isFootnoteBody ? footnoteFontSizePx : fontSizePx}px"
 		style:font-weight={fontWeight}
+		style:font-style={typography.italic ? "italic" : undefined}
+		style:text-decoration={typography.underline ? "underline" : undefined}
 		style:line-height={effectiveLineHeight}
 		style:height={collapsedParbreak ? "0" : undefined}
 		style:min-height={collapsedParbreak ? "0" : undefined}

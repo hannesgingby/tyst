@@ -1386,6 +1386,107 @@ class DocumentStore {
 		});
 	}
 
+	readonly isBold = $derived(this.resolveTypography(this.activeBlock).weight === "Bold");
+	readonly isItalic = $derived(this.resolveTypography(this.activeBlock).italic === true);
+	readonly isUnderline = $derived(this.resolveTypography(this.activeBlock).underline === true);
+
+	private toggleInlineFormat(
+		caretOffset: number,
+		getter: (t: ReturnType<DocumentStore["resolveTypography"]>) => boolean,
+		setter: (t: NonNullable<Block["typography"]>, v: boolean) => void,
+	): void {
+		const block = this.activeBlock;
+		const currentOn = getter(this.resolveTypography(block));
+		const newValue = !currentOn;
+
+		if (this.intraBlockSelection) {
+			const { blockId, start, end } = this.intraBlockSelection;
+			const block = this.findBlock(blockId);
+			if (block && start === 0 && end === block.text.length) {
+				// Entire block selected — apply directly, no split needed
+				block.typography = { ...this.resolveTypography(block) };
+				setter(block.typography, newValue);
+				this.pendingSelection = { blockId: block.id, start: 0, end: block.text.length };
+				return;
+			}
+			const midId = this.splitBlockAtSelection(blockId, start, end);
+			if (midId) {
+				const mid = this.findBlock(midId)!;
+				mid.typography = { ...this.resolveTypography(mid) };
+				setter(mid.typography, newValue);
+				this.pendingSelection = { blockId: midId, start: 0, end: mid.text.length };
+				return;
+			}
+		}
+
+		// When the block already has text, don't change existing text's format.
+		// Split at the caret so only future typing gets the new format.
+		if (
+			block.text !== "" &&
+			caretOffset > 0 &&
+			!block.heading && !block.list &&
+			!block.image && !block.line && !block.rect && !block.outline
+		) {
+			const newTypo: NonNullable<Block["typography"]> = block.typography
+				? { ...block.typography }
+				: {};
+			setter(newTypo, newValue);
+
+			if (caretOffset >= block.text.length) {
+				// Caret at end: append new empty continuation — no text change needed
+				const newId = this.insertBlockObjectAfter(block.id, {
+					text: "",
+					continuation: true,
+					typography: Object.keys(newTypo).length > 0 ? newTypo : undefined,
+				});
+				this.activeBlockId = newId;
+				this.pendingCaret = { blockId: newId, offset: 0 };
+			} else {
+				// Caret in middle: split text, remaining text moves to new continuation
+				const newId = this.insertBlockObjectAfter(block.id, {
+					text: block.text.slice(caretOffset),
+					continuation: true,
+					typography: Object.keys(newTypo).length > 0 ? newTypo : undefined,
+				});
+				block.text = block.text.slice(0, caretOffset);
+				this.activeBlockId = newId;
+				this.pendingCaret = { blockId: newId, offset: 0 };
+			}
+			return;
+		}
+
+		for (const id of this.targetBlockIds) {
+			const b = this.findBlock(id);
+			if (!b) continue;
+			if (!b.typography) b.typography = {};
+			setter(b.typography, newValue);
+		}
+	}
+
+	toggleBold(caretOffset = 0): void {
+		this.toggleInlineFormat(
+			caretOffset,
+			(t) => t.weight === "Bold",
+			(t, v) => { t.weight = v ? "Bold" : "Regular"; },
+		);
+	}
+
+	toggleItalic(caretOffset = 0): void {
+		this.toggleInlineFormat(
+			caretOffset,
+			(t) => t.italic === true,
+			(t, v) => { if (v) t.italic = true; else delete t.italic; },
+		);
+	}
+
+	toggleUnderline(caretOffset = 0): void {
+		this.toggleInlineFormat(
+			caretOffset,
+			(t) => t.underline === true,
+			(t, v) => { if (v) t.underline = true; else delete t.underline; },
+		);
+	}
+
 	/**
 	 * Split block `id` at `startOffset`..`endOffset`, turning the selected
 	 * range into its own block (with any typography/paragraph overrides from the

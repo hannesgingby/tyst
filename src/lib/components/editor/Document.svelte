@@ -856,6 +856,34 @@
         const root = viewportEl;
 
         function onKeydownCapture(event: KeyboardEvent): void {
+            // Formatting shortcuts: ⌘B / ⌘I / ⌘U (or Ctrl on non-Mac)
+            if ((event.metaKey || event.ctrlKey) && !event.altKey && !event.shiftKey) {
+                const key = event.key.toLowerCase();
+                if (key === "b" || key === "i" || key === "u") {
+                    const active = document.activeElement;
+                    if (
+                        active instanceof HTMLElement &&
+                        active.matches(".doc-block[contenteditable]") &&
+                        root.contains(active)
+                    ) {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        const caretOffset = getCaretOffset(active);
+                        const oldBlockId = documentStore.activeBlock.id;
+                        if (key === "b") documentStore.toggleBold(caretOffset);
+                        else if (key === "i") documentStore.toggleItalic(caretOffset);
+                        else documentStore.toggleUnderline(caretOffset);
+                        // When the block text was truncated (caret-in-middle split),
+                        // Block.svelte skips the DOM update while the element is focused.
+                        const oldBlock = documentStore.findBlock(oldBlockId);
+                        if (oldBlock && active.textContent !== oldBlock.text) {
+                            syncBlockDom(active, oldBlock.text);
+                        }
+                        return;
+                    }
+                }
+            }
+
             if (
                 event.key !== "ArrowLeft" &&
                 event.key !== "ArrowRight" &&

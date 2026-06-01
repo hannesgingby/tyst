@@ -48,6 +48,7 @@ function textArgs(t: Partial<TypographySettings>): string[] {
 	if (t.fontFamily !== undefined) lines.push(`font: "${t.fontFamily}"`);
 	if (t.size !== undefined) lines.push(`size: ${typstNumber(t.size)}pt`);
 	if (t.weight !== undefined) lines.push(`weight: "${WEIGHT_KEYWORD[t.weight]}"`);
+	if (t.italic) lines.push(`style: "italic"`);
 	if (t.color !== undefined) lines.push(`fill: ${hexToRgb(t.color)}`);
 	if (t.tracking !== undefined && t.tracking !== 0) {
 		lines.push(`tracking: ${typstNumber(t.tracking / 100)}em`);
@@ -437,19 +438,29 @@ function serializeTextBlock(
 		for (const key of Object.keys(typo) as (keyof TypographySettings)[]) {
 			if (typo[key] !== docTypo[key]) diffTypo[key] = typo[key] as never;
 		}
-		const tArgs = textArgs(diffTypo);
-		if (tArgs.length === 0) return text;
-		return `#text(${tArgs.join(", ")})[${text}]`;
+		// underline is not a text() arg — handle separately
+		const underlineChanged = (typo.underline ?? false) !== (docTypo.underline ?? false);
+		const { underline: _u, ...textDiffTypo } = diffTypo;
+		const tArgs = textArgs(textDiffTypo);
+		let result = text;
+		if (tArgs.length > 0) result = `#text(${tArgs.join(", ")})[${result}]`;
+		if (underlineChanged) result = `#underline[${result}]`;
+		if (!underlineChanged && tArgs.length === 0) return text;
+		return result;
 	}
 
+	const underline = typo.underline === true;
 	const overrides: string[] = [];
 	const tArgs = textArgs(typo);
 	if (tArgs.length > 0) overrides.push(`#set text(${tArgs.join(", ")})`);
 	const pArgs = parArgs(typo.leading, para);
 	if (pArgs.length > 0) overrides.push(`#set par(${pArgs.join(", ")})`);
 
-	if (overrides.length === 0) return text;
-	return ["#[", ...overrides.map((o) => `  ${o}`), `  ${text}`, "]"].join("\n");
+	if (overrides.length === 0 && !underline) return text;
+
+	const content = underline ? `#underline[${text}]` : text;
+	if (overrides.length === 0) return content;
+	return ["#[", ...overrides.map((o) => `  ${o}`), `  ${content}`, "]"].join("\n");
 }
 
 /**

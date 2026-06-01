@@ -73,6 +73,10 @@ export interface TypographySettings {
 	tracking: number;
 	/** Default text colour as a hex string. */
 	color: string;
+	/** Italic text style — maps to Typst `text(style: "italic")`. */
+	italic?: boolean;
+	/** Underline decoration — maps to Typst `#underline[…]`. */
+	underline?: boolean;
 }
 
 export interface ParagraphSettings {

@@ -2,6 +2,7 @@
     import Icon from "$lib/components/Icon.svelte";
     import Tooltip from "$lib/components/Tooltip.svelte";
     import HoverPopup from "$lib/components/ui/HoverPopup.svelte";
+    import { getCaretOffset } from "./caret";
     import { documentStore } from "$lib/document/store.svelte";
     import { imageCache, pickAndLoadImage } from "$lib/system/imageCache.svelte";
     import AlignmentPopup from "./AlignmentPopup.svelte";
@@ -19,6 +20,9 @@
     const alignmentActive = $derived(
         activeBlock.alignment != null && activeBlock.alignment !== "left",
     );
+    const boldActive = $derived(documentStore.isBold);
+    const italicActive = $derived(documentStore.isItalic);
+    const underlineActive = $derived(documentStore.isUnderline);
 
     // Embed popups: the image popup and the line popup (which also handles
     // rectangles) stay "tied" open while their matching block is active.
@@ -335,6 +339,43 @@
     </Tooltip>
 {/snippet}
 
+{#snippet formatTool(
+    name: string,
+    label: string,
+    shortcut: string,
+    active: boolean,
+    toggle: (offset: number) => void,
+)}
+    <Tooltip {label} {shortcut} position="bottom">
+        <button
+            type="button"
+            class={[
+                "relative flex h-6 items-center justify-center rounded-md transition-opacity duration-150 [transition-timing-function:cubic-bezier(0.33,1,0.68,1)]",
+                active ? "toolbar-tool-active" : "hover:opacity-50",
+            ]}
+            onmousedown={(e) => e.preventDefault()}
+            onclick={() => {
+                const el = document.activeElement;
+                const offset =
+                    el instanceof HTMLElement && el.matches(".doc-block[contenteditable]")
+                        ? getCaretOffset(el)
+                        : 0;
+                const oldBlockId = documentStore.activeBlock.id;
+                toggle(offset);
+                // Sync DOM if text was truncated (caret-in-middle split)
+                if (el instanceof HTMLElement) {
+                    const oldBlock = documentStore.findBlock(oldBlockId);
+                    if (oldBlock && el.textContent !== oldBlock.text) {
+                        el.textContent = oldBlock.text;
+                    }
+                }
+            }}
+        >
+            <Icon {name} class="size-6 {active ? 'text-current' : 'text-icon'}" />
+        </button>
+    </Tooltip>
+{/snippet}
+
 <!-- Embed-toolbar trigger: a plain button (no internal popup state) whose
      blue "tied" state is driven from documentStore. The popup itself is
      positioned above it and rendered conditionally based on the same state. -->
@@ -487,7 +528,13 @@
                     {/each}
                 {:else}
                     {#each group.tools as tool, toolIndex (toolIndex)}
-                        {#if tool.kind === "icon"}
+                        {#if tool.kind === "icon" && tool.name === "bold"}
+                            {@render formatTool("bold", tool.label, tool.shortcut ?? "⌘B", boldActive, (o) => documentStore.toggleBold(o))}
+                        {:else if tool.kind === "icon" && tool.name === "italic"}
+                            {@render formatTool("italic", tool.label, tool.shortcut ?? "⌘I", italicActive, (o) => documentStore.toggleItalic(o))}
+                        {:else if tool.kind === "icon" && tool.name === "underline"}
+                            {@render formatTool("underline", tool.label, tool.shortcut ?? "⌘U", underlineActive, (o) => documentStore.toggleUnderline(o))}
+                        {:else if tool.kind === "icon"}
                             {@render toolIcon(
                                 tool.name,
                                 tool.label,
