@@ -17,5 +17,8 @@ export function createBibliographySource(): BibliographySource {
 		volume: "",
 		issue: "",
 		pageRange: "",
+		publisher: "",
+		url: "",
+		accessDate: "",
 	};
 }

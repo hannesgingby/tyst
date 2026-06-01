@@ -417,16 +417,21 @@ export function serializeSourcesYaml(doc: DocumentModel): string | null {
 	for (const s of sources) {
 		lines.push(`${s.id}:`);
 		lines.push(`  type: ${s.type.toLowerCase()}`);
-		if (s.title) lines.push(`  title: "${s.title.replace(/"/g, '\\"')}"`);
-		if (s.authors) lines.push(`  author: "${s.authors.replace(/"/g, '\\"')}"`);
+		if (s.title) lines.push(`  title: "${escapeStringLiteral(s.title)}"`);
+		if (s.authors) lines.push(`  author: "${escapeStringLiteral(s.authors)}"`);
 		if (s.date) lines.push(`  date: ${s.date}`);
+		if (s.publisher) lines.push(`  publisher: "${escapeStringLiteral(s.publisher)}"`);
+		if (s.url) lines.push(`  url: "${escapeStringLiteral(s.url)}"`);
+		if (s.accessDate) lines.push(`  serial-number:\n    url-date: ${s.accessDate}`);
 		if (s.journalName) {
 			lines.push(`  journal:`);
-			lines.push(`    name: "${s.journalName.replace(/"/g, '\\"')}"`);
+			lines.push(`    name: "${escapeStringLiteral(s.journalName)}"`);
+			if (s.volume) lines.push(`    volume: ${s.volume}`);
+			if (s.issue) lines.push(`    issue: ${s.issue}`);
+		} else {
+			if (s.volume) lines.push(`  volume: ${s.volume}`);
 		}
-		if (s.volume) lines.push(`    volume: ${s.volume}`);
-		if (s.issue) lines.push(`    issue: ${s.issue}`);
-		if (s.pageRange) lines.push(`  page-range: "${s.pageRange}"`);
+		if (s.pageRange) lines.push(`  page-range: "${escapeStringLiteral(s.pageRange)}"`);
 		lines.push(``);
 	}
 	return lines.join("\n");

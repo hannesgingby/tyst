@@ -357,10 +357,17 @@ export interface BibliographySource {
 	title: string;
 	authors: string;
 	date: string;
+	/** Journal name (Article), conference proceedings title (Conference). */
 	journalName: string;
 	volume: string;
 	issue: string;
 	pageRange: string;
+	/** Publisher name (Book, Chapter), institution (Report, Thesis). */
+	publisher: string;
+	/** URL (Web). */
+	url: string;
+	/** Date the web source was accessed (Web). */
+	accessDate: string;
 }
 
 /** Inline reference chip — points to a heading or figure block. */

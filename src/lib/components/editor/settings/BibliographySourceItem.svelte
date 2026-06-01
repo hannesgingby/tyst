@@ -4,6 +4,7 @@
 	import {
 		SOURCE_TYPES,
 		type BibliographySource,
+		type SourceType,
 	} from "$lib/document/bibliographySource";
 
 	const FIELD_BG = "bg-bg-input-on-pure-white";
@@ -11,6 +12,46 @@
 	const FIELD_ROW_STYLE = "grid-template-columns: minmax(0, 1fr) 300px";
 	const FIELD_CLASS =
 		"field-shell w-full border-none bg-bg-input-on-pure-white px-3 outline-none placeholder:text-text-250";
+
+	interface FieldSpec {
+		key: keyof BibliographySource;
+		label: string;
+		required?: boolean;
+		placeholder?: string;
+	}
+
+	/** Fields shown for each source type, in display order. Title/authors/date are always first. */
+	const TYPE_FIELDS: Record<SourceType, FieldSpec[]> = {
+		Article: [
+			{ key: "journalName", label: "Journal name" },
+			{ key: "volume", label: "Volume" },
+			{ key: "issue", label: "Issue" },
+			{ key: "pageRange", label: "Page range", placeholder: "e.g. 12–34" },
+		],
+		Book: [
+			{ key: "publisher", label: "Publisher" },
+			{ key: "volume", label: "Volume" },
+		],
+		Chapter: [
+			{ key: "publisher", label: "Publisher" },
+			{ key: "volume", label: "Volume" },
+			{ key: "pageRange", label: "Page range", placeholder: "e.g. 12–34" },
+		],
+		Conference: [
+			{ key: "journalName", label: "Proceedings title" },
+			{ key: "pageRange", label: "Page range", placeholder: "e.g. 12–34" },
+		],
+		Report: [
+			{ key: "publisher", label: "Institution" },
+		],
+		Thesis: [
+			{ key: "publisher", label: "Institution" },
+		],
+		Web: [
+			{ key: "url", label: "URL" },
+			{ key: "accessDate", label: "Accessed", placeholder: "yyyy-(mm)-(dd)" },
+		],
+	};
 
 	interface Props {
 		source: BibliographySource;
@@ -20,6 +61,8 @@
 	}
 
 	let { source, label, onchange, onremove }: Props = $props();
+
+	const extraFields = $derived(TYPE_FIELDS[source.type] ?? []);
 
 	function toggleExpanded(): void {
 		onchange?.({ expanded: !source.expanded });
@@ -61,6 +104,7 @@
 
 		{#if source.expanded}
 			<div class="flex flex-col gap-[18px]">
+				<!-- Type -->
 				<div class={FIELD_ROW_CLASS} style={FIELD_ROW_STYLE}>
 					<span class="text-right text-body-14 text-text-100">
 						Type<span aria-hidden="true"> *</span>
@@ -70,10 +114,11 @@
 						bg={FIELD_BG}
 						value={source.type}
 						options={SOURCE_TYPES}
-						onchange={(v) => updateField("type", v as typeof source.type)}
+						onchange={(v) => updateField("type", v as SourceType)}
 					/>
 				</div>
 
+				<!-- Title -->
 				<div class={FIELD_ROW_CLASS} style={FIELD_ROW_STYLE}>
 					<span class="text-right text-body-14 text-text-100">
 						Title<span aria-hidden="true"> *</span>
@@ -87,9 +132,10 @@
 					/>
 				</div>
 
+				<!-- Authors (optional for Web) -->
 				<div class={FIELD_ROW_CLASS} style={FIELD_ROW_STYLE}>
 					<span class="text-right text-body-14 text-text-100">
-						Author(s)<span aria-hidden="true"> *</span>
+						Author(s){#if source.type !== "Web"}<span aria-hidden="true"> *</span>{/if}
 					</span>
 					<input
 						type="text"
@@ -100,6 +146,7 @@
 					/>
 				</div>
 
+				<!-- Date -->
 				<div class={FIELD_ROW_CLASS} style={FIELD_ROW_STYLE}>
 					<span class="text-right text-body-14 text-text-100">
 						Date<span aria-hidden="true"> *</span>
@@ -114,49 +161,20 @@
 					/>
 				</div>
 
-				<div class={FIELD_ROW_CLASS} style={FIELD_ROW_STYLE}>
-					<span class="text-right text-body-14 text-text-100">Journal name</span>
-					<input
-						type="text"
-						class={FIELD_CLASS}
-						value={source.journalName}
-						oninput={(e) => updateField("journalName", (e.target as HTMLInputElement).value)}
-						spellcheck="false"
-					/>
-				</div>
-
-				<div class={FIELD_ROW_CLASS} style={FIELD_ROW_STYLE}>
-					<span class="text-right text-body-14 text-text-100">Volume</span>
-					<input
-						type="text"
-						class={FIELD_CLASS}
-						value={source.volume}
-						oninput={(e) => updateField("volume", (e.target as HTMLInputElement).value)}
-						spellcheck="false"
-					/>
-				</div>
-
-				<div class={FIELD_ROW_CLASS} style={FIELD_ROW_STYLE}>
-					<span class="text-right text-body-14 text-text-100">Issue</span>
-					<input
-						type="text"
-						class={FIELD_CLASS}
-						value={source.issue}
-						oninput={(e) => updateField("issue", (e.target as HTMLInputElement).value)}
-						spellcheck="false"
-					/>
-				</div>
-
-				<div class={FIELD_ROW_CLASS} style={FIELD_ROW_STYLE}>
-					<span class="text-right text-body-14 text-text-100">Page-range</span>
-					<input
-						type="text"
-						class={FIELD_CLASS}
-						value={source.pageRange}
-						oninput={(e) => updateField("pageRange", (e.target as HTMLInputElement).value)}
-						spellcheck="false"
-					/>
-				</div>
+				<!-- Type-specific fields -->
+				{#each extraFields as field (field.key)}
+					<div class={FIELD_ROW_CLASS} style={FIELD_ROW_STYLE}>
+						<span class="text-right text-body-14 text-text-100">{field.label}</span>
+						<input
+							type="text"
+							class={FIELD_CLASS}
+							value={source[field.key] as string}
+							oninput={(e) => updateField(field.key, (e.target as HTMLInputElement).value)}
+							placeholder={field.placeholder ?? ""}
+							spellcheck="false"
+						/>
+					</div>
+				{/each}
 			</div>
 		{/if}
 	</div>
