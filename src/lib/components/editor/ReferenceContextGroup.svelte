@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { getContext } from "svelte";
+	import { getContext, untrack } from "svelte";
 	import Icon from "$lib/components/Icon.svelte";
 	import {
 		HOVER_POPUP_PIN_KEY,
@@ -19,6 +19,8 @@
 		activeTargetId?: string | null;
 		/** True when the active block is a citation (vs cross-reference). */
 		isCitationActive?: boolean;
+		/** Called when display text or page form changes for the selected item. */
+		onmenuchange?: (displayText: string, pageForm: boolean) => void;
 	}
 
 	let {
@@ -26,6 +28,7 @@
 		onselect,
 		activeTargetId = null,
 		isCitationActive = false,
+		onmenuchange,
 	}: Props = $props();
 
 	const LIST_WIDTH = 300;
@@ -127,9 +130,31 @@
 	// Only show display text menu for non-citation items
 	const showMenu = $derived(activeItemIndex >= 0 && activeItem?.sectionTitle !== "Citation");
 
+	// Initialize menu values when the selected item changes.
+	// If the active block already has a reference pointing to this item, restore its settings.
 	$effect(() => {
-		displayText = activeItem?.displayText ?? activeItem?.label ?? "";
-		pageForm = false;
+		const item = activeItem;
+		if (!item) { displayText = ""; pageForm = false; return; }
+		const ref = untrack(() => documentStore.activeBlock.reference);
+		if (ref && ref.targetBlockId === item.id) {
+			displayText = ref.displayText ?? "";
+			pageForm = ref.pageForm ?? false;
+		} else {
+			displayText = "";
+			pageForm = false;
+		}
+	});
+
+	// Propagate menu changes back to the store whenever displayText or pageForm change.
+	$effect(() => {
+		const dt = displayText;
+		const pf = pageForm;
+		untrack(() => {
+			if (activeItemIndex < 0) return;
+			const item = filteredItems[activeItemIndex];
+			if (!item || item.sectionTitle === "Citation") return;
+			onmenuchange?.(dt, pf);
+		});
 	});
 
 	// Pre-select the row matching the active block's target when the popup opens.

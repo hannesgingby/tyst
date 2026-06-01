@@ -227,7 +227,10 @@
     const referenceInlineLabel = $derived.by(() => {
         if (!block.reference) return "";
         if (block.reference.displayText) return block.reference.displayText;
-        if (block.reference.pageForm) return "p. ?";
+        if (block.reference.pageForm) {
+            const pageIndex = documentStore.blockPageIndex(block.reference.targetBlockId);
+            return `page ${pageIndex + 1}`;
+        }
         const target = documentStore.findBlock(block.reference.targetBlockId);
         if (!target) return "?";
         if (target.heading) return target.text || "Heading";
@@ -642,7 +645,6 @@
                     style:border-top-width="{line.stroke.thickness * scale}px"
                     style:border-top-color={line.stroke.color}
                 ></div>
-                {@render deleteBadge()}
             </div>
         {:else if rect}
             {@const wPx =
@@ -661,9 +663,7 @@
                 style:border-color={rect.stroke.color}
                 style:border-radius="{rect.radius * scale}px"
                 style:padding="{rect.inset * scale}px"
-            >
-                {@render deleteBadge()}
-            </div>
+            ></div>
         {/if}
     </div>
 {/snippet}
@@ -761,7 +761,6 @@
 {#if isVSpacing}
     {@const vsp = block.vSpacing!}
     {@const active = documentStore.activeBlock.id === block.id}
-    {@const awaitingDelete = documentStore.embedAwaitingDelete === block.id}
     <!-- svelte-ignore a11y_click_events_have_key_events -->
     <!-- svelte-ignore a11y_no_static_element_interactions -->
     <div
@@ -783,16 +782,6 @@
             embedEl?.focus({ preventScroll: true });
         }}
     >
-        {#if awaitingDelete}
-            <span
-                class="font-sans text-text-150 pointer-events-none absolute right-0 bottom-full select-none"
-                style:font-size="{10 * scale}px"
-                style:line-height="1"
-                style:padding-bottom="{8 * scale}px"
-            >
-                Backspace to delete
-            </span>
-        {/if}
         <div
             class="h-px flex-1 border-t border-dashed opacity-30"
             style:border-color={typography.color}
@@ -811,7 +800,6 @@
 {:else if isHSpacing}
     {@const hsp = block.hSpacing!}
     {@const active = documentStore.activeBlock.id === block.id}
-    {@const awaitingDelete = documentStore.embedAwaitingDelete === block.id}
     <!-- svelte-ignore a11y_click_events_have_key_events -->
     <!-- svelte-ignore a11y_no_static_element_interactions -->
     <span
@@ -826,16 +814,6 @@
             outerEl?.focus({ preventScroll: true });
         }}
     >
-        {#if awaitingDelete}
-            <span
-                class="text-text-150 pointer-events-none absolute right-0 bottom-full select-none"
-                style:font-size="{10 * scale}px"
-                style:line-height="1"
-                style:padding-bottom="{8 * scale}px"
-            >
-                Backspace to delete
-            </span>
-        {/if}
         <span
             class="inline-block select-none rounded opacity-40 outline-dashed outline-1"
             style:outline-color={typography.color}
@@ -1000,7 +978,6 @@
         }}>{footnoteMarkerNumber}</span
     >
 {:else if isReference || isCitation}
-    {@const awaitingDelete = documentStore.embedAwaitingDelete === block.id}
     <!-- svelte-ignore a11y_no_static_element_interactions -->
     <span
         bind:this={outerEl}
@@ -1025,12 +1002,7 @@
             documentStore.activateReference(block.id);
             onfocusblock(block.id);
         }}
-    >{isReference ? referenceInlineLabel : citationInlineLabel}{#if awaitingDelete}<span
-            class="font-sans text-text-150 pointer-events-none absolute right-0 bottom-full select-none"
-            style:font-size="{10 * scale}px"
-            style:line-height="1"
-            style:padding-bottom="{8 * scale}px"
-        >Backspace to delete</span>{/if}</span
+    >{isReference ? referenceInlineLabel : citationInlineLabel}</span
     >
 {:else if isBibliography}
     {@const awaitingDelete = documentStore.embedAwaitingDelete === block.id}

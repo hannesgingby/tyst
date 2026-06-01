@@ -25,6 +25,14 @@
 			documentStore.insertCitation(id);
 		}
 	}
+
+	function handleMenuChange(dt: string, pf: boolean): void {
+		if (!activeBlock.reference) return;
+		documentStore.updateReference(activeBlock.id, {
+			displayText: dt || undefined,
+			pageForm: pf || undefined,
+		});
+	}
 </script>
 
-<ReferenceContextGroup {activeTargetId} {isCitationActive} onselect={handleSelect} />
+<ReferenceContextGroup {activeTargetId} {isCitationActive} onselect={handleSelect} onmenuchange={handleMenuChange} />
