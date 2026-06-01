@@ -19,12 +19,18 @@
         setCaretOffset,
         setCaretRange,
     } from "./caret";
+    import { zoomStore } from "$lib/document/zoom.svelte";
 
     // Render the page at a higher internal pixel density and scale it *down* to
     // fit the viewport: layout matches the PDF, and the caret renders crisp/thin.
     const RENDER_SCALE = 2;
     // Visual gap between page sheets, in internal render pixels.
     const PAGE_GAP_PX = 40;
+
+    interface Props {
+        scaledPageWidthPx?: number;
+    }
+    let { scaledPageWidthPx = $bindable(0) }: Props = $props();
 
     const model = $derived(documentStore.model);
     // Zone blocks (header/footer) are stored in the main blocks array but excluded
@@ -109,7 +115,9 @@
         return () => observer.disconnect();
     });
 
-    const scale = $derived(viewportWidth > 0 ? viewportWidth / pageWidthPx : 1);
+    const scale = $derived(viewportWidth > 0 ? (viewportWidth / pageWidthPx) * zoomStore.value : 1);
+    const centerOffsetPx = $derived((viewportWidth - pageWidthPx * scale) / 2);
+    $effect(() => { scaledPageWidthPx = pageWidthPx * scale; });
 
     $effect(() => {
         const zone = documentStore.activeZone;
@@ -1309,7 +1317,7 @@
         class="absolute top-0 left-0"
         style:width="{pageWidthPx}px"
         style:height="{totalHeightPx}px"
-        style:transform="scale({scale})"
+        style:transform="translateX({centerOffsetPx}px) scale({scale})"
         style:transform-origin="top left"
     >
         {#each Array(layout.pageCount) as _, pageIdx (pageIdx)}

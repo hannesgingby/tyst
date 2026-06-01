@@ -3,14 +3,16 @@
 	import Tooltip from "$lib/components/Tooltip.svelte";
 	import DropdownMenu from "$lib/components/ui/DropdownMenu.svelte";
 	import { documentStore } from "$lib/document/store.svelte";
+	import { zoomStore } from "$lib/document/zoom.svelte";
 	import { PAPER_PRESETS } from "$lib/document/paperSizes";
 	import type { PaperPreset } from "$lib/document/types";
 
 	interface Props {
 		onMore?: () => void;
+		scaledPageWidthPx?: number;
 	}
 
-	let { onMore }: Props = $props();
+	let { onMore, scaledPageWidthPx = 0 }: Props = $props();
 
 	const model = documentStore.model;
 	let preset = $derived(documentStore.defaultPage.preset);
@@ -19,8 +21,10 @@
 	let editValue = $state("");
 	let inputEl = $state<HTMLInputElement | null>(null);
 
-	const actionClass =
-		"text-body-14 flex items-center text-text-250 transition-colors duration-150 ease-out hover:text-text-100";
+	const compact = $derived(zoomStore.value < 0.7);
+	const actionClass = $derived(
+		`${compact ? "text-body-12" : "text-body-14"} flex items-center text-text-250 transition-colors duration-150 ease-out hover:text-text-100`,
+	);
 
 	function startEditing() {
 		editValue = model.name;
@@ -66,13 +70,19 @@
 		class={[actionClass, icon && "gap-1.5"]}
 	>
 		{#if icon}
-			<Icon name={icon} class="size-4 shrink-0" />
+			<Icon name={icon} class="{compact ? 'size-3' : 'size-4'} shrink-0" />
 		{/if}
 		{label}
 	</button>
 {/snippet}
 
-<div class="group flex h-5 w-full items-center justify-between pb-3 pl-0.5 pr-1">
+<div
+	class="group flex h-5 items-center justify-between pb-3 pl-0.5 pr-1"
+	style:width={scaledPageWidthPx > 0 ? `${scaledPageWidthPx}px` : "100%"}
+	style:max-width="100%"
+	style:margin-left="auto"
+	style:margin-right="auto"
+>
 	<div class="min-w-0 flex-1">
 		{#if isEditing}
 			<input
@@ -105,7 +115,7 @@
 		>
 			<Icon
 				name={documentStore.isZoneEnabled("header") ? "xmark" : "plus"}
-				class="size-4 shrink-0"
+				class="{compact ? 'size-3' : 'size-4'} shrink-0"
 			/>
 			Header
 		</button>
@@ -119,7 +129,7 @@
 		>
 			<Icon
 				name={documentStore.isZoneEnabled("footer") ? "xmark" : "plus"}
-				class="size-4 shrink-0"
+				class="{compact ? 'size-3' : 'size-4'} shrink-0"
 			/>
 			Footer
 		</button>
@@ -145,7 +155,7 @@
 					<span>{preset}</span>
 					<Icon
 						name="nav-arrow-down"
-						class="size-3.5 transition-[opacity,color] duration-150 ease-out {open
+						class="{compact ? 'size-3' : 'size-3.5'} transition-[opacity,color] duration-150 ease-out {open
 							? 'opacity-100'
 							: 'opacity-0 group-hover:opacity-100'}"
 					/>

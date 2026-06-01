@@ -8,10 +8,40 @@
     import { exportPdf, saveTypFile } from "$lib/system/files";
     import { isTauri } from "$lib/system/tauri";
     import { documentStore } from "$lib/document/store.svelte";
+    import { zoomStore } from "$lib/document/zoom.svelte";
     import type { SectionId } from "./DocumentSettings.svelte";
 
     let settingsOpen = $state(false);
     let settingsSection = $state<SectionId | undefined>(undefined);
+    let scaledPageWidthPx = $state(0);
+
+    // Zoom badge visibility
+    let badgeVisible = $state(false);
+    let badgeTimeout: ReturnType<typeof setTimeout> | null = null;
+
+    function showBadge() {
+        badgeVisible = true;
+        if (badgeTimeout) clearTimeout(badgeTimeout);
+        badgeTimeout = setTimeout(() => {
+            badgeVisible = false;
+            badgeTimeout = null;
+        }, 2000);
+    }
+
+    function handleZoomStep(direction: "up" | "down") {
+        if (direction === "up") zoomStore.stepUp();
+        else zoomStore.stepDown();
+        showBadge();
+    }
+
+    function handleZoomReset() {
+        zoomStore.reset();
+        badgeVisible = false;
+        if (badgeTimeout) {
+            clearTimeout(badgeTimeout);
+            badgeTimeout = null;
+        }
+    }
 
     $effect(() => {
         const nav = documentStore.settingsNav;
@@ -24,7 +54,21 @@
     onMount(() => {
         fontStore.ensureLoaded();
 
-        if (!isTauri()) return;
+        function onKeydown(e: KeyboardEvent) {
+            const mod = e.metaKey || e.ctrlKey;
+            if (!mod) return;
+            if (e.key === "=" || e.key === "+") {
+                e.preventDefault();
+                handleZoomStep("up");
+            } else if (e.key === "-") {
+                e.preventDefault();
+                handleZoomStep("down");
+            }
+        }
+
+        window.addEventListener("keydown", onKeydown);
+
+        if (!isTauri()) return () => window.removeEventListener("keydown", onKeydown);
 
         // Bridge native File-menu actions (emitted from Rust) to the frontend.
         const unlisteners: Array<() => void> = [];
@@ -34,7 +78,10 @@
             unlisteners.push(await listen("menu://export-pdf", () => exportPdf()));
         })();
 
-        return () => unlisteners.forEach((off) => off());
+        return () => {
+            window.removeEventListener("keydown", onKeydown);
+            unlisteners.forEach((off) => off());
+        };
     });
 </script>
 
@@ -47,14 +94,52 @@
             style="padding-top: clamp(2rem, 9vh, 5.625rem);"
         >
             <Topbar
+                {scaledPageWidthPx}
                 onMore={() => {
                     settingsSection = "page";
                     settingsOpen = true;
                 }}
             />
-            <Document />
+            <Document bind:scaledPageWidthPx />
         </div>
     </main>
     <Toolbar />
     <DocumentSettings bind:open={settingsOpen} bind:section={settingsSection} />
+
+    <!-- Zoom badge -->
+    <button
+        type="button"
+        class="zoom-badge"
+        class:visible={badgeVisible}
+        onclick={handleZoomReset}
+        aria-label="Reset zoom to 100%"
+    >
+        zoom: {zoomStore.percent}%
+    </button>
 </div>
+
+<style>
+    .zoom-badge {
+        position: fixed;
+        top: 24px;
+        right: 32px;
+        padding: 3px 12px;
+        font-size: 14px;
+        letter-spacing: -0.005em;
+        border-radius: 6px;
+        background: #d9ebf9;
+        color: #3d9eee;
+        border: none;
+        cursor: pointer;
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 150ms ease-out;
+        line-height: 1.35;
+        z-index: 100;
+    }
+
+    .zoom-badge.visible {
+        opacity: 1;
+        pointer-events: auto;
+    }
+</style>
