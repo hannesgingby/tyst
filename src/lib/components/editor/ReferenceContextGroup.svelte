@@ -53,7 +53,6 @@
 	let linkRowEl = $state<HTMLElement | null>(null);
 
 	const hoverPin = getContext<HoverPopupPin | undefined>(HOVER_POPUP_PIN_KEY);
-	const isSearching = $derived(searchQuery.trim() !== "");
 
 	// Build sections from the real store data
 	const sections = $derived.by((): ReferenceSection[] => {
@@ -92,6 +91,13 @@
 		];
 	});
 
+	const totalItemCount = $derived(
+		sections.reduce((n, s) => n + s.items.length, 0),
+	);
+	const showSearch = $derived(hasElements && totalItemCount >= 6);
+	const searchFilter = $derived(showSearch ? searchQuery.trim().toLowerCase() : "");
+	const isSearching = $derived(searchFilter !== "");
+
 	const hasCitations = $derived(sections.find(s => s.title === "Citation")?.items.length ?? 0 > 0);
 
 	const contentSections = $derived(
@@ -101,7 +107,7 @@
 	const allFilterableSections = $derived(sections);
 
 	const filteredItems = $derived.by((): (ReferenceItem & { sectionTitle: string })[] => {
-		const q = searchQuery.trim().toLowerCase();
+		const q = searchFilter;
 		const out: (ReferenceItem & { sectionTitle: string })[] = [];
 		for (const section of allFilterableSections) {
 			for (const item of section.items) {
@@ -112,7 +118,7 @@
 	});
 
 	const sectionBlocks = $derived.by(() => {
-		const q = searchQuery.trim().toLowerCase();
+		const q = searchFilter;
 		return contentSections
 			.map((section) => ({
 				title: section.title,
@@ -126,7 +132,7 @@
 	const citationSectionItems = $derived.by((): ReferenceItem[] => {
 		const s = sections.find(s => s.title === "Citation");
 		if (!s) return [];
-		const q = searchQuery.trim().toLowerCase();
+		const q = searchFilter;
 		return q ? s.items.filter(i => i.label.toLowerCase().includes(q)) : s.items;
 	});
 
@@ -317,7 +323,7 @@
 					isSearching ? "min-h-[400px] max-h-[400px]" : "max-h-[400px]",
 				]}
 			>
-				{#if hasElements}
+				{#if showSearch}
 					<div class="px-3 pt-2.5 pb-2">
 						<input
 							type="text"
@@ -334,7 +340,7 @@
 					</div>
 				{/if}
 
-				<div class="px-3 pb-2 pt-2">
+				<div class="px-3 py-3">
 					{#if !isSearching}
 						<div class="pb-1">
 							<p class="pb-2 text-body-14 text-text-250">Citation</p>
