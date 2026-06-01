@@ -1,7 +1,7 @@
 <script lang="ts">
     import { tick } from "svelte";
     import Block from "./Block.svelte";
-    import PageZoneEditor from "./PageZoneEditor.svelte";
+    import PageZonePopup from "./PageZonePopup.svelte";
     import {
         resolveBlockHeadingSpacing,
         resolveBlockListSpacing,
@@ -26,7 +26,12 @@
     const PAGE_GAP_PX = 40;
 
     const model = $derived(documentStore.model);
-    const blocks = $derived(model.blocks);
+    // Zone blocks (header/footer) are stored in the main blocks array but excluded
+    // from the body layout. They are rendered separately in the page margin areas.
+    const allBlocks = $derived(model.blocks);
+    const blocks = $derived(allBlocks.filter((b) => !b.zoneKind));
+    const headerBlocks = $derived(documentStore.headerBlocks);
+    const footerBlocks = $derived(documentStore.footerBlocks);
 
     // Paper size comes from the default page (we assume uniform paper across all pages).
     const defaultPage = $derived(documentStore.defaultPage);
@@ -638,7 +643,6 @@
 
     function onFocusBlock(id: string): void {
         documentStore.activeBlockId = id;
-        documentStore.deactivateZone();
     }
 
     /** Empty continuation segment whose previous block is an inline embed (h-spacing, footnote marker, reference, citation). */
@@ -699,10 +703,10 @@
     }
 
     function onSplit(id: string, caretOffset: number): void {
-        const block = blocks.find((b) => b.id === id);
+        const block = allBlocks.find((b) => b.id === id);
         if (!block) return;
-        // Footnote zone blocks are not splittable — Enter is a no-op.
-        if (block.footnote || block.footnoteSeparator) return;
+        // Footnote zone blocks and header/footer zone blocks are not splittable.
+        if (block.footnote || block.footnoteSeparator || block.zoneKind) return;
         const text = block.text;
 
         // Pressing Enter on an empty list item exits the list; on an empty
@@ -756,6 +760,8 @@
     }
 
     function onPasteLines(id: string, lines: string[]): void {
+        // Zone blocks are single-line; don't create additional body blocks from paste.
+        if (allBlocks.find((b) => b.id === id)?.zoneKind) return;
         // The first pasted line was inserted into `id`; turn the rest into blocks.
         let prevId = id;
         for (const line of lines)
@@ -779,6 +785,17 @@
     }
 
     function onMergePrev(id: string): void {
+        // Handle zone block backspace: remove zone when primary block is empty.
+        const zoneBlock = allBlocks.find((b) => b.id === id && b.zoneKind);
+        if (zoneBlock) {
+            const zoneKind = zoneBlock.zoneKind!;
+            const firstZone = allBlocks.find((b) => b.zoneKind === zoneKind);
+            if (firstZone?.id === id && zoneBlock.text === "") {
+                documentStore.removeZone(zoneKind);
+            }
+            return;
+        }
+
         const idx = blocks.findIndex((b) => b.id === id);
         const block = idx >= 0 ? blocks[idx] : undefined;
 
@@ -1149,13 +1166,16 @@
     });
 
     function onHeight(id: string, px: number): void {
-        const b = blocks.find((b) => b.id === id);
-        if (b?.footnote || b?.footnoteSeparator) {
+        const b = allBlocks.find((b) => b.id === id);
+        if (!b) return;
+        // Zone blocks (header/footer) don't affect body layout.
+        if (b.zoneKind) { if (heights[id] !== 0) heights[id] = 0; return; }
+        if (b.footnote || b.footnoteSeparator) {
             if (zoneHeights[id] !== px) zoneHeights[id] = px;
             if (heights[id] !== 0) heights[id] = 0;
             return;
         }
-        const h = b?.continuation ? 0 : px;
+        const h = b.continuation ? 0 : px;
         if (heights[id] !== h) heights[id] = h;
     }
 
@@ -1201,26 +1221,78 @@
             {@const renderItems = buildRenderItems(mainPageBlocks)}
             {@const contentHeightPx = pageHeightPx - mp.top - mp.bottom}
             {@const zoneWidth = pageWidthPx - mp.left - mp.right}
-            <!-- Header zone -->
-            <div
-                class="absolute"
-                style:top="{pageTop}px"
-                style:left="{mp.left}px"
-                style:width="{zoneWidth}px"
-                style:height="{mp.top}px"
-            >
-                <PageZoneEditor kind="header" pageIdx={pageIdx} />
-            </div>
+
+            <!-- Header zone (inline rendering of zone blocks, centered vertically in top margin) -->
+            {#if headerBlocks.length > 0}
+                <div
+                    class="absolute flex items-center"
+                    style:top="{pageTop}px"
+                    style:left="{mp.left}px"
+                    style:width="{zoneWidth}px"
+                    style:height="{mp.top}px"
+                >
+                    <div
+                        class={["w-full flex items-baseline", headerBlocks.some(b => b.hSpacing?.amount.unit === "fr") ? "flex" : ""]}
+                        style:text-align="left"
+                    >
+                        {#each headerBlocks as block (block.id)}
+                            <Block
+                                {block}
+                                scale={RENDER_SCALE}
+                                role={blockRoles.get(block.id)}
+                                renderInline={true}
+                                spacingEm={undefined}
+                                marker={undefined}
+                                headingPrefix={undefined}
+                                suppressAbove={true}
+                                skipsFirstLineIndent={true}
+                                registerel={registerEl}
+                                onheight={onHeight}
+                                onfocusblock={onFocusBlock}
+                                oninputblock={onInputBlock}
+                                onsplit={onSplit}
+                                onmergeprev={onMergePrev}
+                                onpastelines={onPasteLines}
+                            />
+                        {/each}
+                    </div>
+                </div>
+            {/if}
+
             <!-- Footer zone -->
-            <div
-                class="absolute"
-                style:top="{pageTop + pageHeightPx - mp.bottom}px"
-                style:left="{mp.left}px"
-                style:width="{zoneWidth}px"
-                style:height="{mp.bottom}px"
-            >
-                <PageZoneEditor kind="footer" pageIdx={pageIdx} />
-            </div>
+            {#if footerBlocks.length > 0}
+                <div
+                    class="absolute flex items-center"
+                    style:top="{pageTop + pageHeightPx - mp.bottom}px"
+                    style:left="{mp.left}px"
+                    style:width="{zoneWidth}px"
+                    style:height="{mp.bottom}px"
+                >
+                    <div class="w-full flex items-baseline">
+                        {#each footerBlocks as block (block.id)}
+                            <Block
+                                {block}
+                                scale={RENDER_SCALE}
+                                role={blockRoles.get(block.id)}
+                                renderInline={true}
+                                spacingEm={undefined}
+                                marker={undefined}
+                                headingPrefix={undefined}
+                                suppressAbove={true}
+                                skipsFirstLineIndent={true}
+                                registerel={registerEl}
+                                onheight={onHeight}
+                                onfocusblock={onFocusBlock}
+                                oninputblock={onInputBlock}
+                                onsplit={onSplit}
+                                onmergeprev={onMergePrev}
+                                onpastelines={onPasteLines}
+                            />
+                        {/each}
+                    </div>
+                </div>
+            {/if}
+
             <!-- Content area for this page (margins are per-page) -->
             <div
                 class="absolute flex flex-col"
@@ -1462,4 +1534,26 @@
             </div>
         {/each}
     </div>
+
+    <!-- Zone popup: rendered outside the scaled div so it appears at toolbar scale -->
+    {#if documentStore.activeZone !== null}
+        {@const kind = documentStore.activeZone}
+        {@const mp0 = resolveMarginsPx(0)}
+        {#if kind === "header"}
+            <div
+                class="absolute left-1/2 z-[200] -translate-x-1/2 pointer-events-auto"
+                style:top="{mp0.top * scale}px"
+            >
+                <PageZonePopup {kind} />
+            </div>
+        {:else}
+            <div
+                class="absolute left-1/2 z-[200] -translate-x-1/2 pointer-events-auto"
+                style:top="{(pageHeightPx - mp0.bottom) * scale}px"
+                style:transform="translate(-50%, -100%)"
+            >
+                <PageZonePopup {kind} />
+            </div>
+        {/if}
+    {/if}
 </div>

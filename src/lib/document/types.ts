@@ -40,22 +40,9 @@ export type PageSection = keyof PageLinks;
 
 export type PageZoneCounterPattern = "1" | "1/1" | "I" | "i" | "A" | "a";
 
-export interface PageZoneNumbering {
+/** Non-deletable page counter chip inside a zone block (when zone numbering is enabled). */
+export interface PageCounterSettings {
 	pattern: PageZoneCounterPattern;
-	align: "left" | "center" | "right";
-}
-
-/** Content for a page header or footer zone. */
-export interface PageZone {
-	/** Free text shown in the zone. */
-	text: string;
-	/** Optional inline page counter. */
-	numbering?: PageZoneNumbering;
-	/**
-	 * Header-only: how far the header is raised into the top margin.
-	 * Typst `header-ascent` value, e.g. "30%" or "12pt". Omit for default.
-	 */
-	ascent?: string;
 }
 
 export interface PageSettings {
@@ -74,10 +61,6 @@ export interface PageSettings {
 	/** Per-page footnote overrides when `footnoteLinked` is false. */
 	footnote?: FootnotePageSettings;
 	footnoteLinked?: boolean;
-	/** Page header zone content. */
-	header?: PageZone;
-	/** Page footer zone content. */
-	footer?: PageZone;
 }
 
 export type FontWeightName = "Regular" | "Medium" | "Bold";
@@ -346,6 +329,18 @@ export interface Block {
 	citation?: CitationSettings;
 	/** Bibliography block (like outline). `text` holds the editable title. */
 	bibliography?: true;
+	/**
+	 * Marks this block as part of the page header or footer zone.
+	 * Zone blocks are rendered in the margin area, not in the document body.
+	 * They use the same editing infrastructure as body blocks.
+	 */
+	zoneKind?: "header" | "footer";
+	/**
+	 * Inline page counter chip. Only appears as a continuation block inside a zone.
+	 * Non-deletable while zone numbering is enabled. Serializes as
+	 * `#counter(page).display("pattern", both?: true)`.
+	 */
+	pageCounter?: PageCounterSettings;
 }
 
 /** Source types for bibliography entries. */
@@ -455,8 +450,13 @@ export interface DocumentModel {
 	outlineTitleScale?: number;
 	/** Typography overrides for footnote body text. Applied via `#show footnote.entry: set text(…)`. */
 	footnoteTypography?: Partial<TypographySettings>;
-	/** Document body as an ordered list of paragraph blocks. */
+	/** Document body as an ordered list of paragraph blocks. Zone blocks (zoneKind set) are prepended here too. */
 	blocks: Block[];
+	/**
+	 * Typst `header-ascent` value (e.g. "30%" or "12pt").
+	 * Controls how far the page header is raised into the top margin.
+	 */
+	headerAscent?: string;
 	/** Bibliography settings (sources, style, etc.). Undefined until first citation is inserted. */
 	bibliography?: BibliographySettings;
 }

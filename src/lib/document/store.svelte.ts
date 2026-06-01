@@ -16,10 +16,10 @@ import type {
 	ListSettings,
 	FootnotePageSettings,
 	OutlineSettings,
+	PageCounterSettings,
 	PageSection,
 	PageSettings,
-	PageZone,
-	PageZoneNumbering,
+	PageZoneCounterPattern,
 	ParagraphSettings,
 	PaperPreset,
 	RectSettings,
@@ -312,6 +312,8 @@ class DocumentStore {
 	readonly embedAwaitingDelete = $derived.by((): string | null => {
 		const active = this.activeBlock;
 		if (!active) return null;
+		// Zone blocks are never "awaiting delete" via the embed path.
+		if (active.zoneKind) return null;
 
 		if (active.image || active.line || active.rect) return active.id;
 		if (active.footnote && active.text === "") return active.id;
@@ -357,6 +359,8 @@ class DocumentStore {
 		const idx = this.blockIndex(id);
 		if (idx < 0) return null;
 		const b = this.model.blocks[idx];
+		// pageCounter chips are non-deletable when zone numbering is enabled.
+		if (b.pageCounter) return null;
 		if (
 			!(
 				b.image ||
@@ -595,7 +599,9 @@ class DocumentStore {
 	}
 
 	get activeBlock(): Block {
-		return this.findBlock(this.activeBlockId ?? "") ?? this.model.blocks[0];
+		const found = this.findBlock(this.activeBlockId ?? "");
+		if (found) return found;
+		return this.model.blocks.find((b) => !b.zoneKind) ?? this.model.blocks[0];
 	}
 
 	readonly isEditingHeadingBlock = $derived(this.activeBlock.heading !== undefined);
@@ -2193,47 +2199,109 @@ class DocumentStore {
 
 	// ── Page zones (header / footer) ─────────────────────────────────────────
 
-	/** Currently active zone kind (null = none). */
-	activeZone = $state<"header" | "footer" | null>(null);
+	/** Active zone kind, derived from which zone block is currently focused. */
+	readonly activeZone = $derived(
+		this.findBlock(this.activeBlockId ?? "")?.zoneKind ?? null,
+	);
 
-	getZone(kind: "header" | "footer"): PageZone | undefined {
-		return this.model.pages[0]?.[kind];
+	readonly headerBlocks = $derived(
+		this.model.blocks.filter((b) => b.zoneKind === "header"),
+	);
+
+	readonly footerBlocks = $derived(
+		this.model.blocks.filter((b) => b.zoneKind === "footer"),
+	);
+
+	isZoneEnabled(kind: "header" | "footer"): boolean {
+		return this.model.blocks.some((b) => b.zoneKind === kind);
 	}
 
-	activateZone(kind: "header" | "footer"): void {
-		this.activeZone = kind;
-		this.activeBlockId = null;
+	/** Pattern of the page counter in the given zone, or null if no counter. */
+	zoneCounterPattern(kind: "header" | "footer"): PageZoneCounterPattern | null {
+		const counter = this.model.blocks.find(
+			(b) => b.zoneKind === kind && b.pageCounter,
+		);
+		return counter?.pageCounter?.pattern ?? null;
 	}
 
-	deactivateZone(): void {
-		this.activeZone = null;
+	/** Insert the initial zone blocks (text placeholder + optional counter blocks). */
+	addZone(kind: "header" | "footer"): void {
+		if (this.isZoneEnabled(kind)) {
+			// Already exists — just focus the first zone block.
+			const first = this.model.blocks.find((b) => b.zoneKind === kind);
+			if (first) {
+				this.activeBlockId = first.id;
+				this.pendingFocusAction = { kind: "caret", blockId: first.id, offset: 0 };
+			}
+			return;
+		}
+		const textBlock: Block = {
+			id: newId(),
+			text: "",
+			zoneKind: kind,
+			placeholder: kind === "header" ? "Page header" : "Page footer",
+		};
+		// Prepend zone blocks before body blocks (header before footer).
+		const insertBefore =
+			kind === "header"
+				? this.model.blocks.findIndex((b) => b.zoneKind !== "header")
+				: this.model.blocks.findIndex((b) => !b.zoneKind);
+		if (insertBefore < 0) {
+			this.model.blocks.push(textBlock);
+		} else {
+			this.model.blocks.splice(insertBefore, 0, textBlock);
+		}
+		this.activeBlockId = textBlock.id;
+		this.pendingFocusAction = { kind: "caret", blockId: textBlock.id, offset: 0 };
 	}
 
-	updateZoneText(kind: "header" | "footer", text: string): void {
-		const page = this.model.pages[0];
-		if (!page) return;
-		const existing = page[kind];
-		page[kind] = { ...(existing ?? { text: "" }), text };
+	/** Remove all blocks for the given zone kind. */
+	removeZone(kind: "header" | "footer"): void {
+		this.model.blocks = this.model.blocks.filter((b) => b.zoneKind !== kind);
+		if (this.activeZone === kind) this.activeBlockId = null;
 	}
 
-	updateZoneNumbering(kind: "header" | "footer", numbering: PageZoneNumbering | undefined): void {
-		const page = this.model.pages[0];
-		if (!page) return;
-		const existing = page[kind] ?? { text: "" };
-		page[kind] = { ...existing, numbering };
+	/** Add a page counter (and preceding #h(1fr)) to the zone. */
+	enableZoneNumbering(kind: "header" | "footer", pattern: PageZoneCounterPattern): void {
+		if (this.zoneCounterPattern(kind) !== null) {
+			this.updateZoneCounterPattern(kind, pattern);
+			return;
+		}
+		const lastZoneIdx = this.model.blocks.reduce((last, b, i) => {
+			return b.zoneKind === kind ? i : last;
+		}, -1);
+		if (lastZoneIdx < 0) return;
+		const spacerId: string = newId();
+		const counterId: string = newId();
+		this.model.blocks.splice(lastZoneIdx + 1, 0,
+			{ id: spacerId, text: "", zoneKind: kind, continuation: true, hSpacing: { amount: { value: 1, unit: "fr" } } },
+			{ id: counterId, text: "", zoneKind: kind, continuation: true, pageCounter: { pattern } },
+		);
 	}
 
-	updateZoneAscent(ascent: string | undefined): void {
-		const page = this.model.pages[0];
-		if (!page) return;
-		const existing = page.header ?? { text: "" };
-		page.header = { ...existing, ascent };
+	/** Remove the page counter (and its auto-spacer) from the zone. */
+	disableZoneNumbering(kind: "header" | "footer"): void {
+		const blocks = this.model.blocks;
+		const counterIdx = blocks.findIndex((b) => b.zoneKind === kind && b.pageCounter);
+		if (counterIdx < 0) return;
+		// Also remove the preceding hSpacing if it belongs to the same zone.
+		const prev = blocks[counterIdx - 1];
+		const removeFrom =
+			prev?.zoneKind === kind && prev?.hSpacing ? counterIdx - 1 : counterIdx;
+		blocks.splice(removeFrom, counterIdx - removeFrom + 1);
 	}
 
-	clearZone(kind: "header" | "footer"): void {
-		const page = this.model.pages[0];
-		if (!page) return;
-		delete page[kind];
+	updateZoneCounterPattern(kind: "header" | "footer", pattern: PageZoneCounterPattern): void {
+		const block = this.model.blocks.find((b) => b.zoneKind === kind && b.pageCounter);
+		if (block?.pageCounter) block.pageCounter = { pattern };
+	}
+
+	get headerAscent(): string | undefined {
+		return this.model.headerAscent;
+	}
+
+	set headerAscent(value: string | undefined) {
+		this.model.headerAscent = value;
 	}
 
 	load(model: DocumentModel): void {

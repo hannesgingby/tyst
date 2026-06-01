@@ -86,8 +86,22 @@
 	</div>
 
 	<div class="flex shrink-0 items-center gap-6">
-		{@render action("Header", "plus")}
-		{@render action("Footer", "plus")}
+		<button
+			type="button"
+			class={[actionClass, "gap-1.5"]}
+			onclick={() => documentStore.addZone("header")}
+		>
+			<Icon name={documentStore.isZoneEnabled("header") ? "check" : "plus"} class="size-4 shrink-0" />
+			Header
+		</button>
+		<button
+			type="button"
+			class={[actionClass, "gap-1.5"]}
+			onclick={() => documentStore.addZone("footer")}
+		>
+			<Icon name={documentStore.isZoneEnabled("footer") ? "check" : "plus"} class="size-4 shrink-0" />
+			Footer
+		</button>
 		<DropdownMenu
 			bind:value={preset}
 			options={PAPER_PRESETS}

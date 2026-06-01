@@ -169,8 +169,9 @@
     const isReference = $derived(!!block.reference);
     const isCitation = $derived(!!block.citation);
     const isBibliography = $derived(!!block.bibliography);
+    const isPageCounter = $derived(!!block.pageCounter);
     const isInline = $derived(
-        block.continuation || renderInline || !!block.footnoteMarker || isReference || isCitation,
+        block.continuation || renderInline || !!block.footnoteMarker || isReference || isCitation || isPageCounter,
     );
     const isList = $derived(!!block.list);
     const isEmbed = $derived(!!(block.image || block.line || block.rect));
@@ -251,15 +252,25 @@
     const footnoteBodyNumber = $derived(
         isFootnoteBody ? documentStore.footnoteNumberForBody(block.id) : 0,
     );
+    const pageCounterPreviewText = $derived.by(() => {
+        if (!block.pageCounter) return "";
+        const p = block.pageCounter.pattern;
+        if (p === "1/1") return "1/5";
+        if (p === "I") return "I";
+        if (p === "i") return "i";
+        if (p === "A") return "A";
+        if (p === "a") return "a";
+        return "1";
+    });
 
     /** Empty tail segment after an inline embed — needs a hit target and caret. */
     const trailAfterInlineEmbed = $derived.by(() => {
-        if (!isInline || block.footnoteMarker || block.reference || block.citation || block.text !== "")
+        if (!isInline || block.footnoteMarker || block.reference || block.citation || block.pageCounter || block.text !== "")
             return false;
         const i = documentStore.blockIndex(block.id);
         if (i <= 0) return false;
         const prev = documentStore.model.blocks[i - 1];
-        return !!(prev?.footnoteMarker || prev?.hSpacing || prev?.reference || prev?.citation);
+        return !!(prev?.footnoteMarker || prev?.hSpacing || prev?.reference || prev?.citation || prev?.pageCounter);
     });
 
     // Outline body entries: walk all blocks, count outlined headings, and pick
@@ -981,6 +992,20 @@
             onfocusblock(block.id);
         }}>{footnoteMarkerNumber}</span
     >
+{:else if isPageCounter}
+    <!-- Non-interactive page counter chip. Non-deletable when zone numbering is on. -->
+    <span
+        bind:this={outerEl}
+        data-block-id={block.id}
+        class="doc-block-page-counter inline select-none rounded px-1 opacity-60 outline outline-1 outline-dashed"
+        style:font-family={`"${typography.fontFamily}", serif`}
+        style:font-size="{fontSizePx}px"
+        style:line-height={lineHeight}
+        style:color={typography.color}
+        style:outline-color={typography.color}
+        style:vertical-align="baseline"
+        aria-label="Page number"
+    >{pageCounterPreviewText}</span>
 {:else if isReference || isCitation}
     <!-- svelte-ignore a11y_no_static_element_interactions -->
     <span

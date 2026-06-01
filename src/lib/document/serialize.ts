@@ -15,7 +15,6 @@ import type {
 	FootnotePageSettings,
 	OutlineSettings,
 	PageSettings,
-	PageZone,
 	ParagraphSettings,
 	RectSettings,
 	ReferenceSettings,
@@ -84,36 +83,32 @@ function serializeMargins(m: Margins): string {
 	return `(${parts.join(", ")})`;
 }
 
-function serializePageZone(zone: PageZone): string {
-	const { text, numbering } = zone;
+/** Serialize zone blocks (header/footer) into a Typst `context [...]` expression. */
+function serializeZoneBlocks(blocks: Block[]): string {
+	if (blocks.length === 0) return "";
 	const parts: string[] = [];
-
-	if (numbering) {
-		const needsBoth = numbering.pattern.length > 1;
-		const counter = needsBoth
-			? `#counter(page).display("${numbering.pattern}", both: true)`
-			: `#counter(page).display("${numbering.pattern}")`;
-
-		if (numbering.align === "left") {
-			parts.push(counter);
-			if (text) parts.push(text);
-		} else if (numbering.align === "center") {
-			if (text) parts.push(text);
-			parts.push("#h(1fr)", counter, "#h(1fr)");
-		} else {
-			if (text) parts.push(text);
-			parts.push("#h(1fr)", counter);
+	for (const b of blocks) {
+		if (b.pageCounter) {
+			const p = b.pageCounter.pattern;
+			const needsBoth = p.length > 1;
+			parts.push(needsBoth
+				? `#counter(page).display("${p}", both: true)`
+				: `#counter(page).display("${p}")`);
+		} else if (b.hSpacing) {
+			const { value, unit } = b.hSpacing.amount;
+			const args = [`${typstNumber(value)}${unit}`];
+			if (b.hSpacing.weak) args.push("weak: true");
+			parts.push(`#h(${args.join(", ")})`);
+		} else if (b.text) {
+			parts.push(escapeText(b.text));
 		}
-	} else if (text) {
-		parts.push(text);
 	}
-
 	if (parts.length === 0) return "";
-	return `context [${parts.join(" ")}]`;
+	return `context [${parts.join("")}]`;
 }
 
 /** Serialize a full #set page(...) call for a given PageSettings. */
-function serializePageSetFull(page: PageSettings, numbering?: string): string {
+function serializePageSetFull(page: PageSettings, numbering?: string, headerContent?: string, footerContent?: string, headerAscent?: string): string {
 	const lines: string[] = [];
 	const paperName = TYPST_PAPER_NAME[page.preset];
 	if (paperName) {
@@ -126,16 +121,12 @@ function serializePageSetFull(page: PageSettings, numbering?: string): string {
 	lines.push(`  margin: ${serializeMargins(page.margins)},`);
 	lines.push(`  fill: ${hexToRgb(page.fill)},`);
 	if (numbering) lines.push(`  numbering: "${numbering}",`);
-	if (page.header) {
-		const hSerialized = serializePageZone(page.header);
-		if (hSerialized) {
-			lines.push(`  header: ${hSerialized},`);
-			if (page.header.ascent) lines.push(`  header-ascent: ${page.header.ascent},`);
-		}
+	if (headerContent) {
+		lines.push(`  header: ${headerContent},`);
+		if (headerAscent) lines.push(`  header-ascent: ${headerAscent},`);
 	}
-	if (page.footer) {
-		const fSerialized = serializePageZone(page.footer);
-		if (fSerialized) lines.push(`  footer: ${fSerialized},`);
+	if (footerContent) {
+		lines.push(`  footer: ${footerContent},`);
 	}
 	return `#set page(\n${lines.join("\n")}\n)`;
 }
@@ -222,7 +213,11 @@ function serializePreamble(doc: DocumentModel, hasPageFormRef = false): string {
 			: null;
 
 	const blockIndexById = new Map(doc.blocks.map((b, idx) => [b.id, idx]));
-	const parts = [serializePageSetFull(doc.pages[0], hasPageFormRef ? "1" : undefined), textRule, parRule];
+	const headerBlocks = doc.blocks.filter((b) => b.zoneKind === "header");
+	const footerBlocks = doc.blocks.filter((b) => b.zoneKind === "footer");
+	const headerContent = serializeZoneBlocks(headerBlocks) || undefined;
+	const footerContent = serializeZoneBlocks(footerBlocks) || undefined;
+	const parts = [serializePageSetFull(doc.pages[0], hasPageFormRef ? "1" : undefined, headerContent, footerContent, doc.headerAscent), textRule, parRule];
 	if (headingRule) parts.push(headingRule);
 	parts.push(...serializeFootnotePageRules(doc, 0, blockIndexById, []));
 
@@ -706,7 +701,7 @@ export function serializeDocument(
 
 		handlePageBreak(block);
 
-		if (block.footnote || block.footnoteSeparator || block.pageBreak) {
+		if (block.zoneKind || block.footnote || block.footnoteSeparator || block.pageBreak) {
 			i++;
 			continue;
 		}
