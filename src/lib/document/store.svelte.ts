@@ -1401,12 +1401,13 @@ class DocumentStore {
 
 		if (this.intraBlockSelection) {
 			const { blockId, start, end } = this.intraBlockSelection;
-			const block = this.findBlock(blockId);
-			if (block && start === 0 && end === block.text.length) {
+			this.intraBlockSelection = null; // consume immediately to prevent stale reuse
+			const selBlock = this.findBlock(blockId);
+			if (selBlock && start === 0 && end === selBlock.text.length) {
 				// Entire block selected — apply directly, no split needed
-				block.typography = { ...this.resolveTypography(block) };
-				setter(block.typography, newValue);
-				this.pendingSelection = { blockId: block.id, start: 0, end: block.text.length };
+				selBlock.typography = { ...this.resolveTypography(selBlock) };
+				setter(selBlock.typography, newValue);
+				this.pendingSelection = { blockId: selBlock.id, start: 0, end: selBlock.text.length };
 				return;
 			}
 			const midId = this.splitBlockAtSelection(blockId, start, end);

@@ -362,8 +362,10 @@
                         : 0;
                 const oldBlockId = documentStore.activeBlock.id;
                 toggle(offset);
-                // Sync DOM if text was truncated (caret-in-middle split)
-                if (el instanceof HTMLElement) {
+                // Only sync the DOM element that actually belongs to oldBlockId.
+                // If activeBlockId changed (a split happened), el may belong to a
+                // different block, and syncing it against oldBlock.text would corrupt DOM.
+                if (el instanceof HTMLElement && el.dataset.blockId === oldBlockId) {
                     const oldBlock = documentStore.findBlock(oldBlockId);
                     if (oldBlock && el.textContent !== oldBlock.text) {
                         el.textContent = oldBlock.text;

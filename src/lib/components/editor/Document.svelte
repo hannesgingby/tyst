@@ -875,8 +875,15 @@
                         else documentStore.toggleUnderline(caretOffset);
                         // When the block text was truncated (caret-in-middle split),
                         // Block.svelte skips the DOM update while the element is focused.
+                        // Only sync the DOM element that actually belongs to oldBlockId.
+                        // If activeBlockId changed (a split happened), active may belong to
+                        // a different block, and syncing it against oldBlock.text would corrupt DOM.
                         const oldBlock = documentStore.findBlock(oldBlockId);
-                        if (oldBlock && active.textContent !== oldBlock.text) {
+                        if (
+                            oldBlock &&
+                            active.dataset.blockId === oldBlockId &&
+                            active.textContent !== oldBlock.text
+                        ) {
                             syncBlockDom(active, oldBlock.text);
                         }
                         return;
