@@ -804,7 +804,9 @@
     <!-- svelte-ignore a11y_no_static_element_interactions -->
     <span
         bind:this={outerEl}
-        class="doc-embed relative inline-block cursor-pointer align-baseline"
+        class="doc-embed relative cursor-pointer align-baseline"
+        class:inline-block={hsp.amount.unit !== 'fr'}
+        class:flex-1={hsp.amount.unit === 'fr'}
         data-block-id={block.id}
         tabindex="-1"
         onclick={(e) => {
@@ -815,18 +817,20 @@
         }}
     >
         <span
-            class="inline-block select-none rounded opacity-40 outline-dashed outline-1"
+            class="select-none rounded opacity-40 outline-dashed outline-1"
+            class:inline-block={hsp.amount.unit !== 'fr'}
+            class:block={hsp.amount.unit === 'fr'}
             style:outline-color={typography.color}
-            style:width="{hsp.amount.unit === 'fr' || hsp.amount.unit === '%'
-                ? 24
-                : hsp.amount.value}{hsp.amount.unit === 'fr' ||
-            hsp.amount.unit === '%'
-                ? 'px'
-                : hsp.amount.unit}"
+            style:width={hsp.amount.unit === 'fr'
+                ? '100%'
+                : hsp.amount.unit === '%'
+                    ? `${hsp.amount.value}%`
+                    : `${hsp.amount.value}${hsp.amount.unit}`}
             style:min-width="{8 * scale}px"
             style:height="{fontSizePx * 0.8}px"
-            style:vertical-align="{(fontSizePx * (lineHeight - 0.8)) / 2 -
-                fontSizePx * 0.35}px"
+            style:vertical-align={hsp.amount.unit !== 'fr'
+                ? `${(fontSizePx * (lineHeight - 0.8)) / 2 - fontSizePx * 0.35}px`
+                : undefined}
         ></span>
     </span>
 {:else if isPageBreak}

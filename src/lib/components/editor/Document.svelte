@@ -1262,10 +1262,12 @@
                         </div>
                     {:else if item.kind === "inlineLine"}
                         {@const lineAlign = item.items[0].alignment ?? "left"}
+                        {@const hasFrHSpace = item.items.some(b => b.hSpacing?.amount.unit === "fr")}
                         <!-- svelte-ignore a11y_no_static_element_interactions -->
                         <div
-                            class="inline-line w-full"
-                            style:text-align={lineAlign}
+                            class={["inline-line w-full", hasFrHSpace ? "flex items-baseline" : ""]}
+                            style:text-align={hasFrHSpace ? undefined : lineAlign}
+                            style:justify-content={hasFrHSpace ? (lineAlign === "right" ? "flex-end" : lineAlign === "center" ? "center" : "flex-start") : undefined}
                             onmousedown={(e) =>
                                 onInlineLineMouseDown(e, item.items)}
                         >
