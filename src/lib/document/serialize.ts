@@ -84,7 +84,7 @@ function serializeMargins(m: Margins): string {
 }
 
 /** Serialize a full #set page(...) call for a given PageSettings. */
-function serializePageSetFull(page: PageSettings): string {
+function serializePageSetFull(page: PageSettings, numbering?: string): string {
 	const lines: string[] = [];
 	const paperName = TYPST_PAPER_NAME[page.preset];
 	if (paperName) {
@@ -96,6 +96,7 @@ function serializePageSetFull(page: PageSettings): string {
 	if (page.landscape) lines.push(`  flipped: true,`);
 	lines.push(`  margin: ${serializeMargins(page.margins)},`);
 	lines.push(`  fill: ${hexToRgb(page.fill)},`);
+	if (numbering) lines.push(`  numbering: "${numbering}",`);
 	return `#set page(\n${lines.join("\n")}\n)`;
 }
 
@@ -160,7 +161,7 @@ function serializePageTransition(
 }
 
 /** The document preamble: page, default text and default paragraph set rules. */
-function serializePreamble(doc: DocumentModel): string {
+function serializePreamble(doc: DocumentModel, hasPageFormRef = false): string {
 	const textRule = `#set text(\n${textArgs(doc.typography)
 		.map((l) => `  ${l},`)
 		.join("\n")}\n)`;
@@ -181,7 +182,7 @@ function serializePreamble(doc: DocumentModel): string {
 			: null;
 
 	const blockIndexById = new Map(doc.blocks.map((b, idx) => [b.id, idx]));
-	const parts = [serializePageSetFull(doc.pages[0]), textRule, parRule];
+	const parts = [serializePageSetFull(doc.pages[0], hasPageFormRef ? "1" : undefined), textRule, parRule];
 	if (headingRule) parts.push(headingRule);
 	parts.push(...serializeFootnotePageRules(doc, 0, blockIndexById, []));
 
@@ -604,7 +605,8 @@ export function serializeDocument(
 	doc: DocumentModel,
 	pageBreakBlockIds: string[] = [],
 ): string {
-	const preamble = serializePreamble(doc);
+	const hasPageFormRef = doc.blocks.some(b => b.reference?.pageForm);
+	const preamble = serializePreamble(doc, hasPageFormRef);
 
 	// Collect block IDs that are referenced so we can add Typst labels to them.
 	const referencedBlockIds = new Set(
