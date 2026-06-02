@@ -16,6 +16,8 @@
 		menuEl?: HTMLElement | null;
 		/** Fired when the clip height transition finishes. */
 		onClipHeightTransitionEnd?: () => void;
+		/** Extra bottom margin below the group (headings/list). Off for toolbar popups that use Popup margins. */
+		toolbarInset?: boolean;
 		list: Snippet;
 		menu?: Snippet;
 	}
@@ -27,6 +29,7 @@
 		menuEl = null,
 		menuAlign = "bottom",
 		onClipHeightTransitionEnd,
+		toolbarInset = true,
 		list,
 		menu,
 	}: Props = $props();
@@ -88,17 +91,21 @@
 </script>
 
 <div
-	class="relative z-[60] mb-4"
+	class={["relative z-[60]", toolbarInset && "mb-4"]}
 	bind:this={trackEl}
 	style:height={trackHeight > 0 ? `${trackHeight}px` : undefined}
 >
-	<div class="flex">
+	<div class="flex items-stretch">
 		<div bind:this={listShellEl} class="shrink-0">
 			{@render list()}
 		</div>
 		{#if showMenu && menu}
 			<!-- Explicit spacer: flex gap is not hoverable; this keeps the 10px gap open. -->
-			<div class="shrink-0" style:width="{GAP_PX}px" aria-hidden="true"></div>
+			<div
+				class="shrink-0 self-stretch"
+				style:width="{GAP_PX}px"
+				aria-hidden="true"
+			></div>
 			<div class="relative shrink-0" style:width="{menuWidth}px">
 				<div
 					class="absolute inset-x-0 flex flex-col justify-end overflow-hidden rounded-lg transition-[height,bottom] duration-100 ease-[cubic-bezier(0.33,1,0.68,1)]"

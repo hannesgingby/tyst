@@ -12,10 +12,11 @@
 	import Popup from "$lib/components/ui/Popup.svelte";
 	import PopupSectionHeader from "$lib/components/ui/PopupSectionHeader.svelte";
 	import Tag from "$lib/components/ui/Tag.svelte";
+	import ContextGroup from "./ContextGroup.svelte";
+	import TypographyLanguageMenu from "./TypographyLanguageMenu.svelte";
 	import { documentStore } from "$lib/document/store.svelte";
 	import { fontStore } from "$lib/system/fonts.svelte";
 	import { FONT_SIZE_UNITS, fontSizeUnit, ptToUnit, unitToPt } from "$lib/document/units";
-	import { LANGUAGES } from "$lib/document/languages";
 
 	// "em" is added as a context-relative unit; handled separately since its
 	// conversion factor depends on the body font size, not a fixed pt ratio.
@@ -60,170 +61,216 @@
 
 	const hoverPin = getContext<HoverPopupPin | undefined>(HOVER_POPUP_PIN_KEY);
 	let fontMenuOpen = $state(false);
+	let langMenuOpen = $state(false);
+	let languageActive = $state(false);
+	let popupHovered = $state(false);
+	let popupRegionEl = $state<HTMLElement | null>(null);
+	let languageAnchorEl = $state<HTMLElement | null>(null);
+	let languageMenuEl = $state<HTMLElement | null>(null);
+
+	const showLanguageMenu = $derived(languageActive || langMenuOpen);
 
 	$effect(() => {
-		hoverPin?.setPinned(fontMenuOpen);
+		hoverPin?.setPinned(fontMenuOpen || langMenuOpen || popupHovered);
 		return () => hoverPin?.setPinned(false);
 	});
 </script>
 
-<Popup padding={16} class="w-[344px] pb-5">
-	<section>
-		<PopupSectionHeader title="Paragraph">
-			<Tag label="default" variant="purple" bind:linked={documentStore.paragraphLinked} />
-		</PopupSectionHeader>
-
-		<div class="mt-[13px] flex flex-col gap-[13px]">
-			<Input
-				value={paragraph.spacing}
-				icon="paragraph-spacing"
-				iconClass="size-[19px]"
-				unit="em"
-				min={0.5}
-				max={3}
-				step={0.1}
-				dragStep={0.1}
-				decimals={spacingFollowsLeading ? 2 : 1}
-				onchange={(v) => documentStore.setParagraph("spacing", v)}
-			/>
-
-			<div class="grid grid-cols-2 gap-2">
-				<FieldLabel label="First-line indent">
-					<Input
-						value={paragraph.firstLineIndent}
-						unit="pt"
-						emptyLabel="None"
-						inactive={paragraph.firstLineIndent == null}
-						nullable
-						min={0}
-						max={72}
-						step={0.5}
-						decimals={1}
-						onchange={(v) => documentStore.setFirstLineIndent(v)}
-						onnull={() => documentStore.setFirstLineIndent(null)}
-					/>
-				</FieldLabel>
-				<FieldLabel label="Hanging indent">
-					<Input
-						value={paragraph.hangingIndent}
-						unit="pt"
-						min={0}
-						max={72}
-						step={0.5}
-						decimals={1}
-						onchange={(v) => documentStore.setParagraph("hangingIndent", v)}
-					/>
-				</FieldLabel>
-			</div>
-
-			<div class="flex items-center justify-between px-1">
-				<Checkbox
-					label="Justified text"
-					class="pl-1.5"
-					checked={paragraph.justify}
-					onchange={(v) => documentStore.setParagraph("justify", v)}
-				/>
-				<button
-					type="button"
-					class="flex size-5 items-center justify-center text-icon transition-colors duration-150 ease-out hover:text-text-200"
-					aria-label="More options"
-				>
-					<Icon name="more-horiz" class="size-5" />
-				</button>
-			</div>
-		</div>
-	</section>
-
-	<section class="mt-6">
-		<PopupSectionHeader title="Typography">
-			<Tag label={documentStore.typographyContext} variant="blue" bind:linked={documentStore.typographyLinked} />
-		</PopupSectionHeader>
-
-		<div class="mt-[13px] flex flex-col gap-2">
-			<DropdownMenu
-				bind:open={fontMenuOpen}
-				value={typography.fontFamily}
-				options={fontOptions}
-				placement="right"
-				verticalAlign="center"
-				searchable
-				searchPlaceholder="Search fonts…"
-				popupClass="flex h-[300px] w-[340px] min-w-[340px] shrink-0 flex-col"
-				maxHeightClass="min-h-0 flex-1 overflow-y-auto"
-				onchange={(v) => documentStore.setTypography("fontFamily", v)}
-			/>
-
-			<div class="grid grid-cols-2 gap-2">
-				<DropdownMenu
-					value={typography.weight}
-					options={weightOptions}
-					disabled={isHeadingBlock}
-					onchange={(v) => documentStore.setTypography("weight", v)}
-				/>
-				<Input
-					value={sizeValue}
-					unit={sizeUnit}
-					units={sizeUnitOptions}
-					min={sizeMin}
-					max={sizeMax}
-					step={sizeStep}
-					decimals={sizeDecimals}
-					onchange={onSizeChange}
-					onunitchange={(u) => (sizeUnit = u)}
-				/>
-			</div>
-
-			<div class="grid grid-cols-2 gap-2">
-				<Input
-					value={typography.leading}
-					icon="line-height"
-					unit="em"
-					min={0.5}
-					max={3}
-					step={0.05}
-					decimals={2}
-					disabled={isHeadingBlock}
-					onchange={(v) => documentStore.setTypography("leading", v)}
-				/>
-				<Input
-					value={typography.tracking}
-					icon="letter-spacing"
-					unit="%"
-					min={-10}
-					max={10}
-					step={0.1}
-					decimals={1}
-					onchange={(v) => documentStore.setTypography("tracking", v)}
-				/>
-			</div>
-		</div>
-	</section>
-
-	<section class="mt-6">
-		<PopupSectionHeader title="Language">
-			<Tag label="default" variant="blue" bind:linked={documentStore.langLinked} />
-		</PopupSectionHeader>
-
-		<div class="mt-[13px]">
-			<DropdownMenu
-				value={documentStore.popupLang}
-				options={LANGUAGES}
-				placement="right"
-				verticalAlign="center"
-				searchable
-				searchPlaceholder="Search languages…"
-				popupClass="flex h-[300px] w-[280px] min-w-[280px] shrink-0 flex-col"
-				maxHeightClass="min-h-0 flex-1 overflow-y-auto"
-				onchange={(v) => documentStore.setLang(v)}
-			/>
-		</div>
-	</section>
-
-	<button
-		type="button"
-		class="mt-6 ml-auto flex items-center gap-1 text-body-14-tight text-text-200 transition-colors duration-150 ease-out hover:text-text-150"
+<!-- svelte-ignore a11y_no_static_element_interactions -->
+<div
+	bind:this={popupRegionEl}
+	onmouseenter={() => (popupHovered = true)}
+	onmouseleave={(event) => {
+		const related = event.relatedTarget;
+		if (
+			related instanceof Node &&
+			event.currentTarget instanceof Node &&
+			event.currentTarget.contains(related)
+		) {
+			return;
+		}
+		popupHovered = false;
+		languageActive = false;
+	}}
+	onfocusin={() => (popupHovered = true)}
+	onfocusout={(event) => {
+		const next = event.relatedTarget;
+		if (
+			next instanceof Node &&
+			event.currentTarget instanceof Node &&
+			event.currentTarget.contains(next)
+		) {
+			return;
+		}
+		popupHovered = false;
+	}}
+>
+	<ContextGroup
+		showMenu={showLanguageMenu}
+		toolbarInset={false}
+		activeRowEl={languageAnchorEl}
+		menuEl={languageMenuEl}
+		menuAlign="center"
 	>
-		Format groups
-		<Icon name="arrow-up-right" class="size-4" />
-	</button>
-</Popup>
+		{#snippet list()}
+			<Popup padding={16} class={["w-[344px] pb-5", showLanguageMenu && "mr-0"]}>
+				<section>
+					<PopupSectionHeader title="Paragraph">
+						<Tag label="default" variant="purple" bind:linked={documentStore.paragraphLinked} />
+					</PopupSectionHeader>
+
+					<div class="mt-[13px] flex flex-col gap-[13px]">
+						<Input
+							value={paragraph.spacing}
+							icon="paragraph-spacing"
+							iconClass="size-[19px]"
+							unit="em"
+							min={0.5}
+							max={3}
+							step={0.1}
+							dragStep={0.1}
+							decimals={spacingFollowsLeading ? 2 : 1}
+							onchange={(v) => documentStore.setParagraph("spacing", v)}
+						/>
+
+						<div class="grid grid-cols-2 gap-2">
+							<FieldLabel label="First-line indent">
+								<Input
+									value={paragraph.firstLineIndent}
+									unit="pt"
+									emptyLabel="None"
+									inactive={paragraph.firstLineIndent == null}
+									nullable
+									min={0}
+									max={72}
+									step={0.5}
+									decimals={1}
+									onchange={(v) => documentStore.setFirstLineIndent(v)}
+									onnull={() => documentStore.setFirstLineIndent(null)}
+								/>
+							</FieldLabel>
+							<FieldLabel label="Hanging indent">
+								<Input
+									value={paragraph.hangingIndent}
+									unit="pt"
+									min={0}
+									max={72}
+									step={0.5}
+									decimals={1}
+									onchange={(v) => documentStore.setParagraph("hangingIndent", v)}
+								/>
+							</FieldLabel>
+						</div>
+
+						<div class="flex items-center justify-between px-1">
+							<Checkbox
+								label="Justified text"
+								class="pl-1.5"
+								checked={paragraph.justify}
+								onchange={(v) => documentStore.setParagraph("justify", v)}
+							/>
+							<button
+								type="button"
+								class="flex size-5 items-center justify-center text-icon transition-colors duration-150 ease-out hover:text-text-200"
+								aria-label="More options"
+							>
+								<Icon name="more-horiz" class="size-5" />
+							</button>
+						</div>
+					</div>
+				</section>
+
+				<section class="mt-8">
+					<PopupSectionHeader title="Typography">
+						<Tag label={documentStore.typographyContext} variant="blue" bind:linked={documentStore.typographyLinked} />
+					</PopupSectionHeader>
+
+					<div class="mt-[13px] flex flex-col gap-2">
+						<DropdownMenu
+							bind:open={fontMenuOpen}
+							value={typography.fontFamily}
+							options={fontOptions}
+							placement="right"
+							verticalAlign="center"
+							searchable
+							searchPlaceholder="Search fonts…"
+							popupClass="flex h-[300px] w-[340px] min-w-[340px] shrink-0 flex-col"
+							maxHeightClass="min-h-0 flex-1 overflow-y-auto"
+							onchange={(v) => documentStore.setTypography("fontFamily", v)}
+						/>
+
+						<div class="grid grid-cols-2 gap-2">
+							<DropdownMenu
+								value={typography.weight}
+								options={weightOptions}
+								disabled={isHeadingBlock}
+								onchange={(v) => documentStore.setTypography("weight", v)}
+							/>
+							<Input
+								value={sizeValue}
+								unit={sizeUnit}
+								units={sizeUnitOptions}
+								min={sizeMin}
+								max={sizeMax}
+								step={sizeStep}
+								decimals={sizeDecimals}
+								onchange={onSizeChange}
+								onunitchange={(u) => (sizeUnit = u)}
+							/>
+						</div>
+
+						<div class="grid grid-cols-2 gap-2">
+							<Input
+								value={typography.leading}
+								icon="line-height"
+								unit="em"
+								min={0.5}
+								max={3}
+								step={0.05}
+								decimals={2}
+								disabled={isHeadingBlock}
+								onchange={(v) => documentStore.setTypography("leading", v)}
+							/>
+							<Input
+								value={typography.tracking}
+								icon="letter-spacing"
+								unit="%"
+								min={-10}
+								max={10}
+								step={0.1}
+								decimals={1}
+								onchange={(v) => documentStore.setTypography("tracking", v)}
+							/>
+						</div>
+					</div>
+
+					<div class="mt-6 flex gap-x-4 items-center">
+						<button
+							type="button"
+							class="ml-auto flex items-center gap-1 text-body-14-tight text-text-200 transition-colors duration-150 ease-out hover:text-text-150"
+						>
+							Format groups
+							<Icon name="arrow-up-right" class="size-4" />
+						</button>
+						<button
+							type="button"
+							bind:this={languageAnchorEl}
+							class="block text-body-14-tight text-text-200 transition-colors duration-150 ease-out hover:text-text-100"
+							onmouseenter={() => (languageActive = true)}
+							onfocus={() => (languageActive = true)}
+						>
+							Language...
+						</button>
+					</div>
+				</section>
+
+				
+			</Popup>
+		{/snippet}
+		{#snippet menu()}
+			<div bind:this={languageMenuEl} class="w-full">
+				<TypographyLanguageMenu bind:open={langMenuOpen} />
+			</div>
+		{/snippet}
+	</ContextGroup>
+</div>
