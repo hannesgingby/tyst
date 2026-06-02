@@ -48,6 +48,7 @@ import { PAPER_SIZES, matchPreset } from "./paperSizes";
 import { serializeDocument } from "./serialize";
 import { normalizeUrl } from "./url";
 import { DEFAULT_LANGUAGE } from "./languages";
+import { getDocLocale } from "./docLocale";
 
 function newId(): string {
 	return crypto.randomUUID();
@@ -1507,10 +1508,11 @@ class DocumentStore {
 				full: false,
 			};
 		}
+		const locale = getDocLocale(this.model.lang);
 		this.insertBlockObjectAt(this.model.blocks.length, {
-			text: "Sources",
+			text: "",
 			bibliography: true,
-			placeholder: "Sources",
+			placeholder: locale.bibliography,
 		});
 	}
 

@@ -15,6 +15,7 @@
     import type { Block, StrokeDash } from "$lib/document/types";
     import { imageCache } from "$lib/system/imageCache.svelte";
     import { isUrl, normalizeUrl } from "$lib/document/url";
+    import { getDocLocale } from "$lib/document/docLocale";
     import { getCaretOffset, setCaretOffset } from "./caret";
 
     const WEIGHT_CSS: Record<string, number> = {
@@ -230,9 +231,10 @@
     const referenceInlineLabel = $derived.by(() => {
         if (!block.reference) return "";
         if (block.reference.displayText) return block.reference.displayText;
+        const locale = getDocLocale(documentStore.model.lang);
         if (block.reference.pageForm) {
             const pageIndex = documentStore.blockPageIndex(block.reference.targetBlockId);
-            return `page ${pageIndex + 1}`;
+            return `${locale.page} ${pageIndex + 1}`;
         }
         const target = documentStore.findBlock(block.reference.targetBlockId);
         if (!target) return "?";
@@ -244,7 +246,7 @@
                 if (b.image) n++;
                 if (b.id === target.id) break;
             }
-            return `Figure ${n}`;
+            return `${locale.figure} ${n}`;
         }
         return "Reference";
     });
@@ -1144,7 +1146,7 @@
             tabindex="0"
             aria-multiline="false"
             data-block-id={block.id}
-            data-placeholder={titleOption !== "none" ? (effectivePlaceholder ?? "Sources") : undefined}
+            data-placeholder={titleOption !== "none" ? (effectivePlaceholder ?? getDocLocale(documentStore.model.lang).bibliography) : undefined}
             style:display={titleOption === "none" ? "none" : undefined}
             style:font-family={`"${typography.fontFamily}", serif`}
             style:font-size="{fontSizePx * 1.4}px"

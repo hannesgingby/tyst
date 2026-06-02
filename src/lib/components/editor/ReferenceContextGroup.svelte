@@ -6,6 +6,7 @@
 		type HoverPopupPin,
 	} from "$lib/components/ui/hoverPopupContext";
 	import { documentStore } from "$lib/document/store.svelte";
+	import { getDocLocale } from "$lib/document/docLocale";
 	import ContextGroup from "./ContextGroup.svelte";
 	import LinkDisplayTextMenu from "./LinkDisplayTextMenu.svelte";
 	import ReferenceDisplayTextMenu from "./ReferenceDisplayTextMenu.svelte";
@@ -62,6 +63,7 @@
 	const sections = $derived.by((): ReferenceSection[] => {
 		const { headings, figures } = documentStore.referenceSections;
 		const bib = documentStore.bibliographySettings;
+		const locale = getDocLocale(documentStore.model.lang);
 
 		const headingItems: ReferenceItem[] = headings.map(b => ({
 			id: b.id,
@@ -72,9 +74,9 @@
 
 		const figureItems: ReferenceItem[] = figures.map(b => ({
 			id: b.id,
-			label: b.image?.fileName || "Figure",
+			label: b.image?.fileName || locale.figure,
 			location: `Page ${documentStore.blockPageIndex(b.id) + 1}`,
-			displayText: b.image?.fileName || "Figure",
+			displayText: b.image?.fileName || locale.figure,
 		}));
 
 		const citationItems: ReferenceItem[] = bib.sources.map(s => {
