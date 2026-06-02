@@ -1,6 +1,8 @@
+<br><br>
 <p align="center">
   <img src="screenshots/screenshot-2026-06-02.png" alt="tyst" width="80%" />
 </p>
+<br><br>
 
 **tyst** is a minimal document editor that saves to [Typst](https://typst.app) source files and exports to PDF.
 
