@@ -1715,7 +1715,11 @@
             const block = documentStore.model.blocks.find((b) => b.id === popup.blockId);
             if (block) {
                 const m = popup.match;
-                block.text = block.text.slice(0, m.offset) + suggestion + block.text.slice(m.offset + m.length);
+                const newText = block.text.slice(0, m.offset) + suggestion + block.text.slice(m.offset + m.length);
+                block.text = newText;
+                // Also patch the live contenteditable so the active block stays in sync.
+                const el = blockEls.get(popup.blockId);
+                if (el) el.textContent = newText;
             }
             spellcheckStore.activePopup = null;
         }}
