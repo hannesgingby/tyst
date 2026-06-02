@@ -681,6 +681,158 @@ function serializeListGroup(items: Block[]): string {
 	return `#${call}(${args.join(", ")})${bodies}`;
 }
 
+/** Per-block paragraph overrides that differ from the document defaults. */
+function paragraphDiff(block: Block, doc: DocumentModel): Partial<ParagraphSettings> {
+	const para = block.paragraph ?? {};
+	const docPara = doc.paragraph;
+	const diff: Partial<ParagraphSettings> = {};
+	for (const k of Object.keys(para) as (keyof ParagraphSettings)[]) {
+		if (para[k] !== docPara[k]) (diff as Record<string, unknown>)[k] = para[k];
+	}
+	return diff;
+}
+
+function leadingForParBlock(
+	block: Block,
+	docTypo: TypographySettings,
+): number | undefined {
+	const typo = block.typography ?? {};
+	return typo.leading !== undefined && typo.leading !== docTypo.leading
+		? typo.leading
+		: undefined;
+}
+
+/** Stable key for matching blocks that share the same `#set par(...)` override. */
+function parOverrideKey(block: Block, doc: DocumentModel, docTypo: TypographySettings): string {
+	return parArgs(leadingForParBlock(block, docTypo), paragraphDiff(block, doc)).join(", ");
+}
+
+/** Inline `#text(...)` / `#underline[...]` for typography that differs from body defaults. */
+function serializeInlineTypography(
+	block: Block,
+	docTypo: TypographySettings,
+	doc: DocumentModel,
+): string {
+	const text = escapeText(block.text);
+	const typo = block.typography ?? {};
+	const docLang = doc.lang ?? DEFAULT_LANGUAGE;
+	const blockLangChanged = block.lang !== undefined && block.lang !== docLang;
+	const diffTypo: Partial<TypographySettings> = {};
+	for (const key of Object.keys(typo) as (keyof TypographySettings)[]) {
+		if (typo[key] !== docTypo[key]) diffTypo[key] = typo[key] as never;
+	}
+	const underlineChanged = (typo.underline ?? false) !== (docTypo.underline ?? false);
+	const { underline: _u, ...textDiffTypo } = diffTypo;
+	const tArgs = textArgs(textDiffTypo);
+	if (blockLangChanged) tArgs.push(`lang: "${langCode(block.lang!)}"`);
+	let result = text;
+	if (tArgs.length > 0) result = `#text(${tArgs.join(", ")})[${result}]`;
+	if (underlineChanged) result = `#underline[${result}]`;
+	return result;
+}
+
+/** Last index of a same-paragraph run sharing one `#set par(...)` scope, or `start` if none. */
+function findSameParGroupEnd(
+	blocks: Block[],
+	start: number,
+	doc: DocumentModel,
+	pageBreakSet: Set<string>,
+): number {
+	const docTypo = doc.typography;
+	if (blocks[start].continuation) return start;
+	const key = parOverrideKey(blocks[start], doc, docTypo);
+	if (!key) return start;
+
+	let end = start;
+	for (let idx = start + 1; idx < blocks.length; idx++) {
+		const b = blocks[idx];
+		if (pageBreakSet.has(b.id)) break;
+		if (b.text === "" && !b.footnoteMarker && !b.continuation) break;
+		if (
+			b.zoneKind ||
+			b.footnote ||
+			b.footnoteSeparator ||
+			b.pageBreak ||
+			b.list ||
+			b.heading ||
+			b.image ||
+			b.line ||
+			b.rect ||
+			b.outline ||
+			b.vSpacing ||
+			b.bibliography
+		) {
+			break;
+		}
+		if (b.hSpacing || b.reference || b.link || b.citation || b.continuation) {
+			end = idx;
+			continue;
+		}
+		if (parOverrideKey(b, doc, docTypo) !== key) break;
+		end = idx;
+	}
+	return end;
+}
+
+/** Serialize consecutive same-paragraph lines under one `#set par(...)` scope. */
+function serializeParStyleGroup(
+	blocks: Block[],
+	start: number,
+	end: number,
+	doc: DocumentModel,
+	blockById: Map<string, Block>,
+): string {
+	const docTypo = doc.typography;
+	const pArgs = parArgs(
+		leadingForParBlock(blocks[start], docTypo),
+		paragraphDiff(blocks[start], doc),
+	);
+	const lines: string[] = [];
+
+	for (let idx = start; idx <= end; idx++) {
+		const b = blocks[idx];
+
+		if (b.hSpacing) {
+			const { value, unit } = b.hSpacing.amount;
+			const args = [`${typstNumber(value)}${unit}`];
+			if (b.hSpacing.weak) args.push("weak: true");
+			lines[lines.length - 1] += `#h(${args.join(", ")})`;
+			continue;
+		}
+		if (b.reference) {
+			const targetBlock = blockById.get(b.reference.targetBlockId);
+			lines[lines.length - 1] += serializeReference(b.reference, targetBlock, doc);
+			continue;
+		}
+		if (b.link) {
+			lines[lines.length - 1] += serializeLink(b.link);
+			continue;
+		}
+		if (b.citation) {
+			lines[lines.length - 1] += serializeCitation(b.citation);
+			continue;
+		}
+		if (b.continuation) {
+			lines[lines.length - 1] += serializeInlineTypography(b, docTypo, doc);
+			continue;
+		}
+
+		if (lines.length > 0) lines.push("#linebreak()");
+		if (b.footnoteMarker) {
+			lines.push(serializeTextBlock(b, docTypo, doc));
+		} else {
+			lines.push(serializeInlineTypography(b, docTypo, doc));
+		}
+	}
+
+	return [
+		"#[",
+		`  #set par(${pArgs.join(", ")})`,
+		...lines.map((l) => `  ${l}`),
+		"]",
+	].join("\n");
+}
+
 /** Serialize a plain (non-heading, non-list) text block. */
 function serializeTextBlock(
 	block: Block,
@@ -694,7 +846,6 @@ function serializeTextBlock(
 
 	const text = escapeText(block.text);
 	const typo = block.typography ?? {};
-	const para = block.paragraph ?? {};
 	const docLang = doc.lang ?? DEFAULT_LANGUAGE;
 	const blockLangChanged = block.lang !== undefined && block.lang !== docLang;
 
@@ -702,19 +853,8 @@ function serializeTextBlock(
 		// Inline block: use #text(...)[content] with only the args that differ
 		// from the document defaults. The #[...] scoped-block form is block-level
 		// in Typst and would break the line — the function-call form stays inline.
-		const diffTypo: Partial<TypographySettings> = {};
-		for (const key of Object.keys(typo) as (keyof TypographySettings)[]) {
-			if (typo[key] !== docTypo[key]) diffTypo[key] = typo[key] as never;
-		}
-		// underline is not a text() arg — handle separately
-		const underlineChanged = (typo.underline ?? false) !== (docTypo.underline ?? false);
-		const { underline: _u, ...textDiffTypo } = diffTypo;
-		const tArgs = textArgs(textDiffTypo);
-		if (blockLangChanged) tArgs.push(`lang: "${langCode(block.lang!)}"`);
-		let result = text;
-		if (tArgs.length > 0) result = `#text(${tArgs.join(", ")})[${result}]`;
-		if (underlineChanged) result = `#underline[${result}]`;
-		if (!underlineChanged && tArgs.length === 0) return text;
+		const result = serializeInlineTypography(block, docTypo, doc);
+		if (result === text) return text;
 		return result;
 	}
 
@@ -723,15 +863,7 @@ function serializeTextBlock(
 	const tArgs = textArgs(typo);
 	if (blockLangChanged) tArgs.push(`lang: "${langCode(block.lang!)}"`);
 	if (tArgs.length > 0) overrides.push(`#set text(${tArgs.join(", ")})`);
-	// Only emit par args that actually differ from the global document defaults.
-	const docPara = doc.paragraph;
-	const paraDiff: Partial<ParagraphSettings> = {};
-	for (const k of Object.keys(para) as (keyof ParagraphSettings)[]) {
-		if (para[k] !== docPara[k]) (paraDiff as Record<string, unknown>)[k] = para[k];
-	}
-	const leadingForPar =
-		typo.leading !== undefined && typo.leading !== docTypo.leading ? typo.leading : undefined;
-	const pArgs = parArgs(leadingForPar, paraDiff);
+	const pArgs = parArgs(leadingForParBlock(block, docTypo), paragraphDiff(block, doc));
 	if (pArgs.length > 0) overrides.push(`#set par(${pArgs.join(", ")})`);
 
 	if (overrides.length === 0 && !underline) return text;
@@ -1015,8 +1147,11 @@ export function serializeDocument(
 		}
 
 		// ── Plain content block ─────────────────────────────────────────────────
+		const groupEnd = findSameParGroupEnd(doc.blocks, i, doc, pageBreakSet);
 		const serialized = wrapAligned(
-			serializeTextBlock(block, doc.typography, doc),
+			groupEnd > i
+				? serializeParStyleGroup(doc.blocks, i, groupEnd, doc, blockById)
+				: serializeTextBlock(block, doc.typography, doc),
 			block.alignment,
 		);
 		if (hasContent && block.continuation) {
@@ -1042,7 +1177,7 @@ export function serializeDocument(
 		afterList = false;
 		afterHeading = false;
 		hasContent = true;
-		i++;
+		i = groupEnd > i ? groupEnd + 1 : i + 1;
 	}
 
 	const body = parts.join("\n");
