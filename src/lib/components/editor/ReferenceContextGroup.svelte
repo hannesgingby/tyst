@@ -67,9 +67,9 @@
 
 		const headingItems: ReferenceItem[] = headings.map(b => ({
 			id: b.id,
-			label: b.text || "Heading",
+			label: b.text || locale.heading,
 			location: `Page ${documentStore.blockPageIndex(b.id) + 1}`,
-			displayText: b.text || "Heading",
+			displayText: b.text || locale.heading,
 		}));
 
 		const figureItems: ReferenceItem[] = figures.map(b => ({

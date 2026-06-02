@@ -12,6 +12,7 @@
         resolveBlockListSpacing,
     } from "$lib/document/blockLevelStyle";
     import { documentStore } from "$lib/document/store.svelte";
+    import { getDocLocale } from "$lib/document/docLocale";
     import { formatItem, formatNumbering } from "$lib/document/numbering";
     import { parbreakGapEm } from "$lib/document/lineMetrics";
     import { marginInsetPx } from "$lib/document/pageZoneInset";
@@ -924,10 +925,11 @@
         // all-empty, which would trigger normalizeInlineStructure and collapse it.
         let newId: string;
         if (block.list) {
+            const locale = getDocLocale(documentStore.model.lang);
             newId = documentStore.insertBlockObjectAfter(id, {
                 text: after,
                 list: { ...block.list },
-                placeholder: "Item",
+                placeholder: locale.listItem,
             });
         } else {
             newId = documentStore.insertBlockAfter(id, after);
@@ -1661,7 +1663,7 @@
                             placeholder={pageIdx === 0 &&
                             item.index === 0 &&
                             blocks.length === 1
-                                ? "Start writing…"
+                                ? getDocLocale(model.lang).startWriting
                                 : undefined}
                             registerel={registerEl}
                             onheight={onHeight}

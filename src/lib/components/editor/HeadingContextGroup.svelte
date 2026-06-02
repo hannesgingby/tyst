@@ -1,13 +1,20 @@
 <script lang="ts" module>
 	import type { SelectableItem } from "./SelectableList.svelte";
+	import {
+		getDocLocale,
+		headingPlaceholder,
+		type HeadingMenuLevel,
+	} from "$lib/document/docLocale";
 
-	export const HEADING_LEVELS: SelectableItem[] = [
-		{ label: "Title", hint: "#title" },
-		{ label: "Heading 1", hint: "=" },
-		{ label: "Heading 2", hint: "==" },
-		{ label: "Heading 3", hint: "===" },
-		{ label: "Heading 4", hint: "====" },
-	];
+	export function headingLevelItems(lang: string | undefined): SelectableItem[] {
+		const locale = getDocLocale(lang);
+		const levels: HeadingMenuLevel[] = [0, 1, 2, 3, 4];
+		const hints = ["#title", "=", "==", "===", "===="] as const;
+		return levels.map((level, i) => ({
+			label: headingPlaceholder(locale, level),
+			hint: hints[i],
+		}));
+	}
 </script>
 
 <script lang="ts">
@@ -28,6 +35,8 @@
 	let activeIndex = $state(0);
 	let rowEls = $state<HTMLElement[]>([]);
 	let menuEl = $state<HTMLElement | null>(null);
+
+	const headingLevels = $derived(headingLevelItems(documentStore.model.lang));
 
 	$effect(() => {
 		activeIndex = levelIndex;
@@ -53,7 +62,7 @@
 <ContextGroup showMenu={true} {activeRowEl} {menuEl}>
 	{#snippet list()}
 		<SelectableList
-			items={HEADING_LEVELS}
+			items={headingLevels}
 			bind:activeIndex
 			width={316}
 			ariaLabel="Heading level"

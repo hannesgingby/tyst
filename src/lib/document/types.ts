@@ -307,7 +307,7 @@ export interface Block {
 	listSpacing?: BlockSpacing;
 	/** Per-block horizontal alignment. Undefined = inherit document default. */
 	alignment?: HorizontalAlignment;
-	/** Placeholder shown when the block has no text (e.g. "Heading 1", "Item"). */
+	/** Optional stored placeholder; most block types derive text from document language. */
 	placeholder?: string;
 	/** Embed: image. Mutually exclusive with line / rect / text content. */
 	image?: ImageSettings;

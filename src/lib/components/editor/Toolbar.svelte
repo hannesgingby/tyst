@@ -4,6 +4,7 @@
     import HoverPopup from "$lib/components/ui/HoverPopup.svelte";
     import { getCaretOffset } from "./caret";
     import { documentStore } from "$lib/document/store.svelte";
+    import { getDocLocale } from "$lib/document/docLocale";
     import { imageCache, pickAndLoadImage } from "$lib/system/imageCache.svelte";
     import AlignmentPopup from "./AlignmentPopup.svelte";
     import HeadingsPopup from "./HeadingsPopup.svelte";
@@ -167,10 +168,11 @@
             documentStore.popupDismissed = null;
             return;
         }
+        const locale = getDocLocale(documentStore.model.lang);
         documentStore.insertEmbed({
             text: "",
             outline: documentStore.defaultOutlineSettings(),
-            placeholder: "Title",
+            placeholder: locale.title,
         });
         documentStore.pendingFocusAction = { kind: "focus", blockId: documentStore.activeBlockId ?? "" };
     }

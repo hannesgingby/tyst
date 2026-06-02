@@ -48,7 +48,6 @@ import { PAPER_SIZES, matchPreset } from "./paperSizes";
 import { serializeDocument } from "./serialize";
 import { normalizeUrl } from "./url";
 import { DEFAULT_LANGUAGE } from "./languages";
-import { getDocLocale } from "./docLocale";
 
 function newId(): string {
 	return crypto.randomUUID();
@@ -1511,11 +1510,9 @@ class DocumentStore {
 				full: false,
 			};
 		}
-		const locale = getDocLocale(this.model.lang);
 		this.insertBlockObjectAt(this.model.blocks.length, {
 			text: "",
 			bibliography: true,
-			placeholder: locale.bibliography,
 		});
 	}
 
@@ -1687,7 +1684,6 @@ class DocumentStore {
 		const bodyId = this.insertBlockObjectAt(this.footnoteBodyInsertIndex(pageIndex), {
 			text: "",
 			footnote: { footnoteId },
-			placeholder: "Footnote",
 		});
 
 		this.popupDismissed = null;
@@ -2401,7 +2397,6 @@ class DocumentStore {
 			id: newId(),
 			text: "",
 			zoneKind: kind,
-			placeholder: kind === "header" ? "Page header" : "Page footer",
 		};
 		// Prepend zone blocks before body blocks (header before footer).
 		const insertBefore =

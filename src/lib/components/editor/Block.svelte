@@ -15,7 +15,7 @@
     import type { Block, StrokeDash } from "$lib/document/types";
     import { imageCache } from "$lib/system/imageCache.svelte";
     import { isUrl, normalizeUrl } from "$lib/document/url";
-    import { getDocLocale } from "$lib/document/docLocale";
+    import { getDocLocale, resolveBlockPlaceholder } from "$lib/document/docLocale";
     import {
         isSpellcheckableBlock,
         spellcheckStore,
@@ -244,7 +244,7 @@
         }
         const target = documentStore.findBlock(block.reference.targetBlockId);
         if (!target) return "?";
-        if (target.heading) return target.text || "Heading";
+        if (target.heading) return target.text || locale.heading;
         if (target.image) {
             // Count which figure this is
             let n = 0;
@@ -345,7 +345,10 @@
         listTight ? typography.leading : paragraph.spacing,
     );
 
-    const effectivePlaceholder = $derived(block.placeholder ?? placeholder);
+    const docLocale = $derived(getDocLocale(documentStore.model.lang));
+    const effectivePlaceholder = $derived(
+        resolveBlockPlaceholder(docLocale, block, placeholder),
+    );
 
     let el = $state<HTMLElement | null>(null);
     let outerEl = $state<HTMLElement | null>(null);
@@ -891,7 +894,7 @@
             tabindex="0"
             aria-multiline="false"
             data-block-id={block.id}
-            data-placeholder={effectivePlaceholder ?? "Title"}
+            data-placeholder={effectivePlaceholder ?? docLocale.title}
             style:font-family={`"${typography.fontFamily}", serif`}
             style:font-size="{fontSizePx}px"
             style:font-weight={700}
@@ -1264,7 +1267,7 @@
             tabindex="0"
             aria-multiline="false"
             data-block-id={block.id}
-            data-placeholder={titleOption !== "none" ? (effectivePlaceholder ?? getDocLocale(documentStore.model.lang).bibliography) : undefined}
+            data-placeholder={titleOption !== "none" ? (effectivePlaceholder ?? docLocale.bibliography) : undefined}
             style:display={titleOption === "none" ? "none" : undefined}
             style:font-family={`"${typography.fontFamily}", serif`}
             style:font-size="{fontSizePx * 1.4}px"

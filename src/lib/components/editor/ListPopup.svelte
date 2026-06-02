@@ -1,6 +1,7 @@
 <script lang="ts">
 	import type { ListSettings } from "$lib/document/types";
 	import { documentStore } from "$lib/document/store.svelte";
+	import { getDocLocale } from "$lib/document/docLocale";
 	import ListContextGroup from "./ListContextGroup.svelte";
 
 	interface Props {
@@ -9,10 +10,11 @@
 	let { onhover }: Props = $props();
 
 	function handleSelect(settings: ListSettings): void {
+		const locale = getDocLocale(documentStore.model.lang);
 		documentStore.insertOrTransformActive({
 			text: "",
 			list: settings,
-			placeholder: "Item",
+			placeholder: locale.listItem,
 		});
 	}
 </script>
