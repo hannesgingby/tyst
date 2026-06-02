@@ -68,7 +68,7 @@
 		</FieldLabel>
 	</div>
 
-	<div class="mt-2">
+	<div class="mt-2 grid grid-cols-2 gap-2">
 		<FieldLabel label="Length">
 			<Input
 				value={value.length}
@@ -82,9 +82,6 @@
 				onunitchange={(u) => onchange({ lengthUnit: u as "%" | "pt" })}
 			/>
 		</FieldLabel>
-	</div>
-
-	<div class="mt-2">
 		<FieldLabel label="Angle">
 			<Input
 				value={value.angle}
