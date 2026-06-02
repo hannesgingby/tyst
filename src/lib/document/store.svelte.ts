@@ -219,6 +219,9 @@ class DocumentStore {
 	 */
 	zoneSettingsKind = $state<"header" | "footer" | null>(null);
 
+	/** Which page index the active zone popup is editing (updated when a zone block gains focus). */
+	activeZonePageIndex = $state(0);
+
 	/** Set by openSettings(); Editor.svelte watches this to open the modal. */
 	settingsNav = $state<string | null>(null);
 
@@ -2471,20 +2474,72 @@ class DocumentStore {
 		this.updateZoneCounterPattern(kind, trimmed as PageZoneCounterPattern);
 	}
 
+	/** Resolved header-ascent for the active zone page (respects per-page unlink). */
 	get headerAscent(): string {
-		return this.model.headerAscent ?? "30%";
+		const global = this.model.headerAscent ?? "30%";
+		const idx = this.activeZonePageIndex;
+		if (idx === 0) return global;
+		const page = this.model.pages[idx];
+		if (!page || (page.zoneLinked?.header ?? true)) return global;
+		return page.headerAscent ?? global;
 	}
 
 	set headerAscent(value: string | undefined) {
-		this.model.headerAscent = value ?? "30%";
+		const v = value ?? "30%";
+		const idx = this.activeZonePageIndex;
+		if (idx === 0 || (this.model.pages[idx]?.zoneLinked?.header ?? true)) {
+			this.model.headerAscent = v;
+		} else {
+			const page = this.model.pages[idx];
+			if (page) page.headerAscent = v;
+		}
 	}
 
+	/** Resolved footer-descent for the active zone page (respects per-page unlink). */
 	get footerDescent(): string {
-		return this.model.footerDescent ?? "30%";
+		const global = this.model.footerDescent ?? "30%";
+		const idx = this.activeZonePageIndex;
+		if (idx === 0) return global;
+		const page = this.model.pages[idx];
+		if (!page || (page.zoneLinked?.footer ?? true)) return global;
+		return page.footerDescent ?? global;
 	}
 
 	set footerDescent(value: string | undefined) {
-		this.model.footerDescent = value ?? "30%";
+		const v = value ?? "30%";
+		const idx = this.activeZonePageIndex;
+		if (idx === 0 || (this.model.pages[idx]?.zoneLinked?.footer ?? true)) {
+			this.model.footerDescent = v;
+		} else {
+			const page = this.model.pages[idx];
+			if (page) page.footerDescent = v;
+		}
+	}
+
+	isZoneLinked(kind: "header" | "footer"): boolean {
+		const idx = this.activeZonePageIndex;
+		if (idx === 0) return true;
+		return this.model.pages[idx]?.zoneLinked?.[kind] ?? true;
+	}
+
+	toggleZoneLink(kind: "header" | "footer"): void {
+		const idx = this.activeZonePageIndex;
+		if (idx === 0) return;
+		this.ensurePage(idx);
+		const page = this.model.pages[idx]!;
+		if (!page.zoneLinked) page.zoneLinked = { header: true, footer: true };
+		const wasLinked = page.zoneLinked[kind] ?? true;
+		if (wasLinked) {
+			// Seed the per-page value from the current global value before unlinking.
+			const globalValue = kind === "header"
+				? (this.model.headerAscent ?? "30%")
+				: (this.model.footerDescent ?? "30%");
+			if (kind === "header") page.headerAscent = globalValue;
+			else page.footerDescent = globalValue;
+			page.zoneLinked[kind] = false;
+		} else {
+			page.zoneLinked[kind] = true;
+		}
 	}
 
 	updateMetadata(patch: Partial<DocumentMetadata>): void {

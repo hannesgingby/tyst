@@ -126,7 +126,22 @@
 
     $effect(() => {
         const zone = documentStore.activeZone;
-        if (zone) documentStore.zoneSettingsKind = zone;
+        if (zone) {
+            documentStore.zoneSettingsKind = zone;
+            // Update anchor to the zone container of the focused page.
+            const focused = document.activeElement;
+            if (focused instanceof Element) {
+                const container = focused.closest(`[data-page-zone="${zone}"]`);
+                if (container instanceof HTMLElement) {
+                    if (zone === "header") headerZoneAnchorEl = container;
+                    else footerZoneAnchorEl = container;
+                    const pageIdxAttr = container.dataset.pageIdx;
+                    if (pageIdxAttr !== undefined) {
+                        documentStore.activeZonePageIndex = parseInt(pageIdxAttr, 10);
+                    }
+                }
+            }
+        }
     });
 
     $effect(() => {
@@ -1441,6 +1456,7 @@
                 <div
                     class="absolute flex flex-col justify-end"
                     data-page-zone="header"
+                    data-page-idx={pageIdx}
                     style:top="{pageTop}px"
                     style:left="{mp.left}px"
                     style:width="{zoneWidth}px"
@@ -1481,6 +1497,7 @@
                 <div
                     class="absolute flex flex-col justify-start"
                     data-page-zone="footer"
+                    data-page-idx={pageIdx}
                     style:top="{pageTop + pageHeightPx - mp.bottom}px"
                     style:left="{mp.left}px"
                     style:width="{zoneWidth}px"

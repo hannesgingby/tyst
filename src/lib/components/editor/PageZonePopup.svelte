@@ -20,6 +20,7 @@
 
 	const title = $derived(kind === "header" ? "Header" : "Footer");
 	const hasNumbering = $derived(documentStore.zoneCounterPattern(kind) !== null);
+	const isLinked = $derived(documentStore.isZoneLinked(kind));
 
 	const insetRaw = $derived(
 		kind === "header" ? documentStore.headerAscent : documentStore.footerDescent,
@@ -59,7 +60,13 @@
 
 <Popup padding={12} class="w-[330px]">
 	<PopupSectionHeader {title}>
-		<Tag label={kind} variant="blue" linked />
+		<Tag
+			label={kind}
+			variant="blue"
+			linked={isLinked}
+			onUnlink={() => documentStore.toggleZoneLink(kind)}
+			onLink={() => documentStore.toggleZoneLink(kind)}
+		/>
 	</PopupSectionHeader>
 
 	<div class="mt-[13px]">

@@ -148,6 +148,13 @@ function serializePageSetFull(
 	return `#set page(\n${lines.join("\n")}\n)`;
 }
 
+/** Resolve the header-ascent or footer-descent for a page, falling back to the global value. */
+function resolveZoneInset(page: PageSettings, globalValue: string, kind: "header" | "footer"): string {
+	const linked = page.zoneLinked?.[kind] ?? true;
+	if (linked) return globalValue;
+	return (kind === "header" ? page.headerAscent : page.footerDescent) ?? globalValue;
+}
+
 /**
  * Compute the `#set page(...)` calls needed to transition from `prev`'s
  * resolved settings to `curr`'s resolved settings. Returns an empty array when
@@ -158,6 +165,10 @@ function serializePageTransition(
 	defaultPage: PageSettings,
 	prev: PageSettings,
 	curr: PageSettings,
+	globalHeaderAscent: string,
+	globalFooterDescent: string,
+	hasHeader: boolean,
+	hasFooter: boolean,
 ): string[] {
 	// Resolve each section through the link system.
 	const prevMargin = prev.linked.margin ? defaultPage : prev;
@@ -202,6 +213,18 @@ function serializePageTransition(
 	// Fill / color
 	if (currColor.fill !== prevColor.fill) {
 		pageArgs.push(`fill: ${hexToRgb(currColor.fill)}`);
+	}
+
+	// Zone insets (header-ascent / footer-descent) — only emit when content exists.
+	if (hasHeader) {
+		const prevAscent = resolveZoneInset(prev, globalHeaderAscent, "header");
+		const currAscent = resolveZoneInset(curr, globalHeaderAscent, "header");
+		if (currAscent !== prevAscent) pageArgs.push(`header-ascent: ${currAscent}`);
+	}
+	if (hasFooter) {
+		const prevDescent = resolveZoneInset(prev, globalFooterDescent, "footer");
+		const currDescent = resolveZoneInset(curr, globalFooterDescent, "footer");
+		if (currDescent !== prevDescent) pageArgs.push(`footer-descent: ${currDescent}`);
 	}
 
 	// Only emit #set page() if something changed; the caller always emits the pagebreak.
@@ -753,6 +776,10 @@ export function serializeDocument(
 
 	const pageBreakSet = new Set(pageBreakBlockIds);
 	const defaultPage = doc.pages[0];
+	const hasHeader = doc.blocks.some(b => b.zoneKind === "header");
+	const hasFooter = doc.blocks.some(b => b.zoneKind === "footer");
+	const globalHeaderAscent = doc.headerAscent ?? "30%";
+	const globalFooterDescent = doc.footerDescent ?? "30%";
 
 	const blockPageIndex = new Map<string, number>();
 	let pi = 1;
@@ -779,7 +806,7 @@ export function serializeDocument(
 		pendingBlanks = 0;
 		afterHeading = false;
 		parts.push("#pagebreak()");
-		parts.push(...serializePageTransition(defaultPage, prevPage, nextPage));
+		parts.push(...serializePageTransition(defaultPage, prevPage, nextPage, globalHeaderAscent, globalFooterDescent, hasHeader, hasFooter));
 		parts.push(
 			...serializeFootnotePageRules(
 				doc,

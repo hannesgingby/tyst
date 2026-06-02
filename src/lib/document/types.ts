@@ -61,6 +61,12 @@ export interface PageSettings {
 	/** Per-page footnote overrides when `footnoteLinked` is false. */
 	footnote?: FootnotePageSettings;
 	footnoteLinked?: boolean;
+	/** Per-page header-ascent override when zone header is unlinked. */
+	headerAscent?: string;
+	/** Per-page footer-descent override when zone footer is unlinked. */
+	footerDescent?: string;
+	/** Whether each zone's inset is linked to the default page. Defaults to true. */
+	zoneLinked?: { header: boolean; footer: boolean };
 }
 
 export type FontWeightName = "Regular" | "Medium" | "Bold";
