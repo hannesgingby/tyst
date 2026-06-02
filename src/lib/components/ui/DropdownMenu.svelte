@@ -60,6 +60,7 @@
 
     let root = $state<HTMLDivElement | null>(null);
     let searchQuery = $state("");
+    let fixedStyle = $state("");
 
     const filteredOptions = $derived(
         searchable && searchQuery.trim() !== ""
@@ -89,6 +90,22 @@
 
     $effect(() => {
         if (!open) searchQuery = "";
+    });
+
+    $effect(() => {
+        if (!open || placement !== "right" || !root) {
+            fixedStyle = "";
+            return;
+        }
+        const rect = root.getBoundingClientRect();
+        const leftPx = rect.right + 4;
+        if (verticalAlign === "end") {
+            fixedStyle = `bottom:${window.innerHeight - rect.bottom}px;left:${leftPx}px`;
+        } else if (verticalAlign === "center") {
+            fixedStyle = `top:${rect.top + rect.height / 2}px;left:${leftPx}px;transform:translateY(-50%)`;
+        } else {
+            fixedStyle = `top:${rect.top}px;left:${leftPx}px`;
+        }
     });
 
     $effect(() => {
@@ -137,6 +154,7 @@
             {searchable}
             {searchPlaceholder}
             {maxHeightClass}
+            {fixedStyle}
             class={popupClass}
             bind:searchQuery
         >

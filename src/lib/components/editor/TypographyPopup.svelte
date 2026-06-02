@@ -111,6 +111,7 @@
 		activeRowEl={languageAnchorEl}
 		menuEl={languageMenuEl}
 		menuAlign="center"
+		menuOffset={16}
 	>
 		{#snippet list()}
 			<Popup padding={16} class={["w-[344px] pb-5", showLanguageMenu && "mr-0"]}>

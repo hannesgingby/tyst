@@ -18,6 +18,8 @@
 		onClipHeightTransitionEnd?: () => void;
 		/** Extra bottom margin below the group (headings/list). Off for toolbar popups that use Popup margins. */
 		toolbarInset?: boolean;
+		/** Additional upward offset in px applied to the side menu after alignment. */
+		menuOffset?: number;
 		list: Snippet;
 		menu?: Snippet;
 	}
@@ -30,6 +32,7 @@
 		menuAlign = "bottom",
 		onClipHeightTransitionEnd,
 		toolbarInset = true,
+		menuOffset = 0,
 		list,
 		menu,
 	}: Props = $props();
@@ -56,7 +59,7 @@
 
 		if (menuAlign === "center") {
 			const rowCenter = rowTop + rowRect.height / 2;
-			let bottom = trackHeight - (rowCenter + menuHeight / 2);
+			let bottom = trackHeight - (rowCenter + menuHeight / 2) + menuOffset;
 			bottom = Math.max(0, Math.min(bottom, trackHeight - menuHeight));
 			menuBottom = bottom;
 		} else {

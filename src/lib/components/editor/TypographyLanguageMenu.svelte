@@ -22,7 +22,8 @@
 			bind:open
 			value={documentStore.popupLang}
 			options={LANGUAGES}
-			placement="below"
+			placement="right"
+			verticalAlign="end"
 			searchable
 			searchPlaceholder="Search languages…"
 			popupClass="flex h-[300px] w-[280px] min-w-[280px] shrink-0 flex-col"

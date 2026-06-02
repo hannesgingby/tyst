@@ -6,7 +6,7 @@
     /** Horizontal alignment when `placement` is `below`. */
     export type DropdownPopupAlign = "stretch" | "start" | "end";
     /** Vertical alignment when `placement` is `right`. */
-    export type DropdownPopupVerticalAlign = "start" | "center";
+    export type DropdownPopupVerticalAlign = "start" | "center" | "end";
 
     interface Props {
         placement?: DropdownPopupPlacement;
@@ -15,6 +15,8 @@
         searchable?: boolean;
         searchPlaceholder?: string;
         searchQuery?: string;
+        /** When set, overrides absolute positioning with fixed positioning (for overflow-escape). */
+        fixedStyle?: string;
         class?: ClassValue;
         listClass?: ClassValue;
         maxHeightClass?: string;
@@ -28,6 +30,7 @@
         searchable = false,
         searchPlaceholder = "Search…",
         searchQuery = $bindable(""),
+        fixedStyle = "",
         class: className,
         listClass,
         maxHeightClass = "max-h-60",
@@ -53,10 +56,11 @@
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div
     class={[
-        "absolute z-10 min-w-[150px] overflow-hidden rounded-[6px] border border-border-checkbox-off bg-bg-850 shadow-tooltip",
-        placementClass,
+        "z-10 min-w-[150px] overflow-hidden rounded-[6px] border border-border-checkbox-off bg-bg-850 shadow-tooltip",
+        fixedStyle ? "fixed" : ["absolute", placementClass],
         className,
     ]}
+    style={fixedStyle || undefined}
     onpointerdown={(event) => event.stopPropagation()}
 >
     {#if searchable}
