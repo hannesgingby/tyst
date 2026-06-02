@@ -213,3 +213,18 @@
     position: relative;
     z-index: 1;
 }
+
+/* Spell-check and grammar squiggly underlines via the CSS Custom Highlight API. */
+::highlight(tyst-spell) {
+    text-decoration: underline wavy red;
+    text-decoration-thickness: 1.5px;
+    text-underline-offset: 5px;
+    text-decoration-skip-ink: none;
+}
+
+::highlight(tyst-grammar) {
+    text-decoration: underline wavy #2563eb;
+    text-decoration-thickness: 1.5px;
+    text-underline-offset: 5px;
+    text-decoration-skip-ink: none;
+}

@@ -2,6 +2,8 @@
     import { tick } from "svelte";
     import Block from "./Block.svelte";
     import PageZonePopup from "./PageZonePopup.svelte";
+    import SpellcheckPopup from "./SpellcheckPopup.svelte";
+    import { spellcheckStore } from "$lib/document/spellcheck.svelte";
     import {
         resolveBlockHeadingSpacing,
         resolveBlockListSpacing,
@@ -1702,4 +1704,25 @@
             <PageZonePopup kind={documentStore.zoneSettingsKind} />
         </div>
     </div>
+{/if}
+
+{#if spellcheckStore.activePopup}
+    {@const popup = spellcheckStore.activePopup}
+    <SpellcheckPopup
+        match={popup.match}
+        anchorRect={popup.anchorRect}
+        onsuggestion={(suggestion) => {
+            const block = documentStore.model.blocks.find((b) => b.id === popup.blockId);
+            if (block) {
+                const m = popup.match;
+                block.text = block.text.slice(0, m.offset) + suggestion + block.text.slice(m.offset + m.length);
+            }
+            spellcheckStore.activePopup = null;
+        }}
+        onignore={() => {
+            spellcheckStore.ignore(popup.match.word);
+            spellcheckStore.activePopup = null;
+        }}
+        ondismiss={() => { spellcheckStore.activePopup = null; }}
+    />
 {/if}

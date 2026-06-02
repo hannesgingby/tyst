@@ -16,6 +16,11 @@
     import { imageCache } from "$lib/system/imageCache.svelte";
     import { isUrl, normalizeUrl } from "$lib/document/url";
     import { getDocLocale } from "$lib/document/docLocale";
+    import {
+        spellcheckStore,
+        setBlockHighlights,
+        clearBlockHighlights,
+    } from "$lib/document/spellcheck.svelte";
     import { getCaretOffset, setCaretOffset } from "./caret";
 
     const WEIGHT_CSS: Record<string, number> = {
@@ -345,6 +350,86 @@
     let outerEl = $state<HTMLElement | null>(null);
     let embedEl = $state<HTMLElement | null>(null);
 
+    // ── Spell / grammar check ────────────────────────────────────────────────
+
+    const isSpellcheckable = $derived(
+        !isEmbed && !isVSpacing && !isHSpacing && !isPageBreak &&
+        !isReference && !isCitation && !isLink && !isPageCounter &&
+        !isOutline && !isBibliography && !isFootnoteMarker && !block.zoneKind,
+    );
+
+
+    // Schedule debounced API check whenever the text or language changes.
+    $effect(() => {
+        const text = block.text;
+        const lang = documentStore.model.lang;
+        const id = block.id;
+        if (!isSpellcheckable) {
+            spellcheckStore.clear(id);
+            return;
+        }
+        spellcheckStore.check(id, text, lang);
+        return () => spellcheckStore.clear(id);
+    });
+
+    // Apply CSS Custom Highlights after text or matches update.
+    $effect(() => {
+        const blockMatches = spellcheckStore.matches[block.id] ?? [];
+        void block.text; // re-run when text changes so stale offsets are flushed
+
+        if (!el || blockMatches.length === 0) {
+            clearBlockHighlights(block.id);
+            return;
+        }
+        let textNode: Text | null = null;
+        for (const child of el.childNodes) {
+            if (child.nodeType === Node.TEXT_NODE) { textNode = child as Text; break; }
+        }
+        if (!textNode) {
+            clearBlockHighlights(block.id);
+            return;
+        }
+        const textLen = textNode.length;
+        const spell: Range[] = [];
+        const grammar: Range[] = [];
+        for (const m of blockMatches) {
+            if (m.offset < 0 || m.offset + m.length > textLen) continue;
+            const r = document.createRange();
+            r.setStart(textNode, m.offset);
+            r.setEnd(textNode, m.offset + m.length);
+            (m.type === "spell" ? spell : grammar).push(r);
+        }
+        setBlockHighlights(block.id, spell, grammar);
+        return () => clearBlockHighlights(block.id);
+    });
+
+    function onSpellCheckClick(e: MouseEvent): void {
+        const blockMatches = spellcheckStore.matches[block.id];
+        if (!blockMatches?.length || !el) return;
+
+        const range = document.caretRangeFromPoint?.(e.clientX, e.clientY);
+        if (!range) return;
+
+        let textNode: Text | null = null;
+        for (const child of el.childNodes) {
+            if (child.nodeType === Node.TEXT_NODE) { textNode = child as Text; break; }
+        }
+        if (!textNode || range.startContainer !== textNode) return;
+
+        const offset = range.startOffset;
+        const match = blockMatches.find(
+            (m) => offset >= m.offset && offset < m.offset + m.length,
+        );
+        if (!match) return;
+
+        const matchRange = document.createRange();
+        matchRange.setStart(textNode, match.offset);
+        matchRange.setEnd(textNode, Math.min(match.offset + match.length, textNode.length));
+        spellcheckStore.activePopup = { blockId: block.id, match, anchorRect: matchRange.getBoundingClientRect() };
+    }
+
+    // ── End spell / grammar check ────────────────────────────────────────────
+
     function reportHeight(): void {
         const target = embedEl ?? outerEl ?? el;
         if (target) onheight(block.id, target.offsetHeight);
@@ -614,8 +699,10 @@
         oninput={onInput}
         onkeydown={onKeydown}
         onpaste={onPaste}
+        onclick={onSpellCheckClick}
     ></svelte:element>
 {/snippet}
+
 
 {#snippet embedView()}
     {@const img = block.image}
