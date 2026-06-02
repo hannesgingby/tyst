@@ -1,5 +1,5 @@
 <script lang="ts">
-    import { untrack } from "svelte";
+    import { untrack, onDestroy } from "svelte";
     import {
         resolveBlockHeadingSpacing,
         resolveBlockListSpacing,
@@ -360,6 +360,8 @@
 
 
     // Schedule debounced API check whenever the text or language changes.
+    // Do NOT clear matches on re-run — live Range objects track edits automatically,
+    // so squiggles stay while typing and update when the API responds.
     $effect(() => {
         const text = block.text;
         const lang = documentStore.model.lang;
@@ -369,8 +371,8 @@
             return;
         }
         spellcheckStore.check(id, text, lang);
-        return () => spellcheckStore.clear(id);
     });
+    onDestroy(() => spellcheckStore.clear(block.id));
 
     // Tracks childList mutations on el so we rebuild ranges when the text node
     // is replaced (e.g. by el.textContent = text in a sync effect).
@@ -382,11 +384,13 @@
         return () => mo.disconnect();
     });
 
-    // Apply CSS Custom Highlights after text, matches, or text-node replacement.
+    // Apply CSS Custom Highlights when matches change or the text node is replaced.
+    // Does NOT track block.text — live Range objects reposition themselves as the
+    // user types, so rebuilding from (possibly stale) API offsets on every keystroke
+    // would shift squiggles to wrong positions.
     $effect(() => {
         const blockMatches = spellcheckStore.matches[block.id] ?? [];
-        void block.text; // re-run when text changes so stale offsets are flushed
-        void elChildVersion; // re-run when text node is replaced
+        void elChildVersion; // re-run when text node is replaced (el.textContent = …)
 
         if (!el || blockMatches.length === 0) {
             clearBlockHighlights(block.id);
