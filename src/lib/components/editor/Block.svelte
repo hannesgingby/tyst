@@ -372,10 +372,21 @@
         return () => spellcheckStore.clear(id);
     });
 
-    // Apply CSS Custom Highlights after text or matches update.
+    // Tracks childList mutations on el so we rebuild ranges when the text node
+    // is replaced (e.g. by el.textContent = text in a sync effect).
+    let elChildVersion = $state(0);
+    $effect(() => {
+        if (!el) return;
+        const mo = new MutationObserver(() => { elChildVersion++; });
+        mo.observe(el, { childList: true });
+        return () => mo.disconnect();
+    });
+
+    // Apply CSS Custom Highlights after text, matches, or text-node replacement.
     $effect(() => {
         const blockMatches = spellcheckStore.matches[block.id] ?? [];
         void block.text; // re-run when text changes so stale offsets are flushed
+        void elChildVersion; // re-run when text node is replaced
 
         if (!el || blockMatches.length === 0) {
             clearBlockHighlights(block.id);
