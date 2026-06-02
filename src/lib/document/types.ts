@@ -201,7 +201,7 @@ export interface StrokeSettings {
 	dash: StrokeDash;
 }
 
-export type LineLengthUnit = "%" | "pt";
+export type LineLengthUnit = "%" | "em" | "pt" | "px";
 
 /** Embed: a line block (non-editable). Maps to Typst `#line(...)`. */
 export interface LineSettings {

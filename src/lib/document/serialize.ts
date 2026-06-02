@@ -538,9 +538,7 @@ function serializeImage(doc: DocumentModel, block: Block, image: ImageSettings, 
 function lineCallExpr(line: LineSettings): string {
 	const args: string[] = [
 		`start: (${typstNumber(line.startX)}pt, ${typstNumber(line.startY)}pt)`,
-		line.lengthUnit === "%"
-			? `length: ${typstNumber(line.length)}%`
-			: `length: ${typstNumber(line.length)}pt`,
+		`length: ${typstNumber(line.length)}${line.lengthUnit}`,
 		`angle: ${typstNumber(line.angle)}deg`,
 		`stroke: ${strokeArg(line.stroke)}`,
 	];

@@ -702,11 +702,15 @@
                 {@render deleteBadge()}
             </div>
         {:else if line}
-            {@const lenPx =
-                line.lengthUnit === "pt" ? line.length * scale : undefined}
+            {@const lineWidth =
+                line.lengthUnit === "%"
+                    ? `${line.length}%`
+                    : line.lengthUnit === "em"
+                      ? `${line.length * fontSizePx}px`
+                      : `${line.length * scale}px`}
             <div
                 class="relative my-2"
-                style:width={lenPx ? `${lenPx}px` : `${line.length}%`}
+                style:width={lineWidth}
                 style:transform={line.angle
                     ? `rotate(${line.angle}deg)`
                     : undefined}

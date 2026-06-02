@@ -1,7 +1,12 @@
 <script lang="ts">
 	import FieldLabel from "$lib/components/ui/FieldLabel.svelte";
 	import Input from "$lib/components/ui/Input.svelte";
-	import type { BlockSpacing, LineSettings, StrokeSettings } from "$lib/document/types";
+	import type {
+		BlockSpacing,
+		LineLengthUnit,
+		LineSettings,
+		StrokeSettings,
+	} from "$lib/document/types";
 	import ShapeSpacingSection from "./ShapeSpacingSection.svelte";
 	import ShapeStrokeSection from "./ShapeStrokeSection.svelte";
 
@@ -28,7 +33,7 @@
 
 	const value = $derived(typeof line === "function" ? line() : line);
 
-	const lengthUnits = ["%", "pt"] as const;
+	const lengthUnits: readonly LineLengthUnit[] = ["%", "em", "pt", "px"];
 	const lengthMax = $derived(value.lengthUnit === "%" ? 100 : 10000);
 
 	function patchStroke(p: Partial<StrokeSettings>): void {
@@ -79,7 +84,7 @@
 				max={lengthMax}
 				step={1}
 				decimals={0}
-				onunitchange={(u) => onchange({ lengthUnit: u as "%" | "pt" })}
+				onunitchange={(u) => onchange({ lengthUnit: u as LineLengthUnit })}
 			/>
 		</FieldLabel>
 		<FieldLabel label="Angle">
