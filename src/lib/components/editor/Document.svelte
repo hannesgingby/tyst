@@ -1719,7 +1719,11 @@
                 block.text = newText;
                 // Also patch the live contenteditable so the active block stays in sync.
                 const el = blockEls.get(popup.blockId);
-                if (el) el.textContent = newText;
+                if (el) {
+                    el.textContent = newText;
+                    el.focus();
+                    setCaretOffset(el, m.offset + suggestion.length);
+                }
             }
             spellcheckStore.activePopup = null;
         }}

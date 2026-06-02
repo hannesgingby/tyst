@@ -359,18 +359,19 @@
     );
 
 
-    // Schedule debounced API check whenever the text or language changes.
-    // Do NOT clear matches on re-run — live Range objects track edits automatically,
-    // so squiggles stay while typing and update when the API responds.
+    // Re-check on mount and when the document language changes.
+    // block.text is read with untrack so typing doesn't re-run this effect —
+    // the onInput handler calls check() directly for every keystroke.
     $effect(() => {
-        const text = block.text;
-        const lang = documentStore.model.lang;
+        const lang = documentStore.model.lang; // tracked: re-run on language change
         const id = block.id;
         if (!isSpellcheckable) {
             spellcheckStore.clear(id);
             return;
         }
+        const text = untrack(() => block.text);
         spellcheckStore.check(id, text, lang);
+        return () => spellcheckStore.cancelPending(id);
     });
     onDestroy(() => spellcheckStore.clear(block.id));
 
@@ -541,7 +542,10 @@
     });
 
     function onInput(): void {
-        if (el) oninputblock(block.id, el.textContent ?? "");
+        if (!el) return;
+        const text = el.textContent ?? "";
+        oninputblock(block.id, text);
+        if (isSpellcheckable) spellcheckStore.check(block.id, text, documentStore.model.lang);
     }
 
     function onKeydown(event: KeyboardEvent): void {

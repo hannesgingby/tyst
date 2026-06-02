@@ -152,8 +152,37 @@ pub fn run() {
                 .select_all()
                 .build()?;
 
+            let zoom_in = MenuItemBuilder::with_id("zoom-in", "Zoom +10%")
+                .accelerator("CmdOrCtrl+Equal")
+                .build(app)?;
+            let zoom_out = MenuItemBuilder::with_id("zoom-out", "Zoom -10%")
+                .accelerator("CmdOrCtrl+Minus")
+                .build(app)?;
+
+            let view_menu = {
+                let builder = SubmenuBuilder::new(app, "View")
+                    .item(&zoom_in)
+                    .item(&zoom_out);
+                #[cfg(target_os = "macos")]
+                let builder = builder.separator().fullscreen();
+                builder.build()?
+            };
+
+            let window_menu = {
+                let builder = SubmenuBuilder::new(app, "Window").minimize().maximize();
+                #[cfg(target_os = "macos")]
+                let builder = builder.separator();
+                builder.close_window().build()?
+            };
+
             let menu = MenuBuilder::new(app)
-                .items(&[&app_menu, &file_menu, &edit_menu])
+                .items(&[
+                    &app_menu,
+                    &file_menu,
+                    &edit_menu,
+                    &view_menu,
+                    &window_menu,
+                ])
                 .build()?;
             app.set_menu(menu)?;
 
@@ -165,6 +194,12 @@ pub fn run() {
             }
             "export-pdf" => {
                 let _ = app.emit("menu://export-pdf", ());
+            }
+            "zoom-in" => {
+                let _ = app.emit("menu://zoom-in", ());
+            }
+            "zoom-out" => {
+                let _ = app.emit("menu://zoom-out", ());
             }
             _ => {}
         })

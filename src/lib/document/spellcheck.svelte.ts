@@ -151,13 +151,18 @@ class SpellcheckStore {
 		}
 	}
 
-	/** Cancel any pending check and remove matches for a block. */
-	clear(blockId: string): void {
+	/** Cancel a pending check without clearing existing matches. */
+	cancelPending(blockId: string): void {
 		const timer = this.#timers.get(blockId);
 		if (timer !== undefined) {
 			clearTimeout(timer);
 			this.#timers.delete(blockId);
 		}
+	}
+
+	/** Cancel any pending check and remove matches for a block. */
+	clear(blockId: string): void {
+		this.cancelPending(blockId);
 		delete this.matches[blockId];
 	}
 }

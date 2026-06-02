@@ -90,6 +90,8 @@
             const { listen } = await import("@tauri-apps/api/event");
             unlisteners.push(await listen("menu://save", () => saveTypFile()));
             unlisteners.push(await listen("menu://export-pdf", () => exportPdf()));
+            unlisteners.push(await listen("menu://zoom-in", () => handleZoomStep("up")));
+            unlisteners.push(await listen("menu://zoom-out", () => handleZoomStep("down")));
         })();
 
         return () => {
