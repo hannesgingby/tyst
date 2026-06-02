@@ -288,7 +288,7 @@ function serializePreamble(doc: DocumentModel, hasPageFormRef = false): string {
 		parRule,
 	);
 	if (headingRule) parts.push(headingRule);
-	parts.push("#show link: underline");
+	parts.push("#show link: it => if type(it.dest) == str { underline(it) } else { it }");
 	parts.push(...serializeFootnotePageRules(doc, 0, blockIndexById, []));
 
 	// Per-level heading typography: #show heading.where(level: N): set text(…)
@@ -414,8 +414,21 @@ function labelFor(blockId: string): string {
 }
 
 /** Serialize a reference chip block to Typst markup. */
-function serializeReference(ref: ReferenceSettings): string {
+function serializeReference(
+	ref: ReferenceSettings,
+	targetBlock?: Block,
+	doc?: DocumentModel,
+): string {
 	const label = labelFor(ref.targetBlockId);
+	// Typst requires headings to have numbering to be referenced with @.
+	// For unnumbered headings, fall back to #link(label(...)) which works without numbering.
+	if (!ref.pageForm && targetBlock?.heading && targetBlock.heading.level !== 0 && doc) {
+		const style = resolveHeadingLevelStyle(doc, targetBlock.heading.level as HeadingLevel);
+		if (!style.numbering) {
+			const text = ref.displayText || targetBlock.text;
+			return `#link(label("${label}"))[${escapeText(text)}]`;
+		}
+	}
 	if (ref.pageForm) {
 		const args: string[] = [`<${label}>`, `form: "page"`];
 		if (ref.displayText) args.splice(1, 0, `supplement: [${escapeText(ref.displayText)}]`);
@@ -738,6 +751,8 @@ export function serializeDocument(
 			.map(b => b.reference!.targetBlockId),
 	);
 
+	const blockById = new Map(doc.blocks.map(b => [b.id, b]));
+
 	const pageBreakSet = new Set(pageBreakBlockIds);
 	const defaultPage = doc.pages[0];
 
@@ -905,7 +920,8 @@ export function serializeDocument(
 
 		// ── Inline reference chip ───────────────────────────────────────────────
 		if (block.reference) {
-			const serialized = serializeReference(block.reference);
+			const targetBlock = blockById.get(block.reference.targetBlockId);
+			const serialized = serializeReference(block.reference, targetBlock, doc);
 			if (hasContent && block.continuation) {
 				parts[parts.length - 1] += serialized;
 			} else {
