@@ -1,4 +1,4 @@
-<br><br>
+<br>
 <p align="center">
   <img src="screenshots/screenshot-2026-06-02.png" alt="tyst" width="80%" />
 </p>
