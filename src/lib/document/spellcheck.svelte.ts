@@ -1,4 +1,22 @@
+import type { Block } from "./types";
 import { LANGUAGE_CODE, DEFAULT_LANGUAGE } from "./languages";
+
+/** Whether a block should participate in LanguageTool spell/grammar checking. */
+export function isSpellcheckableBlock(block: Block): boolean {
+	return (
+		!block.zoneKind &&
+		!block.image &&
+		!block.line &&
+		!block.rect &&
+		!block.reference &&
+		!block.citation &&
+		!block.link &&
+		!block.pageCounter &&
+		!block.outline &&
+		!block.bibliography &&
+		!block.footnoteMarker
+	);
+}
 
 export interface SpellMatch {
 	offset: number;

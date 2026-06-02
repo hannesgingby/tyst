@@ -17,6 +17,7 @@
     import { isUrl, normalizeUrl } from "$lib/document/url";
     import { getDocLocale } from "$lib/document/docLocale";
     import {
+        isSpellcheckableBlock,
         spellcheckStore,
         setBlockHighlights,
         clearBlockHighlights,
@@ -62,7 +63,7 @@
         onheight: (id: string, px: number) => void;
         onfocusblock: (id: string) => void;
         oninputblock: (id: string, text: string) => void;
-        onsplit: (id: string, caretOffset: number) => void;
+        onsplit: (id: string, caretOffset: number, sourceText: string) => string | undefined;
         onmergeprev: (id: string) => void;
         onpastelines: (id: string, lines: string[]) => void;
     }
@@ -352,26 +353,26 @@
 
     // ── Spell / grammar check ────────────────────────────────────────────────
 
-    const isSpellcheckable = $derived(
-        !isEmbed && !isVSpacing && !isHSpacing && !isPageBreak &&
-        !isReference && !isCitation && !isLink && !isPageCounter &&
-        !isOutline && !isBibliography && !isFootnoteMarker && !block.zoneKind,
-    );
+    const isSpellcheckable = $derived(isSpellcheckableBlock(block) && !isEmbed && !isVSpacing && !isHSpacing && !isPageBreak);
 
 
-    // Re-check on mount and when the document language changes.
-    // block.text is read with untrack so typing doesn't re-run this effect —
-    // the onInput handler calls check() directly for every keystroke.
+    // Re-check on mount, language change, or when this block becomes non-checkable.
+    // Everything else is untracked so store updates from typing do not re-run this
+    // effect — onInput calls check() per keystroke. Avoid calling check("") here:
+    // a stale empty block.text during re-runs would cancel the onInput timer via
+    // check()'s early return without scheduling a replacement.
     $effect(() => {
-        const lang = documentStore.model.lang; // tracked: re-run on language change
-        const id = block.id;
-        if (!isSpellcheckable) {
-            spellcheckStore.clear(id);
-            return;
-        }
-        const text = untrack(() => block.text);
-        spellcheckStore.check(id, text, lang);
-        return () => spellcheckStore.cancelPending(id);
+        const lang = documentStore.model.lang;
+        const spellable = isSpellcheckable;
+        untrack(() => {
+            const id = block.id;
+            if (!spellable) {
+                spellcheckStore.clear(id);
+                return;
+            }
+            const text = block.text;
+            if (text.trim()) spellcheckStore.check(id, text, lang);
+        });
     });
     onDestroy(() => spellcheckStore.clear(block.id));
 
@@ -389,8 +390,10 @@
     // Does NOT track block.text — live Range objects reposition themselves as the
     // user types, so rebuilding from (possibly stale) API offsets on every keystroke
     // would shift squiggles to wrong positions.
+    const blockMatches = $derived(spellcheckStore.matches[block.id] ?? []);
+
     $effect(() => {
-        const blockMatches = spellcheckStore.matches[block.id] ?? [];
+        void el; // re-run when contenteditable binds (e.g. block created by Enter)
         void elChildVersion; // re-run when text node is replaced (el.textContent = …)
 
         if (!el || blockMatches.length === 0) {
@@ -543,16 +546,19 @@
 
     function onInput(): void {
         if (!el) return;
-        const text = el.textContent ?? "";
-        oninputblock(block.id, text);
-        if (isSpellcheckable) spellcheckStore.check(block.id, text, documentStore.model.lang);
+        oninputblock(block.id, el.textContent ?? "");
     }
 
     function onKeydown(event: KeyboardEvent): void {
         if (!el) return;
         if (event.key === "Enter") {
             event.preventDefault();
-            onsplit(block.id, getCaretOffset(el));
+            const text = el.textContent ?? "";
+            // Capture caret before store/DOM effects run — a detached selection
+            // would otherwise read as 0 and move all text to the new line.
+            const offset = getCaretOffset(el);
+            oninputblock(block.id, text);
+            onsplit(block.id, offset, text);
         } else if (event.key === "Backspace") {
             if (
                 window.getSelection()?.isCollapsed &&
@@ -817,6 +823,8 @@
             <div
                 class="relative my-2"
                 style:width={lineWidth}
+                style:margin-left="{ptToPx(line.startX) * scale}px"
+                style:margin-top="calc(0.5rem + {ptToPx(line.startY) * scale}px)"
                 style:transform={line.angle
                     ? `rotate(${line.angle}deg)`
                     : undefined}

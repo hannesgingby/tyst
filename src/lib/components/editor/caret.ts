@@ -23,6 +23,9 @@ export function getCaretOffset(el: HTMLElement): number {
 	const sel = window.getSelection();
 	if (!sel || sel.rangeCount === 0) return 0;
 	const range = sel.getRangeAt(0);
+	if (!el.contains(range.startContainer) || !el.contains(range.endContainer)) {
+		return el.textContent?.length ?? 0;
+	}
 	return measureOffset(el, range.endContainer, range.endOffset);
 }
 

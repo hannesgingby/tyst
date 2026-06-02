@@ -3,7 +3,10 @@
     import Block from "./Block.svelte";
     import PageZonePopup from "./PageZonePopup.svelte";
     import SpellcheckPopup from "./SpellcheckPopup.svelte";
-    import { spellcheckStore } from "$lib/document/spellcheck.svelte";
+    import {
+        isSpellcheckableBlock,
+        spellcheckStore,
+    } from "$lib/document/spellcheck.svelte";
     import {
         resolveBlockHeadingSpacing,
         resolveBlockListSpacing,
@@ -771,8 +774,24 @@
         else blockEls.delete(id);
     }
 
+    /** Resolve a block's contenteditable, including after a split before registerEl runs. */
+    function getBlockEl(id: string): HTMLElement | null {
+        const registered = blockEls.get(id);
+        if (registered?.isConnected) return registered;
+        const found = viewportEl?.querySelector(
+            `.doc-block[contenteditable][data-block-id="${id}"]`,
+        ) as HTMLElement | null;
+        if (found) blockEls.set(id, found);
+        return found;
+    }
+
     function onFocusBlock(id: string): void {
         documentStore.activeBlockId = id;
+        const block = documentStore.findBlock(id);
+        const el = getBlockEl(id);
+        if (block && el && isSpellcheckableBlock(block)) {
+            spellcheckStore.check(id, el.textContent ?? block.text, documentStore.model.lang);
+        }
     }
 
     /** Empty continuation segment whose previous block is an inline embed (h-spacing, footnote marker, reference, citation). */
@@ -830,45 +849,62 @@
 
     function onInputBlock(id: string, text: string): void {
         documentStore.setBlockText(id, text);
+        const block = documentStore.findBlock(id);
+        if (block && isSpellcheckableBlock(block)) {
+            spellcheckStore.check(id, text, documentStore.model.lang);
+        }
     }
 
-    function onSplit(id: string, caretOffset: number): void {
+    function onSplit(id: string, caretOffset: number, sourceText: string): string | undefined {
         const block = allBlocks.find((b) => b.id === id);
         if (!block) return;
         // Footnote zone blocks and header/footer zone blocks are not splittable.
         if (block.footnote || block.footnoteSeparator || block.zoneKind) return;
-        const text = block.text;
+        const text = sourceText;
 
         // Pressing Enter on an empty list item exits the list; on an empty
         // heading converts it to a plain block. Caret stays in the same block.
         if (text === "" && block.list) {
             documentStore.setList(id, undefined);
             block.placeholder = undefined;
-            const el = blockEls.get(id);
+            const el = getBlockEl(id);
             if (el) syncBlockDom(el, "");
             documentStore.pendingFocusAction = { kind: "caret", blockId: id, offset: 0 };
-            return;
+            return undefined;
         }
         if (text === "" && block.heading) {
             documentStore.setHeading(id, undefined);
             block.placeholder = undefined;
-            const el = blockEls.get(id);
+            const el = getBlockEl(id);
             if (el) syncBlockDom(el, "");
             documentStore.pendingFocusAction = { kind: "caret", blockId: id, offset: 0 };
-            return;
+            return undefined;
         }
 
-        // Enter at the very start of a heading or list item: insert an empty
-        // plain block above and leave the original (with its metadata + text)
-        // untouched, caret pinned where it was.
-        if (caretOffset === 0 && (block.heading || block.list)) {
-            documentStore.insertBlockBefore(id, "");
-            documentStore.pendingFocusAction = { kind: "caret", blockId: id, offset: 0 };
-            return;
+        const offset = Math.max(0, Math.min(caretOffset, text.length));
+
+        // Enter at the very start: insert an empty block above and keep this
+        // block's text (and metadata) untouched.
+        if (offset === 0 && text.length > 0) {
+            if (block.heading || block.list) {
+                documentStore.insertBlockBefore(id, "");
+                documentStore.pendingFocusAction = { kind: "caret", blockId: id, offset: 0 };
+                return undefined;
+            }
+            const newId = documentStore.insertBlockBefore(id, "");
+            documentStore.activeBlockId = newId;
+            documentStore.pendingFocusAction = { kind: "caret", blockId: newId, offset: 0 };
+            void tick().then(() => {
+                const newEl = getBlockEl(newId);
+                if (newEl) syncBlockDom(newEl, "");
+            });
+            return newId;
         }
 
-        const before = text.slice(0, caretOffset);
-        const after = text.slice(caretOffset);
+        // Enter at the very start of a heading or list item (empty): handled above
+        // via heading/list-specific paths when text === "".
+        const before = text.slice(0, offset);
+        const after = text.slice(offset);
         // Insert the "after" block first so the document is never transiently
         // all-empty, which would trigger normalizeInlineStructure and collapse it.
         let newId: string;
@@ -882,12 +918,22 @@
             newId = documentStore.insertBlockAfter(id, after);
         }
         documentStore.setBlockText(id, before);
-        const el = blockEls.get(id);
-        if (el) {
-            el.textContent = before;
-            if (before === "") el.append(document.createElement("br"));
-        }
+        const el = getBlockEl(id);
+        if (el) syncBlockDom(el, before);
+
+        documentStore.setBlockText(newId, after);
+        documentStore.activeBlockId = newId;
         documentStore.pendingFocusAction = { kind: "caret", blockId: newId, offset: 0 };
+        if (before.trim()) {
+            spellcheckStore.check(id, before, documentStore.model.lang);
+        }
+
+        void tick().then(() => {
+            const newEl = getBlockEl(newId);
+            if (newEl) syncBlockDom(newEl, after);
+        });
+
+        return newId;
     }
 
     function onPasteLines(id: string, lines: string[]): void {
@@ -1283,21 +1329,43 @@
     // Single unified focus-after-mutation handler. All store operations that
     // need to move focus set pendingFocusAction; this effect applies it after
     // Svelte has committed the resulting DOM changes.
+    function applyPendingFocus(action: NonNullable<typeof documentStore.pendingFocusAction>): boolean {
+        const el = getBlockEl(action.blockId);
+        if (!el) return false;
+        const block = documentStore.findBlock(action.blockId);
+        if (block && el.textContent !== block.text) {
+            syncBlockDom(el, block.text);
+        }
+        documentStore.activeBlockId = action.blockId;
+        el.focus();
+        if (action.kind === "caret") {
+            setCaretOffset(el, action.offset);
+        } else if (action.kind === "selection") {
+            setCaretRange(el, action.start, action.end);
+        } else {
+            setCaretOffset(el, el.textContent?.length ?? 0);
+        }
+        return true;
+    }
+
     $effect(() => {
         const action = documentStore.pendingFocusAction;
         if (!action) return;
         documentStore.pendingFocusAction = null;
-        tick().then(() => {
-            const el = blockEls.get(action.blockId);
-            if (!el) return;
-            el.focus();
-            if (action.kind === "caret") {
-                setCaretOffset(el, action.offset);
-            } else if (action.kind === "selection") {
-                setCaretRange(el, action.start, action.end);
-            } else {
-                setCaretOffset(el, el.textContent?.length ?? 0);
-            }
+        documentStore.activeBlockId = action.blockId;
+        void tick().then(() => {
+            if (applyPendingFocus(action)) return;
+            void tick().then(() => {
+                if (applyPendingFocus(action)) return;
+                // New blocks register their contenteditable in a child effect that
+                // may run after tick(); retry until the element appears.
+                let attempts = 0;
+                const retry = () => {
+                    if (applyPendingFocus(action) || ++attempts > 60) return;
+                    requestAnimationFrame(retry);
+                };
+                requestAnimationFrame(retry);
+            });
         });
     });
 
