@@ -51,6 +51,30 @@
                 ? "top-full left-0 mt-1 w-max"
                 : "top-full right-0 left-0 mt-1",
     );
+
+    let scrollEl = $state<HTMLElement | null>(null);
+    let showScrollFade = $state(false);
+
+    function updateScrollFade(): void {
+        if (!scrollEl) { showScrollFade = false; return; }
+        const { scrollTop, scrollHeight, clientHeight } = scrollEl;
+        showScrollFade =
+            scrollHeight > clientHeight + 1 &&
+            scrollTop + clientHeight < scrollHeight - 1;
+    }
+
+    $effect(() => {
+        const el = scrollEl;
+        if (!el) return;
+        updateScrollFade();
+        el.addEventListener("scroll", updateScrollFade, { passive: true });
+        const ro = new ResizeObserver(() => updateScrollFade());
+        ro.observe(el);
+        return () => {
+            el.removeEventListener("scroll", updateScrollFade);
+            ro.disconnect();
+        };
+    });
 </script>
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
@@ -80,7 +104,21 @@
             />
         </div>
     {/if}
-    <div class={["overflow-y-auto", maxHeightClass, listClass]} role="listbox">
+    <div bind:this={scrollEl} class={["overflow-y-auto", maxHeightClass, listClass]} role="listbox">
         {@render children()}
     </div>
+    {#if showScrollFade}
+        <div class="scroll-fade pointer-events-none absolute inset-x-0 bottom-0 h-6" aria-hidden="true"></div>
+    {/if}
 </div>
+
+<style>
+    .scroll-fade {
+        background: linear-gradient(
+            to top,
+            var(--color-bg-850) 0%,
+            color-mix(in srgb, var(--color-bg-850) 65%, transparent) 45%,
+            transparent 100%
+        );
+    }
+</style>
